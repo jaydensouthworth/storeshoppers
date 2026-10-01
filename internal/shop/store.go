@@ -159,6 +159,9 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 			return 0, e
 		}
 	}
+	if _, e = tx.Exec(`INSERT INTO working_order_items(order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step) SELECT order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step FROM order_items WHERE order_id=?`, id); e != nil {
+		return 0, e
+	}
 	if _, e = tx.Exec(`DELETE FROM cart WHERE basket_id=?`, b.ID); e != nil {
 		return 0, e
 	}
@@ -177,53 +180,99 @@ func (s *Store) Orders(sid string, manager bool) ([]Order, error) {
 	return s.OrdersSearch(sid, manager, "")
 }
 func (s *Store) OrdersSearch(sid string, manager bool, search string) ([]Order, error) {
-	rows, e := s.db.Query(`SELECT o.id,o.reference,o.status,o.created,o.total,COALESCE(SUM(CASE WHEN i.sale_unit='each' THEN i.picked_quantity ELSE 0 END),0),COALESCE(SUM(CASE WHEN i.sale_unit='each' THEN i.quantity ELSE 0 END),0) FROM orders o LEFT JOIN order_items i ON i.order_id=o.id WHERE (? OR o.session_id=?) AND (?='' OR instr(lower(o.reference||' '||o.status),lower(?))>0) GROUP BY o.id ORDER BY o.id DESC LIMIT 100`, manager, sid, search, search)
-	if e != nil {
-		return nil, e
+	rows, err := s.db.Query(`SELECT o.id,o.reference,o.status,o.created,o.total,o.order_version,o.final_total,o.completion_kind,COALESCE(SUM(CASE WHEN i.sale_unit='each' THEN i.picked_quantity ELSE 0 END),0),COALESCE(SUM(CASE WHEN i.sale_unit='each' THEN i.quantity ELSE 0 END),0),COALESCE(SUM((i.quantity-i.unavailable_quantity-i.cancelled_quantity)*i.price),0) FROM orders o LEFT JOIN working_order_items i ON i.order_id=o.id WHERE (? OR o.session_id=?) AND (?='' OR instr(lower(o.reference||' '||o.status||' '||o.completion_kind),lower(?))>0) GROUP BY o.id ORDER BY o.id DESC LIMIT 100`, manager, sid, search, search)
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 	var all []Order
 	for rows.Next() {
 		var o Order
-		if e = rows.Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.PickedCount, &o.RequiredCount); e != nil {
-			return nil, e
+		var final sql.NullInt64
+		if err = rows.Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Version, &final, &o.CompletionKind, &o.PickedCount, &o.RequiredCount, &o.WorkingTotal); err != nil {
+			return nil, err
 		}
-		o.AllPicked = o.RequiredCount > 0 && o.PickedCount == o.RequiredCount
-		if o.RequiredCount > 0 {
-			o.Percent = 100 * o.PickedCount / o.RequiredCount
-		}
+		o.Finalized, o.FinalTotal = final.Valid, final.Int64
+		setOrderProgress(&o)
 		all = append(all, o)
 	}
 	return all, rows.Err()
 }
+func setOrderProgress(o *Order) {
+	o.AllPicked = o.RequiredCount > 0 && o.PickedCount == o.RequiredCount && o.CompletionKind != "cancelled"
+	if o.RequiredCount > 0 {
+		o.Percent = 100 * o.PickedCount / o.RequiredCount
+	}
+}
 func (s *Store) Order(id int64, sid string, manager bool) (Order, error) {
 	var o Order
-	e := s.db.QueryRow(`SELECT id,reference,status,created,total,instructions FROM orders WHERE id=? AND (? OR session_id=?)`, id, manager, sid).Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Instructions)
-	if errors.Is(e, sql.ErrNoRows) {
+	var final sql.NullInt64
+	err := s.db.QueryRow(`SELECT id,reference,status,created,total,instructions,order_version,final_total,completion_kind FROM orders WHERE id=? AND (? OR session_id=?)`, id, manager, sid).Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Instructions, &o.Version, &final, &o.CompletionKind)
+	if errors.Is(err, sql.ErrNoRows) {
 		return o, ErrNotFound
 	}
-	if e != nil {
-		return o, e
+	if err != nil {
+		return o, err
 	}
-	rows, e := s.db.Query(`SELECT product_id,name,price,quantity,picked_quantity,pick_version,sku,sale_unit,price_basis,quantity_step,subtotal FROM order_items WHERE order_id=? ORDER BY product_id`, id)
-	if e != nil {
-		return o, e
+	o.Finalized, o.FinalTotal = final.Valid, final.Int64
+	rows, err := s.db.Query(`SELECT i.product_id,i.name,i.price,i.quantity,COALESCE(w.picked_quantity,0),COALESCE(w.pick_version,i.pick_version),i.sku,i.sale_unit,i.price_basis,i.quantity_step,i.subtotal FROM order_items i LEFT JOIN working_order_items w ON w.order_id=i.order_id AND w.product_id=i.product_id WHERE i.order_id=? ORDER BY i.product_id`, id)
+	if err != nil {
+		return o, err
 	}
-	defer rows.Close()
 	for rows.Next() {
 		var i OrderItem
-		if e = rows.Scan(&i.ProductID, &i.Name, &i.Price, &i.Quantity, &i.Picked, &i.PickVersion, &i.SKU, &i.SaleUnit, &i.PriceBasis, &i.QuantityStep, &i.Subtotal); e != nil {
-			return o, e
+		if err = rows.Scan(&i.ProductID, &i.Name, &i.Price, &i.Quantity, &i.Picked, &i.PickVersion, &i.SKU, &i.SaleUnit, &i.PriceBasis, &i.QuantityStep, &i.Subtotal); err != nil {
+			rows.Close()
+			return o, err
 		}
 		o.Items = append(o.Items, i)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return o, err
+	}
+	o.WorkingItems, err = workingOrderItems(s.db, id)
+	if err != nil {
+		return o, err
+	}
+	for _, i := range o.WorkingItems {
+		o.WorkingTotal += i.Subtotal
 		if i.SaleUnit == "each" {
 			o.PickedCount += i.Picked
 			o.RequiredCount += i.Quantity
 		}
 	}
-	o.AllPicked = o.RequiredCount > 0 && o.PickedCount == o.RequiredCount
-	if o.RequiredCount > 0 {
-		o.Percent = 100 * o.PickedCount / o.RequiredCount
+	setOrderProgress(&o)
+	o.WorkingPrices = make(map[int64]int64)
+	rows, err = s.db.Query(`SELECT product_id,price FROM working_order_items WHERE order_id=?`, id)
+	if err != nil {
+		return o, err
+	}
+	for rows.Next() {
+		var pid, price int64
+		if err = rows.Scan(&pid, &price); err != nil {
+			rows.Close()
+			return o, err
+		}
+		o.WorkingPrices[pid] = price
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return o, err
+	}
+	rows, err = s.db.Query(`SELECT action,reason,details,created FROM order_events WHERE order_id=? ORDER BY id DESC LIMIT 100`, id)
+	if err != nil {
+		return o, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var e OrderEvent
+		if err = rows.Scan(&e.Action, &e.Reason, &e.Details, &e.Created); err != nil {
+			return o, err
+		}
+		o.Events = append(o.Events, e)
 	}
 	return o, rows.Err()
 }
@@ -277,6 +326,9 @@ func (s *Store) Adjustments() ([]Adjustment, error) {
 func (s *Store) Advance(id int64, from string) error { return s.AdvanceScoped(id, from, "", true) }
 
 func (s *Store) AdvanceScoped(id int64, from, sid string, allOrders bool) error {
+	return s.AdvanceVersioned(id, from, 0, sid, allOrders)
+}
+func (s *Store) AdvanceVersioned(id int64, from string, version int64, sid string, allOrders bool) error {
 	next := map[string]string{"Placed": "Picking", "Picking": "Ready", "Ready": "Completed"}[from]
 	if next == "" {
 		return ErrInvalid
@@ -287,26 +339,30 @@ func (s *Store) AdvanceScoped(id int64, from, sid string, allOrders bool) error 
 	}
 	defer tx.Rollback()
 	var current string
-	err = tx.QueryRow(`SELECT status FROM orders WHERE id=? AND (? OR session_id=?)`, id, allOrders, sid).Scan(&current)
+	var currentVersion int64
+	err = tx.QueryRow(`SELECT status,order_version FROM orders WHERE id=? AND (? OR session_id=?)`, id, allOrders, sid).Scan(&current, &currentVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
 	}
-	if current != from {
+	if current != from || (version != 0 && version != currentVersion) {
 		return ErrConflict
 	}
 	if from == "Picking" {
 		var total, incomplete int
-		if err = tx.QueryRow(`SELECT COUNT(*),COALESCE(SUM(CASE WHEN picked_quantity < quantity THEN 1 ELSE 0 END),0) FROM order_items WHERE order_id=?`, id).Scan(&total, &incomplete); err != nil {
+		if err = tx.QueryRow(`SELECT COUNT(*),COALESCE(SUM(CASE WHEN picked_quantity < quantity THEN 1 ELSE 0 END),0) FROM working_order_items WHERE order_id=? AND quantity>0`, id).Scan(&total, &incomplete); err != nil {
 			return err
 		}
 		if total == 0 || incomplete != 0 {
 			return ErrIncomplete
 		}
 	}
-	if _, err = tx.Exec(`UPDATE orders SET status=? WHERE id=? AND status=?`, next, id, from); err != nil {
+	if _, err = tx.Exec(`UPDATE orders SET status=?,order_version=order_version+1,final_total=CASE WHEN ? IN ('Ready','Completed') THEN COALESCE(final_total,(SELECT COALESCE(SUM(picked_quantity*price),0) FROM working_order_items WHERE order_id=orders.id)) ELSE NULL END,completion_kind=CASE WHEN ? IN ('Ready','Completed') THEN 'full' ELSE '' END WHERE id=? AND status=?`, next, next, next, id, from); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,'','status','Fulfillment transition',?)`, id, token(), from+" → "+next); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -335,7 +391,7 @@ func (s *Store) RecordPicked(orderID, productID, picked, version int64, sid stri
 		return ErrConflict
 	}
 	var quantity, currentVersion int64
-	err = tx.QueryRow(`SELECT quantity,pick_version FROM order_items WHERE order_id=? AND product_id=?`, orderID, productID).Scan(&quantity, &currentVersion)
+	err = tx.QueryRow(`SELECT quantity,pick_version FROM working_order_items WHERE order_id=? AND product_id=? AND quantity>0`, orderID, productID).Scan(&quantity, &currentVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -348,7 +404,13 @@ func (s *Store) RecordPicked(orderID, productID, picked, version int64, sid stri
 	if version != currentVersion {
 		return ErrConflict
 	}
-	if _, err = tx.Exec(`UPDATE order_items SET picked_quantity=?,pick_version=pick_version+1 WHERE order_id=? AND product_id=? AND pick_version=?`, picked, orderID, productID, version); err != nil {
+	if _, err = tx.Exec(`UPDATE working_order_items SET picked_quantity=?,pick_version=pick_version+1 WHERE order_id=? AND product_id=? AND pick_version=?`, picked, orderID, productID, version); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE orders SET order_version=order_version+1 WHERE id=?`, orderID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,'','pick','Picked count saved',?)`, orderID, token(), fmt.Sprintf("Product %d: picked %d", productID, picked)); err != nil {
 		return err
 	}
 	return tx.Commit()

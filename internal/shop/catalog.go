@@ -329,7 +329,7 @@ func saveProduct(tx *sql.Tx, p Product) (int64, error) {
 	unitChanged := old.SaleUnit != p.SaleUnit || old.PriceBasis != p.PriceBasis
 	if unitChanged {
 		var used int
-		if err = tx.QueryRow(`SELECT COUNT(*) FROM order_items WHERE product_id=?`, p.ID).Scan(&used); err != nil {
+		if err = tx.QueryRow(`SELECT (SELECT COUNT(*) FROM order_items WHERE product_id=?)+(SELECT COUNT(*) FROM working_order_items WHERE product_id=?)`, p.ID, p.ID).Scan(&used); err != nil {
 			return 0, err
 		}
 		if used > 0 || old.Stock != 0 || old.Reserved != 0 {

@@ -871,3 +871,56 @@ main.manager-layout { width: min(1480px,100%); }
   .catalog-pagination { font-size: 11px; gap: 8px; }
   .catalog-pagination .small { padding: 9px 10px; font-size: 10px; }
 }
+
+/* Manager order overrides keep original receipts distinct from live fulfillment. */
+.order-total small { display: block; margin-top: 4px; font-size: 9px; font-weight: 400; }
+.original-receipt .receipt-caption { font-family: "Courier New", monospace; font-size: 10px; line-height: 1.5; letter-spacing: 0; }
+.original-receipt h2.receipt-caption { margin-bottom: 0; padding-bottom: 8px; border-bottom: 0; }
+.original-receipt h2 + .receipt-caption { padding-top: 0; }
+.original-receipt .summary-row.total > span { max-width: 120px; }
+.picked-readonly { flex-shrink: 0; font-size: 12px; }
+.line-resolution { display: block; color: #8b241d !important; font-weight: 700; }
+.pick-item .line-resolution { margin-top: 6px; }
+.working-summary { margin-top: 24px; padding-top: 20px; border-top: 2px solid var(--ink); }
+.working-summary > h3 { font-size: 17px; }
+.working-summary-items { list-style: none; padding: 0; margin: 0; }
+.working-summary-items > li { display: flex; justify-content: space-between; align-items: start; gap: 12px; border-bottom: 1px solid var(--line); padding: 12px 0; font-size: 12px; }
+.working-summary-items > li > div { min-width: 0; overflow-wrap: anywhere; }
+.working-summary-items span { display: block; margin-top: 4px; font-size: 11px; }
+.working-summary-items > li > strong { flex-shrink: 0; }
+.order-totals { margin-top: 20px; border-top: 1px dashed var(--ink); }
+.order-totals .summary-row { align-items: baseline; }
+.order-totals .summary-row.total { margin-top: 5px; padding-bottom: 10px; }
+.order-overrides .fine-print { margin-top: 0; }
+.stock-disposition-help { margin: 18px 0; padding: 14px; background: var(--blue-wash); border-left: 3px solid var(--ink); font-size: 12px; }
+.stock-disposition-help p { margin: 6px 0 0; }
+.override-disclosure, .order-history { margin: 12px 0; border: 1px solid var(--line); }
+.override-disclosure > summary, .override-substitution > summary, .order-history > summary { min-height: 44px; padding: 14px; cursor: pointer; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.override-disclosure > summary > span, .order-history > summary > span { display: block; margin-top: 4px; font-size: 10px; font-weight: 400; color: var(--muted); }
+.override-disclosure[open] > summary { border-bottom: 1px solid var(--line); background: var(--blue-wash); }
+.override-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; padding: 16px 14px; }
+.override-form > div { min-width: 0; }
+.override-form-wide { grid-column: 1 / -1; }
+.override-form input:not([type="hidden"]), .override-form select { width: 100%; font-size: 12px; }
+.override-form select { text-overflow: ellipsis; }
+.override-form .fine-print { margin-bottom: 0; }
+.override-substitution { margin: 0 14px 14px; border-top: 1px dashed var(--ink); }
+.override-substitution .override-form { padding-left: 0; padding-right: 0; }
+.override-finish { border-color: var(--ink); }
+.override-cancel { border-color: var(--red); }
+.override-cancel > summary { color: #8b241d; }
+.override-cancel[open] > summary { background: #fff0ed; border-color: var(--red); }
+.order-history { background: #fff; }
+.order-history ol { list-style: none; padding: 0 14px; margin: 0; }
+.order-history li { padding: 14px 0; border-top: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
+.order-event-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 8px; }
+.order-event-heading time { color: var(--muted); font-size: 10px; }
+.order-history p { margin-bottom: 5px; }
+@media (max-width: 600px) {
+  .override-form { grid-template-columns: 1fr; }
+  .override-form input:not([type="hidden"]), .override-form select { font-size: 16px; }
+  .override-disclosure > summary, .order-history > summary { font-size: 12px; }
+  .order-overrides .section-title { flex-wrap: wrap; }
+  .order-overrides .board-label { max-width: none; }
+  .original-receipt .summary-row.total { flex-wrap: wrap; }
+}

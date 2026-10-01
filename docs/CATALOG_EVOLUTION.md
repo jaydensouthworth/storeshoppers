@@ -1,6 +1,6 @@
 # Catalog and fulfillment evolution
 
-This document distinguishes the implemented version 3 catalog foundation from later fulfillment work. Weighted checkout, substitutions, generated labels and camera scanning are not current capabilities. Each later phase must preserve existing IDs, sessions, baskets, stock allocations, receipt snapshots and picking state through versioned migrations.
+This document distinguishes the implemented version 3 catalog foundation from later fulfillment work. Counted-unit manager overrides and whole-line substitutions are implemented in schema v5; weighted checkout, generated labels and camera scanning remain future work. Each later phase must preserve existing IDs, sessions, baskets, stock allocations, receipt snapshots and picking state through versioned migrations.
 
 ## Preserved version 2 boundary
 
@@ -18,7 +18,7 @@ The current foundation adds a picking quantity and version to order items. It do
 - Fresh databases seed 70 fake products inside initialization. The one-time v3 migration expands only an exact original eight-product catalog, requiring total count eight plus all original IDs and placeholder codes. It preserves manager edits to those records; the same eight with any additional custom product receive no expansion. Partial/custom legacy catalogs and established empty schemas receive no seed products. Reopening does not recreate removed records.
 - `product_codes` preserves existing numeric strings as `legacy_placeholder` and separately stores unique `demo_local` identities for ordinary Code 128. The read-only local-code resolution boundary does not change picking state or claim retail GTIN validation. Generated labels and camera UI remain deferred.
 
-Counted products use `each`, basis 1 and step 1. Weighed metadata uses `g`, basis 1000 and step 1–1000, but weighed products are visibly unavailable for sale. The current 1–99 cart quantity and 0–10000 stock constraints have not been reinterpreted. Neither weighted checkout nor integer weighted line pricing is enabled. Unit/price-basis conversion after receipt use is rejected. Schema v4 implements timed basket reservations, scoped manager basket overrides and customer special instructions; see [Basket reservations](BASKET_RESERVATIONS.md). Actual-weight reconciliation and manager substitutions remain separate milestones.
+Counted products use `each`, basis 1 and step 1. Weighed metadata uses `g`, basis 1000 and step 1–1000, but weighed products are visibly unavailable for sale. The current 1–99 cart quantity and 0–10000 stock constraints have not been reinterpreted. Neither weighted checkout nor integer weighted line pricing is enabled. Unit/price-basis conversion after receipt use is rejected. Schema v4 implements timed basket reservations, scoped manager basket overrides and customer special instructions; see [Basket reservations](BASKET_RESERVATIONS.md). Schema v5 implements counted-unit manager substitutions; actual-weight reconciliation remains a separate milestone.
 
 ## Deferred: integer measurement and pricing
 
@@ -28,15 +28,11 @@ For non-negative values, round once per line with `(grams × cents_per_kg + 500)
 
 Mixed-unit views must not sum grams and units into one misleading item count. Show line progress and each line’s quantity/unit. The original 1–99 cart-quantity and 0–10000 stock constraints require a dedicated migration before supporting weighed quantities. Selling unit/price basis changes after use should be rejected unless a deliberate replacement product/version is introduced. Changing SQLite quantity/stock CHECK constraints requires the controlled table-rebuild migration procedure and a foreign-key integrity check, not just relaxed Go validation. Do not toggle foreign_keys inside an active transaction.
 
-## Deferred: substitution and actual-weight reconciliation
+## Implemented counted overrides; deferred richer allocations and weight reconciliation
 
-Keep `order_items` and the placed `orders.total` as immutable requested snapshots. Introduce separate fulfillment/allocation rows keyed by the original `(order_id, requested_product_id)`, with actual product, reserved and picked base quantity, unit/rate/basis snapshots, resolution, final subtotal and version. Two requested lines may substitute to the same actual product; keying by replacement product would lose one of them.
+Schema v5 keeps `order_items` and `orders.total` as immutable placed snapshots and adds stable working lines, final amounts and reasoned order audit. The current counted-unit workflow aggregates by actual product within an order; source receipt rows, retained zero-quantity source lines and substitution events preserve provenance. Substitution into an existing working product uses its recorded price. Manager authority explicitly permits instruction overrides with a reason; customer pre-approval is not the only gate. See [Manager order overrides](ORDER_OVERRIDES.md) for inventory, replay, migration and terminal-state rules.
 
-Start with whole-line, same-unit substitutions. Snapshot the customer’s allowed substitution policy at checkout. A shared category alone never authorizes a replacement. Split and mixed-unit substitutions are later work.
-
-Available stock was already reserved in the basket and that allocation was consumed at checkout. Picking must not deduct the original again. A substitution transaction should validate order ownership, Picking state, expected version and policy; reserve the replacement with a conditional stock check; reconcile the original allocation; write the new allocation and reasoned audit; and update the final estimate. Failure must roll back every step. Actual weighed quantity reconciles only the difference from the reserved amount. For the original product, use the order’s snapped rate, not the latest catalog rate. Snapshot any permitted weight/price tolerance at checkout; require review beyond it. Replacements use their separately approved rate and price policy.
-
-Physically missing stock cannot simply be returned to available inventory. Model release plus a linked shrinkage adjustment, or explicitly consume the lost allocation. Keep the final total nullable during picking and allow a final zero for an explicitly all-unavailable order; the original placed total remains unchanged. Freeze resolutions, allocations and the final total at Ready. Completed never deducts stock again. Cancellation/restocking needs an equally explicit policy and remains deferred.
+A future richer allocation model may preserve multiple independently priced fulfillment lines per original requested line and split replacements. That extension must migrate current stable IDs/history, preserve all quantity and stock invariants, and avoid losing provenance when two requested lines select the same replacement. Mixed-unit substitutions and actual weights require explicit integer-unit rounding, tolerances and price policy; they are not implemented by the counted model.
 
 ## Barcode identities and the two-screen demo
 
@@ -54,7 +50,7 @@ Camera UI is deferred. When built, require HTTPS, user-triggered camera access, 
 
 ## Acceptance gates
 
-Gates 1–3 and 5 are covered by the current catalog foundation. The remaining weighted, substitution and label gates apply to later milestones; existing counted-item oversell and session-isolation tests remain mandatory.
+Gates 1–3 and 5 are covered by the current catalog foundation. The remaining weighted and label gates apply to later milestones; existing counted-item oversell and session-isolation tests remain mandatory.
 
 1. Upgrade populated older databases and reopen repeatedly without changing receipt amounts, identifiers, sessions or fulfillment state
 2. Add/reassign/archive categories, types and products without code changes or restart resurrection

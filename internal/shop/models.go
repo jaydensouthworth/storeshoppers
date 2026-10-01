@@ -5,6 +5,10 @@ import (
 	"fmt"
 )
 
+var ErrOrderQuote = errors.New("Catalog choices or prices changed. Review the refreshed choices and recorded prices, then submit this manager change again.")
+var ErrUseReady = errors.New("All working units are already picked. Use Mark ready and Confirm collected to finish the normal collection flow.")
+var ErrTerminal = errors.New("This order is ready or closed. Its final receipt and stock disposition cannot be changed or reopened; a separate amendment/refund workflow is not supported in this demo.")
+var ErrStockCapacity = errors.New("Returning these units would exceed the 10,000-unit stock limit. Reconcile physical inventory first, or choose write-off only for units that cannot be resold.")
 var ErrConflict = errors.New("This changed since you opened it. Refresh and try again.")
 var ErrHold = errors.New("Your stock hold expired or needs review. Review and reserve your basket for 15 minutes before checkout.")
 var ErrStock = errors.New("Not enough stock for this order. Review your basket and try again.")
@@ -64,15 +68,28 @@ type OrderItem struct {
 	SKU, SaleUnit                  string
 	PriceBasis, QuantityStep       int64
 }
+type WorkingOrderItem struct {
+	OrderItem
+	LineID, Unavailable, Cancelled int64
+}
+type OrderEvent struct {
+	Action, Reason, Details, Created string
+}
 type Order struct {
-	Instructions               string
-	Percent                    int64
-	ID                         int64
-	Reference, Status, Created string
-	Total                      int64
-	Items                      []OrderItem
-	PickedCount, RequiredCount int64
-	AllPicked                  bool
+	WorkingPrices                     map[int64]int64
+	Version, WorkingTotal, FinalTotal int64
+	Finalized                         bool
+	CompletionKind                    string
+	WorkingItems                      []WorkingOrderItem
+	Events                            []OrderEvent
+	Instructions                      string
+	Percent                           int64
+	ID                                int64
+	Reference, Status, Created        string
+	Total                             int64
+	Items                             []OrderItem
+	PickedCount, RequiredCount        int64
+	AllPicked                         bool
 }
 type Adjustment struct {
 	Product, Reason, Created string

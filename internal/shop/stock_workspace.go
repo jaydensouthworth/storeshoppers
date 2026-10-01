@@ -81,7 +81,7 @@ func parseStockFilters(v url.Values) StockFilters {
 	f.Unit = stockChoice(v.Get("unit"), "each", "g")
 	f.Sort = stockChoice(v.Get("sort"), "name", "name_desc", "available", "available_desc", "reserved", "department")
 	f.View = stockChoice(v.Get("view"), "activity")
-	f.Action = stockChoice(v.Get("action"), "stock", "catalog-create", "catalog-edit", "catalog-archive", "catalog-restore", "basket-quantity", "basket-reserve", "basket-practice", "order-placed")
+	f.Action = stockChoice(v.Get("action"), "stock", "catalog-create", "catalog-edit", "catalog-archive", "catalog-restore", "basket-quantity", "basket-reserve", "basket-practice", "order-placed", "order-change")
 	for _, field := range []struct {
 		name string
 		dst  *string
@@ -318,6 +318,8 @@ const stockActivitySQL = `WITH events AS (
  SELECT 'basket',e.id,CASE e.action WHEN 'set quantity' THEN 'basket-quantity' WHEN 'review and reserve' THEN 'basket-reserve' WHEN 'create practice' THEN 'basket-practice' ELSE 'basket-other' END,b.label,e.details,e.reason,e.created,0,'',0,b.id,0,'' FROM basket_events e JOIN baskets b ON b.id=e.basket_id WHERE (? OR b.owner_session_id=?)
  UNION ALL
  SELECT 'order',o.id,'order-placed',o.reference,'Demo order placed; receipt prices and quantities are preserved.','',o.created,0,'',o.id,'',0,'' FROM orders o WHERE (? OR o.session_id=?)
+ UNION ALL
+ SELECT 'order',e.id,'order-change',o.reference,e.action||': '||e.details,e.reason,e.created,0,'',o.id,'',0,'' FROM order_events e JOIN orders o ON o.id=e.order_id WHERE (? OR o.session_id=?)
 ) `
 
 func (s *Store) StockActivity(f StockFilters, sid string, all bool) (StockActivity, error) {
@@ -326,13 +328,13 @@ func (s *Store) StockActivity(f StockFilters, sid string, all bool) (StockActivi
 		result.Page, result.Pages = 1, 1
 		return result, nil
 	}
-	where := ` WHERE (?='' OR action=?) AND (?='' OR substr(created,1,10)>=?) AND (?='' OR substr(created,1,10)<=?) AND (?=0 OR product_id=? OR (source='order' AND EXISTS(SELECT 1 FROM order_items i WHERE i.order_id=events.resource_id AND i.product_id=?)))`
-	args := []any{all, sid, all, sid, f.Action, f.Action, f.From, f.From, f.To, f.To, f.ActivityProduct, f.ActivityProduct, f.ActivityProduct}
+	where := ` WHERE (?='' OR action=?) AND (?='' OR substr(created,1,10)>=?) AND (?='' OR substr(created,1,10)<=?) AND (?=0 OR product_id=? OR (source='order' AND EXISTS(SELECT 1 FROM working_order_items i WHERE i.order_id=events.resource_id AND i.product_id=?)))`
+	args := []any{all, sid, all, sid, all, sid, f.Action, f.Action, f.From, f.From, f.To, f.To, f.ActivityProduct, f.ActivityProduct, f.ActivityProduct}
 	if err := s.db.QueryRow(stockActivitySQL+"SELECT COUNT(*) FROM events"+where, args...).Scan(&result.Total); err != nil {
 		return result, err
 	}
 	result.Page, result.Pages, result.First, result.Last = stockBounds(result.Total, f.ActivityPage, activityPageSize)
-	rows, err := s.db.Query(stockActivitySQL+`SELECT source,action,name,details,reason,created,delta,unit,resource_id,basket_id,resource_kind FROM events`+where+" ORDER BY created DESC,source,event_id DESC LIMIT ? OFFSET ?", append(args, activityPageSize, (result.Page-1)*activityPageSize)...)
+	rows, err := s.db.Query(stockActivitySQL+`SELECT source,action,name,details,reason,created,delta,unit,resource_id,basket_id,resource_kind FROM events`+where+" ORDER BY created DESC,source,event_id DESC,action LIMIT ? OFFSET ?", append(args, activityPageSize, (result.Page-1)*activityPageSize)...)
 	if err != nil {
 		return result, err
 	}
@@ -363,7 +365,7 @@ func (s *Store) StockActivity(f StockFilters, sid string, all bool) (StockActivi
 			e.URL = fmt.Sprintf("/manager/orders/%d", id)
 			e.LinkLabel = "Open pick ticket"
 		}
-		e.Action = map[string]string{"stock": "Stock adjustment", "catalog-create": "Catalog created", "catalog-edit": "Catalog edited", "catalog-archive": "Catalog archived", "catalog-restore": "Catalog restored", "basket-quantity": "Basket quantity changed", "basket-reserve": "Basket reviewed & reserved", "basket-practice": "Practice basket created", "basket-other": "Basket action", "order-placed": "Order placed"}[e.Action]
+		e.Action = map[string]string{"stock": "Stock adjustment", "catalog-create": "Catalog created", "catalog-edit": "Catalog edited", "catalog-archive": "Catalog archived", "catalog-restore": "Catalog restored", "basket-quantity": "Basket quantity changed", "basket-reserve": "Basket reviewed & reserved", "basket-practice": "Practice basket created", "basket-other": "Basket action", "order-placed": "Order placed", "order-change": "Order changed"}[e.Action]
 		result.Events = append(result.Events, e)
 	}
 	return result, rows.Err()

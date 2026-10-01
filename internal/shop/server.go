@@ -37,6 +37,9 @@ type App struct {
 	resetPending atomic.Bool
 }
 type View struct {
+	OrderCatalogQuote                                        string
+	OrderOverrideDraft                                       map[string]string
+	OrderCommandKey                                          string
 	CatalogPage                                              CatalogPage
 	StockWorkspace                                           *StockWorkspace
 	CatalogFilters                                           CatalogFilters
@@ -129,6 +132,8 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}", a.saveCatalogTaxonomy)
 	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}/archive", a.archiveCatalogTaxonomy)
 	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}/restore", a.restoreCatalogTaxonomy)
+	a.mux.HandleFunc("POST /manager/orders/{id}/override", a.overrideOrder)
+	a.mux.HandleFunc("POST /manager/orders/{id}/lines/{line_id}/pick", a.recordWorkingLinePicked)
 	a.mux.HandleFunc("GET /manager/orders/{id}", a.showPicking)
 	a.mux.HandleFunc("POST /manager/orders/{id}/items/{product_id}", a.recordPicked)
 	a.mux.HandleFunc("POST /manager/inventory", a.inventory)
@@ -567,7 +572,16 @@ func (a *App) advance(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	err = a.store.AdvanceScoped(id, r.PostForm.Get("status"), session.ID, !a.config.DemoMode)
+	version, parseErr := num(r.PostForm.Get("order_version"))
+	if parseErr != nil || version < 1 {
+		if _, scopeErr := a.store.Order(id, session.ID, !a.config.DemoMode); scopeErr != nil {
+			err = scopeErr
+		} else {
+			err = ErrInvalid
+		}
+	} else {
+		err = a.store.AdvanceVersioned(id, r.PostForm.Get("status"), version, session.ID, !a.config.DemoMode)
+	}
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -616,6 +630,23 @@ func (a *App) pickingView(w http.ResponseWriter, r *http.Request, id int64, mess
 		current, _ := url.Parse(r.Header.Get("HX-Current-URL"))
 		if current == nil || current.RequestURI() != target {
 			w.Header().Set("HX-Push-Url", target)
+		}
+	}
+	v.Products, err = a.store.Products("", "")
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	v.OrderCatalogQuote = orderCatalogQuote(v.Products)
+	v.OrderCommandKey = token()
+	if problem != nil && r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/override") {
+		v.OrderOverrideDraft = make(map[string]string)
+		for _, field := range []string{"form_id", "product_id", "replacement_id", "quantity", "reason", "disposition", "remainder"} {
+			value := r.PostForm.Get(field)
+			if len(value) > 1024 {
+				value = value[:1024]
+			}
+			v.OrderOverrideDraft[field] = value
 		}
 	}
 	v.Title = "Pick " + v.Order.Reference

@@ -11,3 +11,4 @@ go build -o bin/shop ./cmd/shop
 python3 scripts/smoke.py
 python3 scripts/demo_reset_smoke.py
 python3 scripts/stock_tools_smoke.py
+python3 scripts/order_overrides_smoke.py

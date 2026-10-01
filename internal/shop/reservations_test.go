@@ -644,7 +644,7 @@ func TestReservationsV4MigrationPreservesPopulatedV3AndReopens(t *testing.T) {
 			t.Errorf("legacy order changed: %+v", o)
 		}
 		var version int
-		if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil || version != 4 {
+		if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil || version != latestSchemaVersion {
 			t.Errorf("schema version=%d,%v", version, err)
 		}
 		var legacyColumn int
@@ -680,7 +680,7 @@ func TestReservationsV4MigrationFailureLeavesV3Intact(t *testing.T) {
 	}
 	recovered := openTestStore(t, path)
 	var version int
-	if err := recovered.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil || version != 4 {
+	if err := recovered.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil || version != latestSchemaVersion {
 		t.Errorf("v4 retry did not recover: %d,%v", version, err)
 	}
 }

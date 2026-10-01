@@ -104,13 +104,13 @@ def main():
             assert "HTTP smoke restock" in manager
             order_id = receipt_path.split('/')[-1]
             picking_path = f"/manager/orders/{order_id}"
-            _, manager = post(picking_path + "/advance", {"csrf":fields["csrf"],"status":"Placed"})
+            _, manager = post(picking_path + "/advance", {"csrf":fields["csrf"],"status":"Placed","order_version":Fields(get(picking_path)).fields["order_version"]})
             assert "Picking" in get(receipt_path)
             # Readiness is blocked until the required quantity has been picked.
-            _, blocked = post(picking_path + "/advance", {"csrf":fields["csrf"],"status":"Picking"})
+            _, blocked = post(picking_path + "/advance", {"csrf":fields["csrf"],"status":"Picking","order_version":Fields(get(picking_path)).fields["order_version"]})
             assert "Pick every required item" in blocked
             _, manager = post(picking_path + "/items/1", {"csrf":fields["csrf"],"picked":2,"version":1})
-            _, manager = post(picking_path + "/advance", {"csrf":fields["csrf"],"status":"Picking"})
+            _, manager = post(picking_path + "/advance", {"csrf":fields["csrf"],"status":"Picking","order_version":Fields(get(picking_path)).fields["order_version"]})
             assert "Ready" in get(receipt_path)
             request = urllib.request.Request(origin + receipt_path + "/status", headers={"HX-Request":"true"})
             with client.open(request) as response:
@@ -122,7 +122,7 @@ def main():
             assert "Ready" in get(receipt_path)
             assert "HTTP smoke restock" in get("/manager/stock")
             manager = get(picking_path)
-            _, completed = post(picking_path + "/advance", {"csrf":Fields(manager).fields["csrf"],"status":"Ready"})
+            _, completed = post(picking_path + "/advance", {"csrf":Fields(manager).fields["csrf"],"status":"Ready","order_version":Fields(manager).fields["order_version"]})
             assert "Completed" in get(receipt_path)
             # Catalog forms use real manager authorization, stable identities and versions.
             catalog = get("/manager/catalog")

@@ -14,6 +14,8 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Bounded plaintext checkout instructions and explicit shopping percentages
 - Task-focused manager sections with searchable lists and dedicated product editors
 - Transactional catalog change history and manager inventory adjustments with a reason and audit trail
+- Manager working-order add/remove/quantity/substitution controls with reasoned stock disposition
+- Partial finish and whole-order cancellation with immutable placed receipts, separate final totals and scoped audit
 - Manager pick tickets with per-item quantities and guarded readiness
 - Customer status refresh with a normal HTML fallback
 - Persistent SQLite storage and locally bundled frontend assets
@@ -73,13 +75,15 @@ The shared manager password is a limited demo gate, not production identity. Nam
 
 Startup applies versioned migrations transactionally. Version 2 adds picking progress; version 3 adds configurable catalog metadata, stable category/type identities, local product codes and receipt measurement snapshots without replacing products, sessions, baskets, stock or receipt amounts. Historical Ready/Completed orders retain their state; new and unfinished orders require every item to be picked before Ready. Picking does not deduct stock a second time. Back up the SQLite volume before a deployment, and preserve the entire `/data` directory.
 
+Version 5 adds separate working-order lines, reasoned manager overrides and explicit partial/cancelled outcomes without rewriting placed receipts. Ready and Completed orders remain frozen. See [Manager order overrides](docs/ORDER_OVERRIDES.md).
+
 Version 4 adds persisted basket allocations, scoped basket management and instruction snapshots. Existing baskets migrate with their contents intact and no reservation; the customer must explicitly review and reserve before checkout. Expired holds release exactly once on startup or the next relevant request, and reads never renew a hold. See [Basket reservations](docs/BASKET_RESERVATIONS.md).
 
 Catalog management is implemented in version 3 at `/manager/catalog`. New manager-created products start with zero stock; restock them through the audited inventory form. Category/type names and SKUs remain reserved after archive, and historical receipts and picking tickets survive catalog edits. Archived category/type labels can be restored with their original identity; this does not restore any archived products. Product restoration is a separate, version-guarded action requiring active category/type labels. It preserves stock, SKU and local code IDs, and requires a fresh checkout quote.
 
 Fresh stores get 70 fake products. A one-time v3 migration expands only an exact original eight-product catalog, identified by its eight original IDs and placeholder codes, while retaining existing names, prices and stock. A catalog with those eight plus any custom product is not expanded. In normal mode, customized/partial legacy catalogs and established empty stores are not seeded; reopening never restores removed products. An explicitly confirmed demo reset instead restores the full seed after safely preserving the prior database.
 
-Weighed products can be configured with grams, cents per kilogram and a quantity step, but are clearly unavailable to add to a basket or checkout. Existing numeric barcode values are legacy placeholders; the stored local `SHOPDEMO-` identifiers are not retail GTINs. Label generation, camera scanning, weighted checkout and substitutions remain later work. Baskets reserve counted inventory for 15 minutes; checkout consumes that allocation atomically. Manager inventory shows available and reserved separately. See the [catalog evolution plan](docs/CATALOG_EVOLUTION.md) for completed boundaries and deferred work.
+Weighed products can be configured with grams, cents per kilogram and a quantity step, but are clearly unavailable to add to a basket or checkout. Existing numeric barcode values are legacy placeholders; the stored local `SHOPDEMO-` identifiers are not retail GTINs. Label generation, camera scanning, weighted checkout and actual-weight reconciliation remain later work. Baskets reserve counted inventory for 15 minutes; checkout consumes that allocation atomically. Manager inventory shows available and reserved separately. See the [catalog evolution plan](docs/CATALOG_EVOLUTION.md) for completed boundaries and deferred work.
 
 ## Project layout
 

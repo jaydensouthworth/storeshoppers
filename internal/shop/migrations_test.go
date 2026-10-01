@@ -138,7 +138,7 @@ func assertLegacyPreserved(t *testing.T, s *Store, owner Session) {
 	if b := testBasket(t, s, owner.ID); b.Count != 3 || len(b.Lines) != 1 || b.Lines[0].Product.ID != 2 || b.Total != 1143 {
 		t.Errorf("migration changed basket: %+v", b)
 	}
-	for table, want := range map[string]int{"products": 2, "product_codes": 4, "sessions": 1, "cart": 1, "orders": 4, "order_items": 8, "adjustments": 1, "schema_version": 4} {
+	for table, want := range map[string]int{"products": 2, "product_codes": 4, "sessions": 1, "cart": 1, "orders": 4, "order_items": 8, "adjustments": 1, "schema_version": latestSchemaVersion} {
 		if got := testCount(t, s, table); got != want {
 			t.Errorf("%s count = %d, want %d", table, got, want)
 		}
@@ -148,8 +148,8 @@ func assertLegacyPreserved(t *testing.T, s *Store, owner Session) {
 		t.Errorf("migration changed adjustment history: %+v, %v", logs, err)
 	}
 	var version int
-	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil || version != 4 {
-		t.Errorf("schema version = %d, %v, want 4", version, err)
+	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil || version != latestSchemaVersion {
+		t.Errorf("schema version = %d, %v, want latest schema", version, err)
 	}
 }
 
@@ -468,8 +468,8 @@ func TestMigrationNeverSeedsAnEmptyEstablishedDatabase(t *testing.T) {
 				if count := testCount(t, s, "products"); count != 0 {
 					t.Errorf("opening established empty v%d (attempt %d) seeded %d products", version, attempt+1, count)
 				}
-				if count := testCount(t, s, "schema_version"); count != 4 {
-					t.Errorf("schema_version count = %d, want 4", count)
+				if count := testCount(t, s, "schema_version"); count != latestSchemaVersion {
+					t.Errorf("schema_version count = %d, want latest schema", count)
 				}
 				if err := s.Close(); err != nil {
 					t.Fatal(err)
@@ -494,8 +494,8 @@ func TestMigrationSeedsFreshDatabaseOnlyOnceWithoutResurrection(t *testing.T) {
 	if count := testCount(t, s, "products"); count != 70 {
 		t.Fatalf("fresh catalog count = %d, want 70", count)
 	}
-	if count := testCount(t, s, "schema_version"); count != 4 {
-		t.Errorf("fresh schema_version count = %d, want 4", count)
+	if count := testCount(t, s, "schema_version"); count != latestSchemaVersion {
+		t.Errorf("fresh schema_version count = %d, want latest schema", count)
 	}
 	// Deliberately alter, archive, and delete seed rows. Opening an established
 	// database must never recreate a demo row or overwrite manager changes.

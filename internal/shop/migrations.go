@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-const latestSchemaVersion = 4
+const latestSchemaVersion = 5
 
 //go:embed migrations/002_picking.sql
 var pickingMigration string
@@ -16,6 +16,9 @@ var catalogMigration string
 
 //go:embed migrations/004_reservations.sql
 var reservationsMigration string
+
+//go:embed migrations/005_order_overrides.sql
+var orderOverridesMigration string
 
 // migrate applies the baseline and every additive upgrade under one immediate
 // transaction. An interrupted or failed upgrade leaves the prior schema intact.
@@ -57,6 +60,11 @@ func (s *Store) migrate() error {
 	if version < 4 {
 		if err = applyMigration(tx, reservationsMigration); err != nil {
 			return fmt.Errorf("migration 4: %w", err)
+		}
+	}
+	if version < 5 {
+		if err = applyMigration(tx, orderOverridesMigration); err != nil {
+			return fmt.Errorf("migration 5: %w", err)
 		}
 	}
 	return tx.Commit()

@@ -21,6 +21,12 @@ func pickingFixture(t *testing.T, s *Store) (Session, int64) {
 }
 
 func receiptSnapshot(o Order) Order {
+	o.Version, o.WorkingTotal, o.FinalTotal = 0, 0, 0
+	o.Finalized = false
+	o.CompletionKind = ""
+	o.WorkingItems = nil
+	o.WorkingPrices = nil
+	o.Events = nil
 	o.Percent = 0
 	o.Status, o.PickedCount, o.AllPicked = "", 0, false
 	o.Items = append([]OrderItem(nil), o.Items...)
@@ -343,7 +349,7 @@ func TestHTTPAbsentSessionCannotUseGuessedOrders(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expired session retained order access: %d", w.Code)
 	}
-	w = testRequest(t, a, http.MethodPost, fmt.Sprintf("/manager/orders/%d/advance", id), owner, url.Values{"csrf": {owner.CSRF}, "status": {"Placed"}}, nil)
+	w = testRequest(t, a, http.MethodPost, fmt.Sprintf("/manager/orders/%d/advance", id), owner, url.Values{"csrf": {owner.CSRF}, "status": {"Placed"}, "order_version": {fmt.Sprint(testOrder(t, s, id, owner.ID).Version)}}, nil)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("expired session retained mutation access: %d", w.Code)
 	}
@@ -365,7 +371,7 @@ func TestHTTPNormalManagerCanFulfillOtherSessionOrder(t *testing.T) {
 		}
 	}
 	detailPath := fmt.Sprintf("/manager/orders/%d", id)
-	w := testRequest(t, a, http.MethodPost, detailPath+"/advance", manager, url.Values{"csrf": {manager.CSRF}, "status": {"Placed"}}, nil)
+	w := testRequest(t, a, http.MethodPost, detailPath+"/advance", manager, url.Values{"csrf": {manager.CSRF}, "status": {"Placed"}, "order_version": {fmt.Sprint(testOrder(t, s, id, owner.ID).Version)}}, nil)
 	assertRedirect(t, w, detailPath, false)
 	for _, item := range order.Items {
 		w = testRequest(t, a, http.MethodPost, fmt.Sprintf("%s/items/%d", detailPath, item.ProductID), manager,
@@ -373,7 +379,7 @@ func TestHTTPNormalManagerCanFulfillOtherSessionOrder(t *testing.T) {
 		assertRedirect(t, w, detailPath, false)
 	}
 	for _, stage := range []string{"Picking", "Ready"} {
-		w = testRequest(t, a, http.MethodPost, detailPath+"/advance", manager, url.Values{"csrf": {manager.CSRF}, "status": {stage}}, nil)
+		w = testRequest(t, a, http.MethodPost, detailPath+"/advance", manager, url.Values{"csrf": {manager.CSRF}, "status": {stage}, "order_version": {fmt.Sprint(testOrder(t, s, id, owner.ID).Version)}}, nil)
 		assertRedirect(t, w, detailPath, false)
 	}
 	if o := testOrder(t, s, id, owner.ID); o.Status != "Completed" || !o.AllPicked {
@@ -411,7 +417,7 @@ func TestHTTPPickingFormValidationAndGuards(t *testing.T) {
 				t.Errorf("invalid picking form (%q,%q) HX=%t did not render error: %d", fields.picked, fields.version, htmx, w.Code)
 			}
 		}
-		w = testRequest(t, a, http.MethodPost, fmt.Sprintf("/manager/orders/%d/advance", id), owner, url.Values{"csrf": {owner.CSRF}, "status": {"Picking"}}, pickingHeaders(htmx))
+		w = testRequest(t, a, http.MethodPost, fmt.Sprintf("/manager/orders/%d/advance", id), owner, url.Values{"csrf": {owner.CSRF}, "status": {"Picking"}, "order_version": {fmt.Sprint(testOrder(t, s, id, owner.ID).Version)}}, pickingHeaders(htmx))
 		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), ErrIncomplete.Error()) {
 			t.Errorf("incomplete Ready did not render actionable error: %d", w.Code)
 		}
@@ -440,7 +446,7 @@ func TestHTTPStatusFragmentProgressAndRestart(t *testing.T) {
 	owner, id := pickingFixture(t, s)
 	owner = pickingLogin(t, a, owner)
 	detailPath, statusPath := fmt.Sprintf("/manager/orders/%d", id), fmt.Sprintf("/orders/%d/status", id)
-	w := testRequest(t, a, http.MethodPost, detailPath+"/advance", owner, url.Values{"csrf": {owner.CSRF}, "status": {"Placed"}}, pickingHeaders(true))
+	w := testRequest(t, a, http.MethodPost, detailPath+"/advance", owner, url.Values{"csrf": {owner.CSRF}, "status": {"Placed"}, "order_version": {fmt.Sprint(testOrder(t, s, id, owner.ID).Version)}}, pickingHeaders(true))
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `id="workspace"`) {
 		t.Fatalf("HTMX start-picking failed: %d", w.Code)
 	}
