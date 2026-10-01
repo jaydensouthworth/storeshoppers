@@ -89,7 +89,8 @@ func (a *App) catalogView(w http.ResponseWriter, r *http.Request, message string
 			v.CategoryCount++
 		}
 	}
-	v.Search = managerSearch(r)
+	v.CatalogFilters = catalogFilters(r)
+	v.Search = v.CatalogFilters.Query
 	v.ManagerTab = "products"
 	if r.URL.Query().Get("tab") == "labels" || catalogTaxonomyKind(r) != "" {
 		v.ManagerTab = "labels"
@@ -137,15 +138,30 @@ func (a *App) catalogView(w http.ResponseWriter, r *http.Request, message string
 	if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Push-Url", catalogDestination(r))
 	}
-	if v.Search != "" {
-		filtered := make([]Product, 0, len(v.CatalogProducts))
-		needle := strings.ToLower(v.Search)
-		for _, p := range v.CatalogProducts {
-			if strings.Contains(strings.ToLower(p.Name+" "+p.SKU+" "+p.Category+" "+p.ProductType), needle) {
-				filtered = append(filtered, p)
+	codeMatches, err := a.store.catalogCodeMatches(v.CatalogFilters.Query)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	v.CatalogProducts = filterCatalogProducts(v.CatalogProducts, v.CatalogFilters, codeMatches)
+	if v.ManagerTab == "products" {
+		v.CatalogProducts, v.CatalogPage = paginateCatalogProducts(v.CatalogProducts, &v.CatalogFilters)
+		// Redirect stale/out-of-range pages to the final available page. HTMX
+		// replaces its URL while rendering that page, rather than adding a loop.
+		if pages, supplied := r.URL.Query()["page"]; supplied {
+			page := ""
+			if v.CatalogFilters.Page > 1 {
+				page = strconv.Itoa(v.CatalogFilters.Page)
+			}
+			if len(pages) != 1 || pages[0] != page {
+				if r.Header.Get("HX-Request") == "true" {
+					w.Header().Set("HX-Replace-Url", v.CatalogFilters.ListURL())
+				} else {
+					redirect(w, r, v.CatalogFilters.ListURL())
+					return
+				}
 			}
 		}
-		v.CatalogProducts = filtered
 	}
 	v.Title, v.Section = "Product catalog", "catalog"
 	switch v.ManagerTab {
@@ -374,20 +390,13 @@ func searchQuery(v string) string {
 	return "?" + url.Values{"q": {v}}.Encode()
 }
 func catalogDestination(r *http.Request) string {
-	values := url.Values{}
-	if q := managerSearch(r); q != "" {
-		values.Set("q", q)
-	}
+	values := catalogFilters(r).values()
 	if catalogTaxonomyKind(r) != "" {
 		values.Set("tab", "labels")
-	} else if id := r.PathValue("id"); id != "" {
-		values.Set("edit", id)
+	} else if id, err := num(r.PathValue("id")); err == nil && id > 0 {
+		values.Set("edit", strconv.FormatInt(id, 10))
 	} else if strings.Contains(r.URL.Path, "/products") {
 		values.Set("tab", "new")
 	}
-	path := "/manager/catalog"
-	if len(values) > 0 {
-		path += "?" + values.Encode()
-	}
-	return path
+	return catalogURL(values)
 }

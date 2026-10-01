@@ -16,12 +16,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type Config struct {
 	Origin, ManagerPassword string
 	SecureCookies, DemoMode bool
+	DemoBackupMaxBytes      int64
 }
 type App struct {
 	store        *Store
@@ -31,8 +33,13 @@ type App struct {
 	mu           sync.Mutex
 	failures     int
 	blockedUntil time.Time
+	requestGate  sync.RWMutex
+	resetPending atomic.Bool
 }
 type View struct {
+	CatalogPage                                              CatalogPage
+	StockWorkspace                                           *StockWorkspace
+	CatalogFilters                                           CatalogFilters
 	BasketDraft, StockDraft                                  *ManagerDraft
 	DemoPasswordHint                                         bool
 	ManagerTab                                               string
@@ -56,6 +63,9 @@ type View struct {
 }
 
 func New(store *Store, cfg Config) (*App, error) {
+	if cfg.DemoBackupMaxBytes < 0 {
+		return nil, errors.New("DEMO_BACKUP_MAX_BYTES must be positive")
+	}
 	u, e := url.Parse(cfg.Origin)
 	if e != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.Path != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return nil, errors.New("APP_ORIGIN must be an http(s) origin without a path")
@@ -109,7 +119,7 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("POST /manager/logout", a.logout)
 	a.mux.HandleFunc("GET /manager", a.showManager)
 	a.mux.HandleFunc("GET /manager/orders", a.showManager)
-	a.mux.HandleFunc("GET /manager/stock", a.showManager)
+	a.mux.HandleFunc("GET /manager/stock", a.showStock)
 	a.mux.HandleFunc("GET /manager/catalog", a.showCatalog)
 	a.mux.HandleFunc("POST /manager/catalog/products", a.saveCatalogProduct)
 	a.mux.HandleFunc("POST /manager/catalog/products/{id}", a.saveCatalogProduct)
@@ -123,6 +133,10 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("POST /manager/orders/{id}/items/{product_id}", a.recordPicked)
 	a.mux.HandleFunc("POST /manager/inventory", a.inventory)
 	a.mux.HandleFunc("POST /manager/orders/{id}/advance", a.advance)
+	if cfg.DemoMode {
+		a.mux.HandleFunc("GET /manager/demo/reset", a.showDemoReset)
+		a.mux.HandleFunc("POST /manager/demo/reset", a.performDemoReset)
+	}
 	return a, nil
 }
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +161,17 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if !strings.HasPrefix(r.URL.Path, "/static/") {
 		w.Header().Set("Cache-Control", "no-store")
+	}
+	// Reset POSTs perform their own read-lease validation before requesting
+	// maintenance. Parsing an untrusted request body must never hold that gate.
+	if a.config.DemoMode && !(r.Method == http.MethodPost && r.URL.Path == demoResetPath) {
+		release, err := a.acquireRequestGate(r.Context(), false)
+		if err != nil {
+			w.Header().Set("Retry-After", "3")
+			http.Error(w, "The demo is busy or being reset. Wait a moment and try again.", http.StatusServiceUnavailable)
+			return
+		}
+		defer release()
 	}
 	a.mux.ServeHTTP(w, r)
 }
@@ -532,34 +557,6 @@ func (a *App) managerView(w http.ResponseWriter, r *http.Request, message string
 	a.render(w, r, v, 200)
 }
 func (a *App) showManager(w http.ResponseWriter, r *http.Request) { a.managerView(w, r, "", nil) }
-func (a *App) inventory(w http.ResponseWriter, r *http.Request) {
-	s, ok := a.form(w, r)
-	if !ok || !a.guard(w, r, s) {
-		return
-	}
-	pid, e1 := num(r.PostForm.Get("product_id"))
-	delta, e2 := num(r.PostForm.Get("delta"))
-	ver, e3 := num(r.PostForm.Get("version"))
-	var e error
-	if e1 != nil || e2 != nil || e3 != nil {
-		e = ErrInvalid
-	} else {
-		e = a.store.Adjust(pid, delta, ver, r.PostForm.Get("reason"))
-	}
-	if e != nil && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrConflict) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrNotFound) {
-		a.fail(w, e)
-		return
-	}
-	if e == nil && r.Header.Get("HX-Request") != "true" {
-		redirect(w, r, "/manager/stock"+searchQuery(managerSearch(r)))
-		return
-	}
-	message := ""
-	if e == nil {
-		message = "Inventory adjusted. The change is recorded below."
-	}
-	a.managerView(w, r, message, e)
-}
 func (a *App) advance(w http.ResponseWriter, r *http.Request) {
 	session, ok := a.form(w, r)
 	if !ok || !a.guard(w, r, session) {

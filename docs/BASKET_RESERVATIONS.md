@@ -12,7 +12,7 @@ Checkout validates session key/revision, immutable price quote, product eligibil
 
 ## Upgrade and restart
 
-Restart persistence here describes normal mode. With `DEMO_MODE=true`, application startup restores the seeded database after preserving a private complete backup, including clearing baskets, holds, orders and sessions. This is distinct from the per-visitor practice setup action. See [Demo reset and recovery](DEMO_RESET.md).
+Ordinary restarts preserve data in both normal and demo mode. In `DEMO_MODE=true`, an explicitly confirmed manager POST at `/manager/demo/reset` restores the seed after a complete private backup, clearing baskets, holds, orders and sessions for all visitors. This is distinct from the per-visitor practice setup action. See [Demo reset and recovery](DEMO_RESET.md).
 
 Version 4 adds independent opaque basket IDs, owner-scoped basket metadata, per-line allocations, basket audit and checkout instruction snapshots. The cart table is rebuilt transactionally; existing session cart contents and revisions are copied to a real basket with zero held quantities and no deadline. They are visibly review-required. Migration never reserves every stale cart, seeds extra customer baskets, drops contents or changes historical receipts. Old orders get empty instructions. Tests cover an independent populated-v3 fixture, failed migration rollback, foreign-key integrity and reopening.
 

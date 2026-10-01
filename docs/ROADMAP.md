@@ -1,64 +1,88 @@
-# Roadmap
+# Product goals and roadmap
 
-## Working first slice
+## Design intent and acceptance
 
-- [x] One Go workspace and one persistent database
-- [x] Seeded catalog with search, department filter and out-of-stock state
-- [x] Session basket and quantity editing
-- [x] Atomic demo checkout, replay protection and receipts
-- [x] Manager gate, inventory adjustments and recent activity
-- [x] Manager order queue, per-item picking checklist and guarded readiness
-- [x] Customer status refresh and HTML fallback
-- [x] Versioned additive migration with populated-v1 upgrade and restart tests
-- [x] Session-scoped order privacy in shared demo mode
-- [x] Server-side validation, integer money and transactional stock rules
-- [x] Responsive shared design and accessible form structure
+Build a distinctive, believable corner-store demo that shows the storefront, manager tools and fulfillment working together. Keep the design intent visible through every phase, rather than reducing the project to a feature checklist.
 
-## Completed: flexible catalog and basket management
+- **Storefront:** an authored grocery-circular look using bright yellow, deep navy, red and crisp white, with strong typography, product illustrations and clear price hierarchy. Avoid generic cream/sage cards. It should feel like a specific shop, with useful shopping paths on mobile and desktop.
+- **Manager:** a task-based dashboard with purposeful navigation, focused editors, useful search/filter controls and clear feedback. Each control must do real work; printed lists and decorative metrics are not the goal.
+- **Fulfillment:** broad manager control over working orders, with explicit reasons, audit history and transactional stock changes. Preserve the original receipt and show the final fulfillment total separately. Missing items must never silently become picked.
+- **Portfolio boundary:** approximate a real shop while remaining an explicit fake-data demo, with no customer accounts, real personal information or payments. The catalog/inventory are shared; visitor baskets and orders are session-scoped. The manager password is only a demo gate.
+- **Technical shape:** one repository and Go application, server-rendered HTML with HTMX progressive enhancement, SQLite, integer money and accessible responsive layouts. Keep ordinary HTML fallbacks and release small, tested phases.
 
-- [x] 70-product demo catalog, configurable categories and optional product types
-- [x] Product create/edit/archive/restore, stable SKU/local-code identities and reusable illustrations
-- [x] Immutable receipt measurement snapshots and stale-price review
-- [x] Versioned v3/v4 populated-data upgrades and restart coverage
-- [x] Persisted 15-minute basket reservations, expiry and explicit review/reacquisition
-- [x] Available/reserved stock, scoped manager basket overrides and transactional audit
-- [x] Per-visitor synthetic practice baskets with no destructive global reset
-- [x] Plaintext checkout instructions and explicit shopping percentage
-- [x] Task-focused manager navigation, dedicated product editors and searchable lists
+Each phase is accepted only when the intended task works end to end, relevant invalid/stale/concurrent actions are tested, stock and receipt invariants hold, and desktop/mobile layouts remain usable. Check plain HTML behavior, keyboard access, labels, focus, contrast and empty/error states. A local implementation or passing unit test alone is not a live release.
 
-## Queued: storefront and catalog presentation
+## Verified live foundation
 
-- Promotions and Featured management, plus a weekly-deals homepage
-- Individual product pages with package details, descriptions and optional clearly fake nutrition panels
-- Non-food examples such as deodorant and razors to demonstrate catalog flexibility
-- Existing reusable illustration picker is complete; constrained uploads require a separate secure design
+As of 1 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/c391ead670088fb72f01d0acc280b396123c4439). This checkpoint contains 50 verified published files.
 
-## Next: manager fulfillment changes
+- 70 fake products; configurable categories/types; create, edit, archive and restore; dedicated editors and a manager sidebar
+- Safe bundled illustration picker, immutable SKU and separate demo-local product codes; uploads, generated scan labels and camera scanning are not implemented
+- Session baskets, atomic simulated checkout, replay protection, ownership checks, immutable receipt/measurement snapshots and stale-price review
+- Persisted 15-minute stock holds, expiry/reacquisition, available/reserved counts, scoped practice baskets and audited manager basket overrides
+- Plaintext checkout instructions capped at 500 characters; Picking progress percentages/counts and a distinct Ready status. The default Orders view already shows these states
+- Reasoned stock audit, per-line picking, guarded readiness, customer status refresh and normal HTML fallback
+- Versioned populated-data migrations and restart persistence; server-side validation, CSRF and non-negative transactional inventory
+- The public known-password hint appears only when the configured password matches the demo value; this remains intentionally limited demo access
 
-Preserve requested receipt lines and placed totals. Add separate fulfillment/allocation rows, explicit substitution policy snapshots, same-unit substitutions, missing-item resolution and reasoned scoped audit. Reconcile stock transactionally without phantom returns. Keep final total nullable until Ready, allow an explicitly all-unavailable final zero and freeze it at Ready. Follow with a deliberate cancellation/Needs-attention/activity workflow. Weighted checkout remains its own bounded quantity/pricing migration before actual-weight reconciliation. See [catalog evolution](CATALOG_EVOLUTION.md).
+Verification for this release: 115 top-level tests, 82.2% core coverage, race checks, vet, build, HTTP/restart checks and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36933888229). Authenticated-manager QA passed on desktop and at 400 CSS pixels. Physical-phone testing and a fuller accessibility audit remain open.
 
-## Later vertical slice: shopper scanning
+## Ordered implementation backlog
 
-1. Introduce actual user roles and an order assignment/claim policy before phone access leaves loopback.
-2. Add a phone-first pick list for a claimed order, with remaining quantities and clear completed state.
-3. Define valid barcode format(s). Current seed values are placeholders, so they must not be presented as retail-valid EAN/UPC codes.
-4. Start with manual barcode entry to validate the model; add camera scanning through a maintained browser capability/library only after testing the intended phone and HTTPS behavior.
-5. Reuse the existing picked quantity/version guards, then add scan events. Reject wrong-item scans, duplicate over-picking and stale competing writes.
-6. Keep the existing all-items-picked Ready guard. Camera scans must use the same server-side picking service, never a second inventory or status path.
-7. Add interrupted-session recovery, clear camera permission failure UX and full wrong-barcode/duplicate-scan tests.
+### 1. Manager usability and explicit reset
 
-## Further hardening
+**Implemented in this iteration:** Products search by name/SKU/barcode, category/type/availability and active/archive filters, sorting, result counts, pagination and preserved list/editor context. Put Add product in the Products header, not the sidebar. Make Stock and Activity queries/filters functional, with selected-product quick adjustments, useful links and retained context. Keep the already-working Picking/Ready distinctions; the new regression check does not represent new user-facing behavior.
 
-- Named demo identities and role separation; replace shared-password gate
-- Continue versioned migrations; add database cleanup and backup/restore operations
-- Cancellation and restocking policy
-- Dependency/security scanning, load checks, fuller accessibility audit and real-device phone QA
-- TLS, deployment configuration, trusted proxy strategy and operational logs
-- Container build and persistence verification in CI
-- Deployment configuration, private secrets and a suitable hosting boundary
-- Walkthrough, screenshots and short design narrative for the portfolio
-- Dark mode (low priority after core management/fulfillment flows)
+**Implemented and tested in this iteration:** an explicit demo-only reset page at `/manager/demo/reset`. GET only presents the confirmation; a CSRF-protected POST requires explicit confirmation of the global fake-data impact. Retain a private, consistent, recoverable snapshot, drain active requests safely, support rollback and invalidate affected sessions. Ordinary restarts continue to preserve data. This replaces the earlier reset-on-restart idea.
 
-## Intentionally later
+**Acceptance:** real queries narrow results accurately, controls remain usable at narrow widths, editor return links preserve context, and adjustment errors leave stock/audit consistent. Reset must preserve its recovery path and clearly state the shared impact before submission. Publish only after integrated checks and live verification.
 
-Real payments, tax/shipping calculation, emails, customer personal information, multi-store inventory, delivery routing, supplier integrations and production retail use.
+### 2. Give managers broad control over confirmed working orders
+
+This is the next main product priority after usability. Existing basket overrides do **not** edit a confirmed order. Add working-order line additions/removals, quantity changes and substitutions, plus explicit reasoned manager overrides. Support finishing an incomplete order by resolving remaining quantities as unavailable/cancelled with the correct stock disposition; never pretend unpicked quantities were picked.
+
+Preserve requested receipt lines and the placed total. Use separate fulfillment/allocation records, resolution history and a final fulfillment total. Record the shopper’s substitution preference, but allow explicit, reasoned manager overrides; begin with same-unit changes. Missing physical stock must not produce phantom returns. Validate scope, state and versions; update allocations, stock, totals and audit in one transaction. Final totals stay nullable until Ready, allow an explicitly all-unavailable final zero and freeze at Ready. Follow with robust order cancellation, Needs attention and useful order activity. See [catalog and fulfillment evolution](CATALOG_EVOLUTION.md).
+
+**Acceptance:** additions, removals, partial quantities, substitutions, override reasons, unavailable items and cancellation paths work end to end; failed/stale/repeated writes cannot oversell, double-deduct or double-return stock. Original receipts remain unchanged and final outcomes are understandable to both manager and customer.
+
+### 3. Add the Shoppers workspace
+
+Place Shoppers directly below Orders in the sidebar. Show a simulated employee roster, assigned tasks and progress, with working, audited assign/reassign/cancel-picking-task controls. Cancelling a picking task is distinct from cancelling its order. Define ownership, competing-picker and interrupted-session rules. Keep scan rate as an explicit placeholder until real scanner telemetry exists; do not invent analytics.
+
+**Acceptance:** task changes preserve order/stock integrity and session scope, expose the current assignment clearly, and remain recoverable after interruption.
+
+### 4. Manage promotions and make weekly sales drive the homepage
+
+Add Promotions and Featured management with integer-cent sale prices, explicit start/end times and a stated timezone. Drive the weekly-sales homepage/jumbotron and Shop all sales from that data, including an honest no-active-sales fallback. Preserve the grocery-circular visual direction and price-quote protection.
+
+**Acceptance:** active/scheduled/expired promotions display consistently; stale sale prices require review and totals match the current valid quote.
+
+### 5. Complete individual product pages and catalog presentation
+
+Provide a full page per product with description and package/quantity information. Optional nutrition panels must be clearly labelled as demo data; do not fabricate health or allergen claims. Include non-food examples such as deodorant and razors. The local illustration picker is complete. Add constrained local uploads only after a secure implementation; no arbitrary server-side URL fetching or unsanitized SVG.
+
+**Acceptance:** product details, available stock, units and basket actions agree; archived/referenced products retain their history, and both food and non-food items render sensibly on mobile.
+
+### 6. Implement weighted selling and actual-weight reconciliation
+
+Gram measurement metadata already exists, but weighted checkout and actual-weight reconciliation do not. Use a dedicated quantity/pricing migration with integer cents and grams, bounded line rounding, immutable unit/rate snapshots and unit-specific totals. Implement weighted checkout before reconciling actual picked weight, with explicit tolerance/review and transactional allocation changes. Do not mix grams and units into one misleading item count.
+
+**Acceptance:** populated migrations, rounding/bounds, competing orders and above/below-requested weights preserve history and stock; failed reconciliation rolls back every effect.
+
+### 7. Add low-priority dark mode
+
+After core manager/fulfillment work, add a persistent toggle and system-default behavior to both storefront and manager. Preserve the distinctive palette, hierarchy, focus indicators and readable contrast in both modes.
+
+### 8. Build the later two-screen barcode demo
+
+The barcode identity foundation is complete; legacy seed numbers are placeholders, not validated retail UPC/GTINs. Generate independently decodable demo-local Code 128 labels from stored identities, then add a desktop fake-shop label display and phone-friendly pick list. Begin with manual entry; add user-triggered camera scanning only after HTTPS and intended-device testing. Keep these screens in the same app.
+
+Both entry methods must use the same authorized picking service, version checks and idempotent request handling. Test unknown/wrong/archived codes, over-picking, retries, competing writes, permission failures and interrupted sessions. Preserve leading zeroes and distinguish product identity from package weight. No camera workflow, real retail barcode support or scan-rate analytics is claimed today. Named roles and an assignment policy are required before access extends beyond the bounded fake-data demo.
+
+### 9. Continue release hardening and portfolio evidence
+
+Keep versioned migrations, recoverable backup/restore and deliberate cleanup policy. Never delete referenced catalog or receipt history or perform a silent global purge. Retain the completed Docker/CI and persistence checks; extend dependency/security scanning, load checks, accessibility and physical-phone QA. Revisit TLS, trusted-proxy configuration, operational logs and private deployment secrets as the deployment evolves. Before real-world use, replace the shared gate with named identities and explicit role permissions. Capture a short walkthrough, screenshots and design narrative for the portfolio.
+
+## Outside the current demo
+
+Real payments, tax/shipping calculation, emails, customer personal information, multi-store inventory, delivery routing, supplier integrations and production retail use remain outside this scope.

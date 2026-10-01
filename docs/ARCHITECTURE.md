@@ -69,3 +69,7 @@ Fresh database creation seeds 70 fake products within the migration transaction.
 ## Product identity and scanning boundary
 
 `product_codes` keeps the old numeric values as `legacy_placeholder` and separately records a generated `demo_local` code such as `SHOPDEMO-000001`, preserving leading zeroes and uniqueness across archived rows. A custom SKU does not change the local demo code. These local codes are intended for ordinary Code 128, not GS1-128 or registered GTINs. The read-only resolver accepts the local Code 128 boundary; it does not validate legacy placeholders as retail codes, mutate orders, or mark items picked. No generated barcode labels, camera UI or scanner workflow are shipped in this milestone. All future scanning and fulfillment remain modules of this same Go/HTMX application.
+
+## Explicit demo reset
+
+Both normal and demo startup preserve data through additive migrations. Shared demo managers may visit `/manager/demo/reset` for a confirmation page; only an authorized, CSRF-protected and explicitly confirmed POST resets the shared fixture. A bounded request gate drains active handlers, SQLite temporarily enforces exclusive ownership, and the supported Backup API creates a durable private archive before transactional baseline installation. The live main/WAL files are never swapped or unlinked. Failure preserves recoverability, archives are bounded without automatic pruning, and successful reset invalidates every session. See [Demo reset, storage limits and recovery](DEMO_RESET.md) for details and primary SQLite references.

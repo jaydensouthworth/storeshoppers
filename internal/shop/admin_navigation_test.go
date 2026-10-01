@@ -205,8 +205,17 @@ func TestAdminStockIsSeparateSearchableAndKeepsAdjustmentContext(t *testing.T) {
 	if page.Code != http.StatusOK || !strings.Contains(body, "Honeycrisp apples") || strings.Contains(body, "Baby spinach") {
 		t.Errorf("stock search did not filter products: %d %s", page.Code, body)
 	}
-	if adminForm(body, "/manager/inventory") == "" {
-		t.Fatal("stock screen lacks a stock adjustment form")
+	if adminForm(body, "/manager/inventory") != "" {
+		t.Fatal("stock search embeds a write form before selecting a product")
+	}
+	if !adminFindLink(body, func(u *url.URL) bool {
+		return u.Path == "/manager/stock" && u.Query().Get("product") == "1" && u.Query().Get("q") == query
+	}) {
+		t.Fatal("stock search lacks a selected-product adjustment link")
+	}
+	selected := testRequest(t, a, http.MethodGet, path+"&product=1", manager, nil, nil)
+	if adminForm(selected.Body.String(), "/manager/inventory") == "" {
+		t.Fatal("selected product lacks a stock adjustment form")
 	}
 	if got, _ := adminInput(body, "q"); got != query {
 		t.Errorf("stock query=%q", got)
@@ -239,10 +248,10 @@ func TestAdminCatalogUsesDedicatedProductAndTaxonomyScreens(t *testing.T) {
 				if create != "" || edit != "" || categories != "" || types != "" {
 					t.Error("product list embeds create/edit/taxonomy forms")
 				}
-				if !strings.Contains(body, "Honeycrisp apples") {
-					t.Error("product list missing products")
+				if len(catalogHTTPIDs(body)) != catalogPageSize {
+					t.Error("product list missing its first page of products")
 				}
-				if !adminFindLink(body, func(u *url.URL) bool { return u.Path == "/manager/catalog" && u.Query().Get("edit") == "1" }) {
+				if !adminFindLink(body, func(u *url.URL) bool { return u.Path == "/manager/catalog" && u.Query().Get("edit") != "" }) {
 					t.Error("product list lacks link to dedicated editor")
 				}
 			case "new":

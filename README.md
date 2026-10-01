@@ -6,6 +6,8 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 
 - Searchable 70-product demo catalog with configurable department filters and clear stock states
 - Manager product creation, editing, archiving and restoration, with stable SKUs and reusable bundled illustrations
+- Catalog search across names/SKUs/codes, combined filters, sorting and 20-row pages with preserved editor context
+- Inventory filters, 12-row pages and a single selected adjustment form; scoped, filterable activity links
 - Configurable categories and optional product types, with reassignment, safe archive guards and label restoration
 - Persisted 15-minute basket stock holds, explicit review after expiry and session-owned receipts
 - Scoped manager basket overrides, reasoned audit and per-visitor synthetic practice baskets
@@ -46,11 +48,11 @@ Open `http://127.0.0.1:8090`. The development script uses the intentionally publ
 ./scripts/check.sh
 ```
 
-The check script verifies formatting, runs `go vet` and the tests with the race detector, builds the server, and exercises an actual HTTP order/manager flow with restart persistence. Tests use temporary databases. Container checks run in CI.
+The check script verifies formatting, runs `go vet` and the tests with the race detector, builds the server, and exercises actual HTTP order/manager flows with restart persistence and an explicitly confirmed demo reset. Tests use temporary databases. Container checks run in CI.
 
 ## Container configuration
 
-The root Dockerfile builds a non-root, single-service image. It listens on port **8090** and stores SQLite at **/data/shop.db**. Mount a persistent volume at **/data** and run **one replica**. Preserve the whole directory, including SQLite WAL files; use a consistent backup strategy.
+The root Dockerfile builds a non-root, single-service image. It listens on port **8090** and stores SQLite at **/data/shop.db**. Mount a persistent volume at **/data** and run **one replica**. Preserve the whole directory, including SQLite WAL files and private demo-reset backups; use a consistent backup strategy.
 
 | Variable | Purpose |
 | --- | --- |
@@ -58,11 +60,12 @@ The root Dockerfile builds a non-root, single-service image. It listens on port 
 | `APP_ORIGIN` | Exact public origin, including `http://` or `https://`, without a trailing slash |
 | `DATABASE_PATH` | SQLite path, `/data/shop.db` in the container |
 | `MANAGER_PASSWORD` | Optional demo manager gate; unset disables management |
-| `DEMO_MODE` | Set exactly `true` to allow a simple shared demo password; off by default |
+| `DEMO_MODE` | Set exactly `true` for the shared demo gate and optional manager-confirmed reset page; off by default |
+| `DEMO_BACKUP_MAX_BYTES` | Private pre-reset archive budget in bytes; default `268435456` (256 MiB), no automatic pruning |
 
 Public HTTP is suitable only for a fake-data storefront demonstration with management disabled. The app refuses public HTTP manager access. To enable management, first configure working HTTPS and use a unique password of at least 24 characters supplied through the hosting platform’s environment settings. HTTPS origins force Secure cookies. Do not commit real secrets or expose the container port directly around a TLS reverse proxy.
 
-For an intentionally shared, fake-data demo, explicitly set `DEMO_MODE=true` and `MANAGER_PASSWORD=password` in runtime environment settings. This permits a simple password while keeping public HTTPS, CSRF, ownership checks and manager checks in place. Anyone who knows or guesses that shared password can change the shared demo catalog, inventory and their own session’s order statuses. In shared demo mode, the manager sees and prepares only orders owned by the current browser session; inventory remains a shared fake catalog. A visible shared-demo banner explains this boundary. Leave `DEMO_MODE` unset or set it to `false` to retain the normal password requirements. Do not enable shared demo mode with real or private data.
+For an intentionally shared, fake-data demo, explicitly set `DEMO_MODE=true` and `MANAGER_PASSWORD=password` in runtime environment settings. This permits a simple password while keeping public HTTPS, CSRF, ownership checks and manager checks in place. Anyone who knows or guesses that shared password can change the shared demo catalog, inventory and their own session’s order statuses. In shared demo mode, the manager sees and prepares only orders owned by the current browser session; inventory remains a shared fake catalog. A visible shared-demo banner explains this boundary. Leave `DEMO_MODE` unset or set it to `false` to retain the normal password requirements. Do not enable shared demo mode with real or private data. Ordinary restarts and deployments retain data. Managers can explicitly restore the seeded catalog at `/manager/demo/reset`: GET shows a global-consequence confirmation and a CSRF-protected POST preserves a complete private SQLite backup before clearing sessions, baskets, orders, picking and visitor edits. Exhausted backup storage refuses the reset instead of deleting history. See [Demo reset and recovery](docs/DEMO_RESET.md).
 
 The shared manager password is a limited demo gate, not production identity. Named accounts, hardened access control, full browser/accessibility verification and operational hardening remain before real-world use.
 
@@ -74,7 +77,7 @@ Version 4 adds persisted basket allocations, scoped basket management and instru
 
 Catalog management is implemented in version 3 at `/manager/catalog`. New manager-created products start with zero stock; restock them through the audited inventory form. Category/type names and SKUs remain reserved after archive, and historical receipts and picking tickets survive catalog edits. Archived category/type labels can be restored with their original identity; this does not restore any archived products. Product restoration is a separate, version-guarded action requiring active category/type labels. It preserves stock, SKU and local code IDs, and requires a fresh checkout quote.
 
-Fresh stores get 70 fake products. A one-time v3 migration expands only an exact original eight-product catalog, identified by its eight original IDs and placeholder codes, while retaining existing names, prices and stock. A catalog with those eight plus any custom product is not expanded. Customized/partial legacy catalogs and established empty stores are not seeded; reopening never restores removed products.
+Fresh stores get 70 fake products. A one-time v3 migration expands only an exact original eight-product catalog, identified by its eight original IDs and placeholder codes, while retaining existing names, prices and stock. A catalog with those eight plus any custom product is not expanded. In normal mode, customized/partial legacy catalogs and established empty stores are not seeded; reopening never restores removed products. An explicitly confirmed demo reset instead restores the full seed after safely preserving the prior database.
 
 Weighed products can be configured with grams, cents per kilogram and a quantity step, but are clearly unavailable to add to a basket or checkout. Existing numeric barcode values are legacy placeholders; the stored local `SHOPDEMO-` identifiers are not retail GTINs. Label generation, camera scanning, weighted checkout and substitutions remain later work. Baskets reserve counted inventory for 15 minutes; checkout consumes that allocation atomically. Manager inventory shows available and reserved separately. See the [catalog evolution plan](docs/CATALOG_EVOLUTION.md) for completed boundaries and deferred work.
 

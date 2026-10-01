@@ -1,4 +1,7 @@
 .git
+**/*.demo-backups
+**/*.sqlite3
+**/*.sqlite3.incomplete
 .tools
 var
 bin

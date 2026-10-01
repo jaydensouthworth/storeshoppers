@@ -28,7 +28,7 @@ func TestHTTPCatalogManagerGuardAndRoundTrip(t *testing.T) {
 	visitor := testSession(t, s, "")
 	assertRedirect(t, testRequest(t, a, http.MethodGet, "/manager/catalog", visitor, nil, nil), "/manager/login", false)
 	manager := testManager(t, s)
-	page := testRequest(t, a, http.MethodGet, "/manager/catalog", manager, nil, nil)
+	page := testRequest(t, a, http.MethodGet, "/manager/catalog?q=Honeycrisp", manager, nil, nil)
 	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Honeycrisp apples") || !strings.Contains(page.Body.String(), `name="csrf"`) {
 		t.Fatalf("catalog page = %d: %s", page.Code, page.Body.String())
 	}

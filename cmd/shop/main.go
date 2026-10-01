@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -50,6 +51,14 @@ func main() {
 		}
 		return
 	}
+	demoBackupMaxBytes := shop.DefaultDemoBackupMaxBytes
+	if raw := os.Getenv("DEMO_BACKUP_MAX_BYTES"); raw != "" {
+		budget, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || budget <= 0 {
+			log.Fatal("DEMO_BACKUP_MAX_BYTES must be a positive integer byte count")
+		}
+		demoBackupMaxBytes = budget
+	}
 	path := env("DATABASE_PATH", "var/shop.db")
 	if e := os.MkdirAll(filepath.Dir(path), 0700); e != nil {
 		log.Fatal(e)
@@ -63,7 +72,7 @@ func main() {
 	if e != nil {
 		log.Fatalf("invalid APP_ORIGIN: %v", e)
 	}
-	app, e := shop.New(s, shop.Config{Origin: origin, ManagerPassword: os.Getenv("MANAGER_PASSWORD"), SecureCookies: u.Scheme == "https", DemoMode: os.Getenv("DEMO_MODE") == "true"})
+	app, e := shop.New(s, shop.Config{Origin: origin, ManagerPassword: os.Getenv("MANAGER_PASSWORD"), SecureCookies: u.Scheme == "https", DemoMode: os.Getenv("DEMO_MODE") == "true", DemoBackupMaxBytes: demoBackupMaxBytes})
 	if e != nil {
 		log.Fatal(e)
 	}
