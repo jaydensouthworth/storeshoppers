@@ -57,7 +57,7 @@ def main():
         process = start()
         try:
             home = get("/")
-            assert "Good things." in home and "Honeycrisp apples" in home
+            assert "The daily shop." in home and "Honeycrisp apples" in home
             assert "ZgotmplZ" not in home
             assert "htmx" in get("/static/htmx.min.js")
             csrf = Fields(home).fields["csrf"]
@@ -74,17 +74,32 @@ def main():
             fields = Fields(manager).fields
             _, manager = post("/manager/inventory", {"csrf":fields["csrf"],"product_id":1,"version":2,"delta":3,"reason":"HTTP smoke restock"})
             assert "HTTP smoke restock" in manager
-            _, manager = post(f"/manager/orders/{receipt_path.split('/')[-1]}/advance", {"csrf":fields["csrf"],"status":"Placed"})
+            order_id = receipt_path.split('/')[-1]
+            picking_path = f"/manager/orders/{order_id}"
+            _, manager = post(picking_path + "/advance", {"csrf":fields["csrf"],"status":"Placed"})
             assert "Picking" in get(receipt_path)
-            # Restart the actual process; cookies, stock and order must survive.
+            # Readiness is blocked until the required quantity has been picked.
+            _, blocked = post(picking_path + "/advance", {"csrf":fields["csrf"],"status":"Picking"})
+            assert "Pick every required item" in blocked
+            _, manager = post(picking_path + "/items/1", {"csrf":fields["csrf"],"picked":2,"version":1})
+            _, manager = post(picking_path + "/advance", {"csrf":fields["csrf"],"status":"Picking"})
+            assert "Ready" in get(receipt_path)
+            request = urllib.request.Request(origin + receipt_path + "/status", headers={"HX-Request":"true"})
+            with client.open(request) as response:
+                fragment = response.read().decode()
+            assert 'id="order-status"' in fragment and '<!doctype html>' not in fragment
+            # Restart the actual process; cookies, picked quantities and order must survive.
             process.terminate(); process.wait(timeout=5)
             process = start()
-            assert "Picking" in get(receipt_path)
+            assert "Ready" in get(receipt_path)
             assert "HTTP smoke restock" in get("/manager")
+            manager = get(picking_path)
+            _, completed = post(picking_path + "/advance", {"csrf":Fields(manager).fields["csrf"],"status":"Ready"})
+            assert "Completed" in get(receipt_path)
             manager = get("/manager")
             post("/manager/logout", {"csrf":Fields(manager).fields["csrf"]})
             assert "Manager demo access" in get("/manager")
-            print("PASS: real HTTP catalog, static asset, basket, checkout replay, manager login, stock audit, status, process restart and logout")
+            print("PASS: real HTTP catalog, static asset, basket, checkout replay, manager login, stock audit, guarded picking, status fragment, process restart, collection and logout")
         finally:
             process.terminate()
             process.wait(timeout=5)

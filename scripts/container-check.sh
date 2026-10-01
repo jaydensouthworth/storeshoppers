@@ -16,7 +16,7 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 curl -fsS http://127.0.0.1:18090/ -o /tmp/storeshoppers-home.html
-grep -q 'Good things.' /tmp/storeshoppers-home.html
+grep -q 'The daily shop.' /tmp/storeshoppers-home.html
 curl -fsS http://127.0.0.1:18090/manager/login -o /tmp/storeshoppers-login.html
 grep -q 'Manager access is disabled' /tmp/storeshoppers-login.html
 test "$(docker exec "$name" id -u)" = 10001

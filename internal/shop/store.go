@@ -37,11 +37,11 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err = db.Exec(schema); err != nil {
+	s := &Store{db: db}
+	if err = s.migrate(); err != nil {
 		db.Close()
 		return nil, err
 	}
-	s := &Store{db: db}
 	if err = s.seed(); err != nil {
 		db.Close()
 		return nil, err
@@ -250,7 +250,7 @@ func (s *Store) Checkout(sid, key string, revision int64) (int64, error) {
 	return id, nil
 }
 func (s *Store) Orders(sid string, manager bool) ([]Order, error) {
-	rows, e := s.db.Query(`SELECT id,reference,status,created,total FROM orders WHERE (? OR session_id=?) ORDER BY id DESC LIMIT 100`, manager, sid)
+	rows, e := s.db.Query(`SELECT o.id,o.reference,o.status,o.created,o.total,COALESCE(SUM(i.picked_quantity),0),COALESCE(SUM(i.quantity),0) FROM orders o LEFT JOIN order_items i ON i.order_id=o.id WHERE (? OR o.session_id=?) GROUP BY o.id ORDER BY o.id DESC LIMIT 100`, manager, sid)
 	if e != nil {
 		return nil, e
 	}
@@ -258,9 +258,10 @@ func (s *Store) Orders(sid string, manager bool) ([]Order, error) {
 	var all []Order
 	for rows.Next() {
 		var o Order
-		if e = rows.Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total); e != nil {
+		if e = rows.Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.PickedCount, &o.RequiredCount); e != nil {
 			return nil, e
 		}
+		o.AllPicked = o.RequiredCount > 0 && o.PickedCount == o.RequiredCount
 		all = append(all, o)
 	}
 	return all, rows.Err()
@@ -274,19 +275,22 @@ func (s *Store) Order(id int64, sid string, manager bool) (Order, error) {
 	if e != nil {
 		return o, e
 	}
-	rows, e := s.db.Query(`SELECT name,price,quantity FROM order_items WHERE order_id=? ORDER BY product_id`, id)
+	rows, e := s.db.Query(`SELECT product_id,name,price,quantity,picked_quantity,pick_version FROM order_items WHERE order_id=? ORDER BY product_id`, id)
 	if e != nil {
 		return o, e
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var i OrderItem
-		if e = rows.Scan(&i.Name, &i.Price, &i.Quantity); e != nil {
+		if e = rows.Scan(&i.ProductID, &i.Name, &i.Price, &i.Quantity, &i.Picked, &i.PickVersion); e != nil {
 			return o, e
 		}
 		i.Subtotal = i.Price * i.Quantity
 		o.Items = append(o.Items, i)
+		o.PickedCount += i.Picked
+		o.RequiredCount += i.Quantity
 	}
+	o.AllPicked = o.RequiredCount > 0 && o.PickedCount == o.RequiredCount
 	return o, rows.Err()
 }
 func (s *Store) Adjust(pid, delta, version int64, reason string) error {
@@ -331,23 +335,86 @@ func (s *Store) Adjustments() ([]Adjustment, error) {
 	}
 	return all, rows.Err()
 }
-func (s *Store) Advance(id int64, from string) error {
+
+// Advance is the internal unrestricted operation. HTTP handlers use AdvanceScoped.
+func (s *Store) Advance(id int64, from string) error { return s.AdvanceScoped(id, from, "", true) }
+
+func (s *Store) AdvanceScoped(id int64, from, sid string, allOrders bool) error {
 	next := map[string]string{"Placed": "Picking", "Picking": "Ready", "Ready": "Completed"}[from]
 	if next == "" {
 		return ErrInvalid
 	}
-	r, e := s.db.Exec(`UPDATE orders SET status=? WHERE id=? AND status=?`, next, id, from)
-	if e != nil {
-		return e
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
 	}
-	n, e := r.RowsAffected()
-	if e != nil {
-		return e
+	defer tx.Rollback()
+	var current string
+	err = tx.QueryRow(`SELECT status FROM orders WHERE id=? AND (? OR session_id=?)`, id, allOrders, sid).Scan(&current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
 	}
-	if n != 1 {
+	if err != nil {
+		return err
+	}
+	if current != from {
 		return ErrConflict
 	}
-	return nil
+	if from == "Picking" {
+		var total, incomplete int
+		if err = tx.QueryRow(`SELECT COUNT(*),COALESCE(SUM(CASE WHEN picked_quantity < quantity THEN 1 ELSE 0 END),0) FROM order_items WHERE order_id=?`, id).Scan(&total, &incomplete); err != nil {
+			return err
+		}
+		if total == 0 || incomplete != 0 {
+			return ErrIncomplete
+		}
+	}
+	if _, err = tx.Exec(`UPDATE orders SET status=? WHERE id=? AND status=?`, next, id, from); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// RecordPicked sets an absolute quantity. Version checks reject stale duplicate
+// forms; picking never deducts stock again or changes immutable receipt amounts.
+func (s *Store) RecordPicked(orderID, productID, picked, version int64, sid string, allOrders bool) error {
+	if picked < 0 || picked > 99 || version < 1 {
+		return ErrInvalid
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var status string
+	err = tx.QueryRow(`SELECT status FROM orders WHERE id=? AND (? OR session_id=?)`, orderID, allOrders, sid).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if status != "Picking" {
+		return ErrConflict
+	}
+	var quantity, currentVersion int64
+	err = tx.QueryRow(`SELECT quantity,pick_version FROM order_items WHERE order_id=? AND product_id=?`, orderID, productID).Scan(&quantity, &currentVersion)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if picked > quantity {
+		return ErrInvalid
+	}
+	if version != currentVersion {
+		return ErrConflict
+	}
+	if _, err = tx.Exec(`UPDATE order_items SET picked_quantity=?,pick_version=pick_version+1 WHERE order_id=? AND product_id=? AND pick_version=?`, picked, orderID, productID, version); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 func (s *Store) Manager(sid string, on bool) error {
 	until := int64(0)

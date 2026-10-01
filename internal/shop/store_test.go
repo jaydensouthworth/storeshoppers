@@ -401,6 +401,15 @@ func TestOrderStatusTransitions(t *testing.T) {
 		if got := testOrder(t, s, id, session.ID).Status; got != tc.from {
 			t.Fatalf("current status %q, want %q", got, tc.from)
 		}
+
+		if tc.from == "Picking" {
+			if err := s.Advance(id, "Picking"); !errors.Is(err, ErrIncomplete) {
+				t.Fatalf("incomplete readiness = %v", err)
+			}
+			if err := s.RecordPicked(id, 1, 1, 1, session.ID, false); err != nil {
+				t.Fatal(err)
+			}
+		}
 		if err := s.Advance(id, tc.from); err != nil {
 			t.Fatalf("advance %s: %v", tc.from, err)
 		}
@@ -416,8 +425,8 @@ func TestOrderStatusTransitions(t *testing.T) {
 			t.Errorf("advance from %q = %v, want ErrInvalid", from, err)
 		}
 	}
-	if err := s.Advance(id+100, "Placed"); !errors.Is(err, ErrConflict) {
-		t.Errorf("advance unknown order = %v, want ErrConflict", err)
+	if err := s.Advance(id+100, "Placed"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("advance unknown order = %v, want ErrNotFound", err)
 	}
 	if got := testProduct(t, s, 1).Stock; got != 23 {
 		t.Errorf("status transitions changed stock: %d", got)

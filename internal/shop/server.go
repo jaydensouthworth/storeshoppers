@@ -86,10 +86,13 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("POST /checkout", a.checkout)
 	a.mux.HandleFunc("GET /orders", a.showOrders)
 	a.mux.HandleFunc("GET /orders/{id}", a.showOrder)
+	a.mux.HandleFunc("GET /orders/{id}/status", a.showOrder)
 	a.mux.HandleFunc("GET /manager/login", a.showLogin)
 	a.mux.HandleFunc("POST /manager/login", a.login)
 	a.mux.HandleFunc("POST /manager/logout", a.logout)
 	a.mux.HandleFunc("GET /manager", a.showManager)
+	a.mux.HandleFunc("GET /manager/orders/{id}", a.showPicking)
+	a.mux.HandleFunc("POST /manager/orders/{id}/items/{product_id}", a.recordPicked)
 	a.mux.HandleFunc("POST /manager/inventory", a.inventory)
 	a.mux.HandleFunc("POST /manager/orders/{id}/advance", a.advance)
 	return a, nil
@@ -151,6 +154,9 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, v View, status int)
 	if r.Header.Get("HX-Request") == "true" {
 		name = "workspace"
 	}
+	a.renderNamed(w, r, name, v, status)
+}
+func (a *App) renderNamed(w http.ResponseWriter, r *http.Request, name string, v View, status int) {
 	var b bytes.Buffer
 	if e := a.templates.ExecuteTemplate(&b, name, v); e != nil {
 		a.fail(w, e)
@@ -208,7 +214,7 @@ func (a *App) showStore(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	v.Title = "Your neighborhood, in a basket"
+	v.Title = "The daily shop"
 	v.Section = "store"
 	v.Search = strings.TrimSpace(r.URL.Query().Get("q"))
 	v.Category = r.URL.Query().Get("category")
@@ -334,7 +340,7 @@ func (a *App) showOrder(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	v.Order, e = a.store.Order(id, v.Session.ID, v.Manager)
+	v.Order, e = a.store.Order(id, v.Session.ID, v.Manager && !a.config.DemoMode)
 	if errors.Is(e, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -345,6 +351,10 @@ func (a *App) showOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	v.Title = v.Order.Reference
 	v.Section = "order"
+	if strings.HasSuffix(r.URL.Path, "/status") && r.Header.Get("HX-Request") == "true" {
+		a.renderNamed(w, r, "order-status", v, 200)
+		return
+	}
 	a.render(w, r, v, 200)
 }
 func (a *App) showLogin(w http.ResponseWriter, r *http.Request) {
@@ -427,7 +437,7 @@ func (a *App) managerView(w http.ResponseWriter, r *http.Request, message string
 		a.fail(w, err)
 		return
 	}
-	if v.Orders, err = a.store.Orders("", true); err != nil {
+	if v.Orders, err = a.store.Orders(v.Session.ID, !a.config.DemoMode); err != nil {
 		a.fail(w, err)
 		return
 	}
@@ -479,27 +489,108 @@ func (a *App) inventory(w http.ResponseWriter, r *http.Request) {
 	a.managerView(w, r, message, e)
 }
 func (a *App) advance(w http.ResponseWriter, r *http.Request) {
-	s, ok := a.form(w, r)
-	if !ok || !a.guard(w, r, s) {
+	session, ok := a.form(w, r)
+	if !ok || !a.guard(w, r, session) {
 		return
 	}
-	id, e := num(r.PathValue("id"))
-	if e == nil {
-		e = a.store.Advance(id, r.PostForm.Get("status"))
-	} else {
-		e = ErrInvalid
-	}
-	if e != nil && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrConflict) {
-		a.fail(w, e)
+	id, err := num(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
 		return
 	}
-	if e == nil && r.Header.Get("HX-Request") != "true" {
-		redirect(w, r, "/manager")
+	err = a.store.AdvanceScoped(id, r.PostForm.Get("status"), session.ID, !a.config.DemoMode)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil && !errors.Is(err, ErrInvalid) && !errors.Is(err, ErrConflict) && !errors.Is(err, ErrIncomplete) {
+		a.fail(w, err)
+		return
+	}
+	if err == nil && r.Header.Get("HX-Request") != "true" {
+		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id))
 		return
 	}
 	message := ""
-	if e == nil {
+	if err == nil {
 		message = "Order status updated."
 	}
-	a.managerView(w, r, message, e)
+	a.pickingView(w, r, id, message, err)
+}
+
+func (a *App) showPicking(w http.ResponseWriter, r *http.Request) {
+	id, err := num(r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	a.pickingView(w, r, id, "", nil)
+}
+func (a *App) pickingView(w http.ResponseWriter, r *http.Request, id int64, message string, problem error) {
+	v, ok := a.view(w, r)
+	if !ok || !a.guard(w, r, v.Session) {
+		return
+	}
+	var err error
+	v.Order, err = a.store.Order(id, v.Session.ID, !a.config.DemoMode)
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+
+	if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
+		target := fmt.Sprintf("/manager/orders/%d", id)
+		current, _ := url.Parse(r.Header.Get("HX-Current-URL"))
+		if current == nil || current.Path != target {
+			w.Header().Set("HX-Push-Url", target)
+		}
+	}
+	v.Title = "Pick " + v.Order.Reference
+	v.Section = "picking"
+	v.Message = message
+	if problem != nil {
+		v.Error = problem.Error()
+	}
+	a.render(w, r, v, 200)
+}
+func (a *App) recordPicked(w http.ResponseWriter, r *http.Request) {
+	session, ok := a.form(w, r)
+	if !ok || !a.guard(w, r, session) {
+		return
+	}
+	id, e1 := num(r.PathValue("id"))
+	pid, e2 := num(r.PathValue("product_id"))
+	picked, e3 := num(r.PostForm.Get("picked"))
+	version, e4 := num(r.PostForm.Get("version"))
+	if e1 != nil {
+		http.NotFound(w, r)
+		return
+	}
+	var err error
+	if e2 != nil || e3 != nil || e4 != nil {
+		err = ErrInvalid
+	} else {
+		err = a.store.RecordPicked(id, pid, picked, version, session.ID, !a.config.DemoMode)
+	}
+	if errors.Is(err, ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil && !errors.Is(err, ErrInvalid) && !errors.Is(err, ErrConflict) {
+		a.fail(w, err)
+		return
+	}
+	if err == nil && r.Header.Get("HX-Request") != "true" {
+		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id))
+		return
+	}
+	message := ""
+	if err == nil {
+		message = "Picked quantity saved."
+	}
+	a.pickingView(w, r, id, message, err)
 }

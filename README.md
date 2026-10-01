@@ -7,7 +7,8 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Searchable catalog with department filters and clear stock states
 - Basket quantities, simulated checkout and session-owned receipts
 - Manager inventory adjustments with a reason and audit trail
-- A shared order queue with guarded fulfillment transitions
+- Manager pick tickets with per-item quantities and guarded readiness
+- Customer status refresh with a normal HTML fallback
 - Persistent SQLite storage and locally bundled frontend assets
 
 This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Phone-first picking and barcode validation are planned next.
@@ -55,9 +56,15 @@ The root Dockerfile builds a non-root, single-service image. It listens on port 
 
 Public HTTP is suitable only for a fake-data storefront demonstration with management disabled. The app refuses public HTTP manager access. To enable management, first configure working HTTPS and use a unique password of at least 24 characters supplied through the hosting platform’s environment settings. HTTPS origins force Secure cookies. Do not commit real secrets or expose the container port directly around a TLS reverse proxy.
 
-For an intentionally shared, fake-data demo, explicitly set `DEMO_MODE=true` and `MANAGER_PASSWORD=password` in runtime environment settings. This permits a simple password while keeping public HTTPS, CSRF, ownership checks and manager checks in place. Anyone who knows or guesses that shared password can change demo inventory and order statuses. A visible shared-demo banner is shown. Leave `DEMO_MODE` unset or set it to `false` to retain the normal password requirements. Do not enable shared demo mode with real or private data.
+For an intentionally shared, fake-data demo, explicitly set `DEMO_MODE=true` and `MANAGER_PASSWORD=password` in runtime environment settings. This permits a simple password while keeping public HTTPS, CSRF, ownership checks and manager checks in place. Anyone who knows or guesses that shared password can change demo inventory and order statuses. In shared demo mode, the manager sees and prepares only orders owned by the current browser session; inventory remains a shared fake catalog. A visible shared-demo banner explains this boundary. Leave `DEMO_MODE` unset or set it to `false` to retain the normal password requirements. Do not enable shared demo mode with real or private data.
 
-The shared manager password is a limited demo gate, not production identity. Named accounts, hardened access control, full browser/accessibility verification, versioned migrations and operational hardening remain before real-world use.
+The shared manager password is a limited demo gate, not production identity. Named accounts, hardened access control, full browser/accessibility verification and operational hardening remain before real-world use.
+
+## Data upgrades and fulfillment
+
+Startup applies versioned migrations transactionally. The picking upgrade adds progress columns without replacing products, sessions, baskets, stock or receipt snapshots. Historical Ready/Completed orders retain their state; new and unfinished orders require every item to be picked before Ready. Picking does not deduct stock a second time. Back up the SQLite volume before a deployment, and preserve the entire `/data` directory.
+
+Catalog categories/types, weighed products, substitutions and a two-screen barcode demo are planned extensions, not current checkout capabilities. See the [catalog evolution plan](docs/CATALOG_EVOLUTION.md) for schema, quantity and barcode boundaries.
 
 ## Project layout
 
