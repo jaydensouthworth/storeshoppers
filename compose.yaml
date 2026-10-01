@@ -1,0 +1,14 @@
+# Local opt-in example. No deployment is performed by this file.
+services:
+  market:
+    build: .
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      APP_ORIGIN: http://127.0.0.1:8090
+      MANAGER_PASSWORD: ${MANAGER_PASSWORD:?Set a demo-only password with at least 12 characters}
+    volumes:
+      - market-data:/data
+    restart: unless-stopped
+volumes:
+  market-data:
