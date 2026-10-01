@@ -89,15 +89,53 @@ func (a *App) catalogView(w http.ResponseWriter, r *http.Request, message string
 			v.CategoryCount++
 		}
 	}
-	if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
-		current, _ := url.Parse(r.Header.Get("HX-Current-URL"))
-		if current == nil || current.Path != "/manager/catalog" {
-			w.Header().Set("HX-Push-Url", "/manager/catalog")
+	v.Search = managerSearch(r)
+	v.ManagerTab = "products"
+	if r.URL.Query().Get("tab") == "labels" || catalogTaxonomyKind(r) != "" {
+		v.ManagerTab = "labels"
+	}
+	if r.URL.Query().Get("tab") == "new" {
+		v.ManagerTab = "new"
+	}
+	edit := r.URL.Query().Get("edit")
+	if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/products") {
+		edit = r.PathValue("id")
+		if edit == "" {
+			v.ManagerTab = "new"
 		}
 	}
-	v.Search = strings.TrimSpace(r.URL.Query().Get("q"))
-	if len(v.Search) > 100 {
-		v.Search = v.Search[:100]
+	if edit != "" {
+		id, e := num(edit)
+		if e != nil || id < 1 {
+			http.NotFound(w, r)
+			return
+		}
+		var current *Product
+		for _, p := range v.CatalogProducts {
+			if p.ID == id {
+				copy := p
+				current = &copy
+				break
+			}
+		}
+		if current == nil {
+			http.NotFound(w, r)
+			return
+		}
+		if draft != nil && draft.ID == id {
+			draft.SKU = current.SKU
+			draft.Stock = current.Stock
+			draft.Reserved = current.Reserved
+			draft.Archived = current.Archived
+			draft.Version = current.Version
+			draft.PriceVersion = current.PriceVersion
+			current = draft
+		}
+		draft = current
+		v.ManagerTab = "edit"
+	}
+	if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Push-Url", catalogDestination(r))
 	}
 	if v.Search != "" {
 		filtered := make([]Product, 0, len(v.CatalogProducts))
@@ -109,7 +147,15 @@ func (a *App) catalogView(w http.ResponseWriter, r *http.Request, message string
 		}
 		v.CatalogProducts = filtered
 	}
-	v.Title, v.Section = "Manage the catalog", "catalog"
+	v.Title, v.Section = "Product catalog", "catalog"
+	switch v.ManagerTab {
+	case "labels":
+		v.Title = "Categories & types"
+	case "new":
+		v.Title = "Add product"
+	case "edit":
+		v.Title = "Edit product"
+	}
 	v.Message, v.CatalogDraft = message, draft
 	if problem != nil {
 		v.Error = problem.Error()
@@ -128,7 +174,7 @@ func (a *App) catalogResult(w http.ResponseWriter, r *http.Request, message stri
 	}
 	if err == nil {
 		if r.Header.Get("HX-Request") != "true" {
-			redirect(w, r, "/manager/catalog")
+			redirect(w, r, catalogDestination(r))
 			return
 		}
 		draft = nil
@@ -189,7 +235,11 @@ func (a *App) saveCatalogProduct(w http.ResponseWriter, r *http.Request) {
 	if invalid {
 		err = ErrInvalid
 	} else {
-		_, err = a.store.SaveProduct(p)
+		var saved int64
+		saved, err = a.store.SaveProduct(p)
+		if err == nil {
+			r.SetPathValue("id", strconv.FormatInt(saved, 10))
+		}
 	}
 	a.catalogResult(w, r, "Product saved. Use inventory adjustments to change its stock.", err, &p)
 }
@@ -304,4 +354,40 @@ func (a *App) restoreCatalogProduct(w http.ResponseWriter, r *http.Request) {
 		err = a.store.RestoreProduct(id, version)
 	}
 	a.catalogResult(w, r, "Product restored with its original SKU, stock and identity. Check its shelf details before ordering.", err, nil)
+}
+
+func managerSearch(r *http.Request) string {
+	v := r.URL.Query().Get("q")
+	if r.Method == http.MethodPost {
+		v = r.PostForm.Get("q")
+	}
+	v = strings.TrimSpace(v)
+	if len(v) > 100 {
+		v = v[:100]
+	}
+	return v
+}
+func searchQuery(v string) string {
+	if v == "" {
+		return ""
+	}
+	return "?" + url.Values{"q": {v}}.Encode()
+}
+func catalogDestination(r *http.Request) string {
+	values := url.Values{}
+	if q := managerSearch(r); q != "" {
+		values.Set("q", q)
+	}
+	if catalogTaxonomyKind(r) != "" {
+		values.Set("tab", "labels")
+	} else if id := r.PathValue("id"); id != "" {
+		values.Set("edit", id)
+	} else if strings.Contains(r.URL.Path, "/products") {
+		values.Set("tab", "new")
+	}
+	path := "/manager/catalog"
+	if len(values) > 0 {
+		path += "?" + values.Encode()
+	}
+	return path
 }

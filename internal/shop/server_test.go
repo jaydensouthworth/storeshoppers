@@ -58,7 +58,7 @@ func assertRedirect(t *testing.T, w *httptest.ResponseRecorder, path string, htm
 }
 
 func TestHTTPRejectsCSRFOnEveryMutation(t *testing.T) {
-	for _, path := range []string{"/cart", "/checkout", "/manager/login", "/manager/logout", "/manager/inventory", "/manager/orders/1/advance", "/manager/orders/1/items/1", "/manager/catalog/products", "/manager/catalog/products/1", "/manager/catalog/products/1/archive", "/manager/catalog/products/1/restore", "/manager/catalog/categories", "/manager/catalog/categories/1", "/manager/catalog/categories/1/archive", "/manager/catalog/categories/1/restore", "/manager/catalog/types", "/manager/catalog/types/1", "/manager/catalog/types/1/archive", "/manager/catalog/types/1/restore"} {
+	for _, path := range []string{"/cart", "/cart/renew", "/manager/baskets/practice", "/manager/baskets/missing/items", "/manager/baskets/missing/renew", "/checkout", "/manager/login", "/manager/logout", "/manager/inventory", "/manager/orders/1/advance", "/manager/orders/1/items/1", "/manager/catalog/products", "/manager/catalog/products/1", "/manager/catalog/products/1/archive", "/manager/catalog/products/1/restore", "/manager/catalog/categories", "/manager/catalog/categories/1", "/manager/catalog/categories/1/archive", "/manager/catalog/categories/1/restore", "/manager/catalog/types", "/manager/catalog/types/1", "/manager/catalog/types/1/archive", "/manager/catalog/types/1/restore"} {
 		for _, tokenKind := range []string{"missing", "incorrect", "another session", "query string only"} {
 			t.Run(path+"/"+tokenKind, func(t *testing.T) {
 				s := newTestStore(t)
@@ -90,7 +90,7 @@ func TestHTTPRejectsCSRFOnEveryMutation(t *testing.T) {
 				if b := testBasket(t, s, session.ID); b.Count != 1 {
 					t.Error("CSRF-rejected request mutated basket")
 				}
-				if p := testProduct(t, s, 1); p.Stock != 24 || p.Version != 1 {
+				if p := testProduct(t, s, 1); p.Stock != 23 || p.Version != 2 {
 					t.Error("CSRF-rejected request mutated inventory")
 				}
 				if testCount(t, s, "orders") != 0 || testCount(t, s, "adjustments") != 0 {
@@ -301,7 +301,7 @@ func TestHTTPFormAndNumericValidation(t *testing.T) {
 			s := newTestStore(t)
 			a := testApp(t, s, testManagerPassword)
 			session := testSession(t, s, "")
-			w := testRequest(t, a, http.MethodPost, "/cart", session, url.Values{"csrf": {session.CSRF}, "product_id": {tc.pid}, "quantity": {tc.quantity}}, map[string]string{"HX-Request": "true"})
+			w := testRequest(t, a, http.MethodPost, "/cart", session, url.Values{"revision": {fmt.Sprint(session.Revision)}, "csrf": {session.CSRF}, "product_id": {tc.pid}, "quantity": {tc.quantity}}, map[string]string{"HX-Request": "true"})
 			if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `role="alert"`) {
 				t.Errorf("validation must render an HTMX error state: status %d", w.Code)
 			}
@@ -373,7 +373,7 @@ func TestHTTPCheckoutStaleRevisionAndReplay(t *testing.T) {
 			if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), ErrConflict.Error()) {
 				t.Fatalf("stale checkout did not render conflict: status %d", w.Code)
 			}
-			if testCount(t, s, "orders") != 0 || testProduct(t, s, 1).Stock != 24 {
+			if testCount(t, s, "orders") != 0 || testProduct(t, s, 1).Stock != 23 {
 				t.Error("stale HTTP checkout created an order or changed stock")
 			}
 			current := testSession(t, s, session.ID)

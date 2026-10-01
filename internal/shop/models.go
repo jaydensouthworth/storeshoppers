@@ -6,6 +6,7 @@ import (
 )
 
 var ErrConflict = errors.New("This changed since you opened it. Refresh and try again.")
+var ErrHold = errors.New("Your stock hold expired or needs review. Review and reserve your basket for 15 minutes before checkout.")
 var ErrStock = errors.New("Not enough stock for this order. Review your basket and try again.")
 var ErrEmpty = errors.New("Add something to your basket first.")
 var ErrInvalid = errors.New("Please check the submitted values.")
@@ -21,6 +22,7 @@ var ErrNotFound = errors.New("That item could not be found.")
 type Product struct {
 	ID                                         int64
 	Name, Description, Category, Barcode, Icon string
+	Reserved                                   int64
 	Price, Stock, Version                      int64
 	SKU, ProductType, SaleUnit                 string
 	CategoryID, TypeID                         int64
@@ -43,14 +45,17 @@ type Session struct {
 	Revision, ManagerUntil int64
 }
 type CartLine struct {
-	Product            Product
-	Quantity, Subtotal int64
+	Product                      Product
+	Quantity, Subtotal, Reserved int64
 }
 type Basket struct {
-	Lines        []CartLine
-	Total, Count int64
-	CanCheckout  bool
-	Quote        string
+	ID, Label, HoldLabel   string
+	Synthetic, NeedsReview bool
+	HoldUntil, Revision    int64
+	Lines                  []CartLine
+	Total, Count           int64
+	CanCheckout            bool
+	Quote                  string
 }
 type OrderItem struct {
 	Name                           string
@@ -60,6 +65,8 @@ type OrderItem struct {
 	PriceBasis, QuantityStep       int64
 }
 type Order struct {
+	Instructions               string
+	Percent                    int64
 	ID                         int64
 	Reference, Status, Created string
 	Total                      int64
@@ -80,4 +87,9 @@ func Money(cents int64) string { return fmt.Sprintf("$%d.%02d", cents/100, cents
 type CatalogEvent struct {
 	Kind, Action, Name, Details, Created string
 	EntityID                             int64
+}
+
+// BasketEvent uses public basket identifiers, never authentication tokens.
+type BasketEvent struct {
+	BasketID, Label, Action, Reason, Details, Created string
 }

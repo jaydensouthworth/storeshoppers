@@ -106,16 +106,16 @@ func testOrder(t *testing.T, s *Store, id int64, sid string) Order {
 }
 
 func TestCheckoutAllOrNothing(t *testing.T) {
-	for _, failure := range []string{"stock changed", "second item insert failed"} {
+	for _, failure := range []string{"hold lost", "second item insert failed"} {
 		t.Run(failure, func(t *testing.T) {
 			s := newTestStore(t)
 			session := testSession(t, s, "")
 			testCart(t, s, session.ID, 1, 2)
 			testCart(t, s, session.ID, 2, 3)
-			if failure == "stock changed" {
-				testExec(t, s, "UPDATE products SET stock=2 WHERE id=2")
+			if failure == "hold lost" {
+				testExec(t, s, "UPDATE cart SET reserved=0 WHERE product_id=2")
 			} else {
-				// Fail after product 1 has already been deducted and snapshotted.
+				// Fail after product 1 has already been snapshotted; holds must survive.
 				testExec(t, s, `CREATE TRIGGER reject_second_order_item BEFORE INSERT ON order_items WHEN NEW.product_id=2 BEGIN SELECT RAISE(ABORT, 'injected item insert failure'); END`)
 			}
 			beforeSession := testSession(t, s, session.ID)
@@ -128,8 +128,8 @@ func TestCheckoutAllOrNothing(t *testing.T) {
 			if err == nil || id != 0 {
 				t.Fatalf("failed checkout = (%d, %v), want (0, error)", id, err)
 			}
-			if failure == "stock changed" && !errors.Is(err, ErrStock) {
-				t.Fatalf("checkout error = %v, want ErrStock", err)
+			if failure == "hold lost" && !errors.Is(err, ErrHold) {
+				t.Fatalf("checkout error = %v, want ErrHold", err)
 			}
 			afterProducts, err := s.Products("", "")
 			if err != nil {
@@ -162,13 +162,10 @@ func TestConcurrentLastUnitNeverOversells(t *testing.T) {
 	testExec(t, first, "UPDATE products SET stock=1 WHERE id=1")
 	const shoppers = 16
 	sessions := make([]Session, shoppers)
-	quotes := make([]string, shoppers)
 	for i := range sessions {
 		s := stores[i%len(stores)]
 		session := testSession(t, s, "")
-		testCart(t, s, session.ID, 1, 1)
-		sessions[i] = testSession(t, s, session.ID)
-		quotes[i] = testBasket(t, s, session.ID).Quote
+		sessions[i] = session
 	}
 	type outcome struct {
 		index int
@@ -183,7 +180,16 @@ func TestConcurrentLastUnitNeverOversells(t *testing.T) {
 		go func(i int, session Session) {
 			defer wg.Done()
 			<-start
-			id, err := stores[i%len(stores)].Checkout(session.ID, session.CheckoutKey, session.Revision, quotes[i])
+			store := stores[i%len(stores)]
+			id := int64(0)
+			err := store.SetCart(session.ID, 1, 1, false)
+			if err == nil {
+				b, e := store.Basket(session.ID)
+				err = e
+				if err == nil {
+					id, err = store.Checkout(session.ID, session.CheckoutKey, b.Revision, b.Quote)
+				}
+			}
 			results <- outcome{i, id, err}
 		}(i, session)
 	}
@@ -204,8 +210,8 @@ func TestConcurrentLastUnitNeverOversells(t *testing.T) {
 			if !errors.Is(result.err, ErrStock) {
 				t.Errorf("loser error = %v, want ErrStock", result.err)
 			}
-			if b := testBasket(t, first, sessions[result.index].ID); b.Count != 1 {
-				t.Error("loser's basket was modified")
+			if b := testBasket(t, first, sessions[result.index].ID); b.Count != 0 {
+				t.Error("failed reservation changed loser's basket")
 			}
 		}
 	}
@@ -294,8 +300,8 @@ func TestCheckoutRejectsStaleRevisionAndWrongKey(t *testing.T) {
 			}
 		})
 	}
-	if p := testProduct(t, s, 1); p.Stock != 24 {
-		t.Error("rejected checkout deducted stock")
+	if p := testProduct(t, s, 1); p.Stock != 23 || p.Reserved != 1 {
+		t.Error("rejected checkout changed the existing hold")
 	}
 	if n := testCount(t, s, "orders"); n != 0 {
 		t.Error("rejected checkout created an order")

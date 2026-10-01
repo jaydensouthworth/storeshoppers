@@ -21,6 +21,7 @@ func pickingFixture(t *testing.T, s *Store) (Session, int64) {
 }
 
 func receiptSnapshot(o Order) Order {
+	o.Percent = 0
 	o.Status, o.PickedCount, o.AllPicked = "", 0, false
 	o.Items = append([]OrderItem(nil), o.Items...)
 	for i := range o.Items {
@@ -304,7 +305,7 @@ func TestHTTPDemoManagersOnlyAccessOwnOrders(t *testing.T) {
 	p := testProduct(t, s, 1)
 	w := testRequest(t, a, http.MethodPost, "/manager/inventory", second,
 		url.Values{"csrf": {second.CSRF}, "product_id": {"1"}, "delta": {"1"}, "version": {fmt.Sprint(p.Version)}, "reason": {"Shared demo restock"}}, nil)
-	assertRedirect(t, w, "/manager", false)
+	assertRedirect(t, w, "/manager/stock", false)
 	if got := testProduct(t, s, 1); got.Stock != p.Stock+1 {
 		t.Error("demo privacy isolation incorrectly isolated global inventory")
 	}

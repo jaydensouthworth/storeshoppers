@@ -14,11 +14,28 @@
 - [x] Server-side validation, integer money and transactional stock rules
 - [x] Responsive shared design and accessible form structure
 
-## Next foundation: a flexible catalog
+## Completed: flexible catalog and basket management
 
-Add configurable category and product-type records, product creation/editing/archiving, stable barcode identities and explicit measurement metadata. Archive referenced records rather than breaking receipt history. Counted quantities and weighed quantities must have explicit units; use integer grams and integer cents, never floating point. Implement this as a separate migration after the current picking foundation.
+- [x] 70-product demo catalog, configurable categories and optional product types
+- [x] Product create/edit/archive/restore, stable SKU/local-code identities and reusable illustrations
+- [x] Immutable receipt measurement snapshots and stale-price review
+- [x] Versioned v3/v4 populated-data upgrades and restart coverage
+- [x] Persisted 15-minute basket reservations, expiry and explicit review/reacquisition
+- [x] Available/reserved stock, scoped manager basket overrides and transactional audit
+- [x] Per-visitor synthetic practice baskets with no destructive global reset
+- [x] Plaintext checkout instructions and explicit shopping percentage
+- [x] Task-focused manager navigation, dedicated product editors and searchable lists
 
-Weighted checkout and substitutions need immutable quantity/price-basis snapshots and a separate order-change ledger with transactional stock reconciliation. Merely adding fields does not mean these checkout behaviors exist.
+## Queued: storefront and catalog presentation
+
+- Promotions and Featured management, plus a weekly-deals homepage
+- Individual product pages with package details, descriptions and optional clearly fake nutrition panels
+- Non-food examples such as deodorant and razors to demonstrate catalog flexibility
+- Existing reusable illustration picker is complete; constrained uploads require a separate secure design
+
+## Next: manager fulfillment changes
+
+Preserve requested receipt lines and placed totals. Add separate fulfillment/allocation rows, explicit substitution policy snapshots, same-unit substitutions, missing-item resolution and reasoned scoped audit. Reconcile stock transactionally without phantom returns. Keep final total nullable until Ready, allow an explicitly all-unavailable final zero and freeze it at Ready. Follow with a deliberate cancellation/Needs-attention/activity workflow. Weighted checkout remains its own bounded quantity/pricing migration before actual-weight reconciliation. See [catalog evolution](CATALOG_EVOLUTION.md).
 
 ## Later vertical slice: shopper scanning
 
@@ -34,13 +51,13 @@ Weighted checkout and substitutions need immutable quantity/price-basis snapshot
 
 - Named demo identities and role separation; replace shared-password gate
 - Continue versioned migrations; add database cleanup and backup/restore operations
-- Product creation/editing and a price update policy if needed for the story
-- Cancellation and restocking policy; substitutions only if they support the demo
+- Cancellation and restocking policy
 - Dependency/security scanning, load checks, fuller accessibility audit and real-device phone QA
 - TLS, deployment configuration, trusted proxy strategy and operational logs
 - Container build and persistence verification in CI
 - Deployment configuration, private secrets and a suitable hosting boundary
 - Walkthrough, screenshots and short design narrative for the portfolio
+- Dark mode (low priority after core management/fulfillment flows)
 
 ## Intentionally later
 

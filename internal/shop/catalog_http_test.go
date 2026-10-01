@@ -38,7 +38,7 @@ func TestHTTPCatalogManagerGuardAndRoundTrip(t *testing.T) {
 	createValues := catalogProductForm(manager, p)
 	createValues.Set("stock", "9000") // Catalog forms may never invent stock without audit.
 	w := testRequest(t, a, http.MethodPost, "/manager/catalog/products", manager, createValues, nil)
-	assertRedirect(t, w, "/manager/catalog", false)
+	assertRedirect(t, w, "/manager/catalog?edit=71", false)
 	all, err := s.CatalogProducts()
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestHTTPCatalogManagerGuardAndRoundTrip(t *testing.T) {
 		t.Error("stale HTTP form changed product")
 	}
 	w = testRequest(t, a, http.MethodPost, fmt.Sprintf("/manager/catalog/products/%d/archive", p.ID), manager, url.Values{"csrf": {manager.CSRF}, "catalog_version": {fmt.Sprint(saved.CatalogVersion)}}, nil)
-	assertRedirect(t, w, "/manager/catalog", false)
+	assertRedirect(t, w, "/manager/catalog?edit=71", false)
 	if !testCatalogProduct(t, s, p.ID).Archived {
 		t.Error("HTTP archive not persisted")
 	}
@@ -88,7 +88,7 @@ func TestHTTPTaxonomyFormsAndProductValidation(t *testing.T) {
 	for _, tc := range []struct{ route, kind, name string }{{"categories", "category", "HTTP seasonal"}, {"types", "type", "HTTP fruit"}} {
 		path := "/manager/catalog/" + tc.route
 		w := testRequest(t, a, http.MethodPost, path, manager, url.Values{"csrf": {manager.CSRF}, "name": {tc.name}}, nil)
-		assertRedirect(t, w, "/manager/catalog", false)
+		assertRedirect(t, w, "/manager/catalog?tab=labels", false)
 		all, err := s.Taxonomies(tc.kind, false)
 		if err != nil {
 			t.Fatal(err)
@@ -104,12 +104,12 @@ func TestHTTPTaxonomyFormsAndProductValidation(t *testing.T) {
 		}
 		path += fmt.Sprintf("/%d", created.ID)
 		values := url.Values{"csrf": {manager.CSRF}, "name": {tc.name + " renamed"}, "version": {"1"}}
-		assertRedirect(t, testRequest(t, a, http.MethodPost, path, manager, values, nil), "/manager/catalog", false)
+		assertRedirect(t, testRequest(t, a, http.MethodPost, path, manager, values, nil), "/manager/catalog?tab=labels", false)
 		w = testRequest(t, a, http.MethodPost, path, manager, values, nil)
 		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), ErrConflict.Error()) {
 			t.Errorf("taxonomy stale form missing conflict: %d", w.Code)
 		}
-		assertRedirect(t, testRequest(t, a, http.MethodPost, path+"/archive", manager, url.Values{"csrf": {manager.CSRF}, "version": {"2"}}, nil), "/manager/catalog", false)
+		assertRedirect(t, testRequest(t, a, http.MethodPost, path+"/archive", manager, url.Values{"csrf": {manager.CSRF}, "version": {"2"}}, nil), "/manager/catalog?tab=labels", false)
 		if !testTaxonomy(t, s, tc.kind, created.ID).Archived {
 			t.Error("taxonomy HTTP archive missing")
 		}
@@ -182,7 +182,7 @@ func TestDemoCatalogChangesCannotExposeOtherSessionOrders(t *testing.T) {
 	manager := testManager(t, s)
 	p := testProduct(t, s, 1)
 	p.Name = "Shared demo apples"
-	assertRedirect(t, testRequest(t, a, http.MethodPost, "/manager/catalog/products/1", manager, catalogProductForm(manager, p), nil), "/manager/catalog", false)
+	assertRedirect(t, testRequest(t, a, http.MethodPost, "/manager/catalog/products/1", manager, catalogProductForm(manager, p), nil), "/manager/catalog?edit=1", false)
 	for _, path := range []string{"/manager/catalog", "/manager", "/orders"} {
 		w := testRequest(t, a, http.MethodGet, path, manager, nil, nil)
 		if w.Code != http.StatusOK || strings.Contains(w.Body.String(), order.Reference) || strings.Contains(w.Body.String(), other.ID) {
@@ -206,7 +206,7 @@ func TestHTTPWeightedProductMetadataCannotBecomeCountedSale(t *testing.T) {
 	p := Product{Name: "HTTP future weighed nuts", CategoryID: testProduct(t, s, 1).CategoryID, Icon: "leaf", Price: 1599, SaleUnit: "g", QuantityStep: 100}
 	values := catalogProductForm(manager, p)
 	values.Set("price_basis", "1")
-	assertRedirect(t, testRequest(t, a, http.MethodPost, "/manager/catalog/products", manager, values, nil), "/manager/catalog", false)
+	assertRedirect(t, testRequest(t, a, http.MethodPost, "/manager/catalog/products", manager, values, nil), "/manager/catalog?edit=71", false)
 	all, err := s.CatalogProducts()
 	if err != nil {
 		t.Fatal(err)
@@ -224,7 +224,7 @@ func TestHTTPWeightedProductMetadataCannotBecomeCountedSale(t *testing.T) {
 		t.Fatal(err)
 	}
 	shopper := testSession(t, s, "")
-	w := testRequest(t, a, http.MethodPost, "/cart", shopper, url.Values{"csrf": {shopper.CSRF}, "product_id": {fmt.Sprint(p.ID)}, "quantity": {"1"}}, nil)
+	w := testRequest(t, a, http.MethodPost, "/cart", shopper, url.Values{"revision": {fmt.Sprint(shopper.Revision)}, "csrf": {shopper.CSRF}, "product_id": {fmt.Sprint(p.ID)}, "quantity": {"1"}}, nil)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), ErrUnavailable.Error()) {
 		t.Errorf("weighted HTTP cart = %d: %s", w.Code, w.Body.String())
 	}
@@ -255,7 +255,7 @@ func TestHTTPRestoreTaxonomyPreservesVersionGuard(t *testing.T) {
 			t.Error("stale taxonomy restore succeeded")
 		}
 		values.Set("version", "2")
-		assertRedirect(t, testRequest(t, a, http.MethodPost, path, manager, values, nil), "/manager/catalog", false)
+		assertRedirect(t, testRequest(t, a, http.MethodPost, path, manager, values, nil), "/manager/catalog?tab=labels", false)
 		if got := testTaxonomy(t, s, tc.kind, id); got.Archived || got.Version != 3 {
 			t.Errorf("restored taxonomy = %+v", got)
 		}
@@ -295,7 +295,7 @@ func TestHTTPProductRestoreGuardsAndExplicitRecovery(t *testing.T) {
 		t.Errorf("stale product restore = %d: %s", w.Code, w.Body.String())
 	}
 	values.Set("catalog_version", "2")
-	assertRedirect(t, testRequest(t, a, http.MethodPost, path, manager, values, nil), "/manager/catalog", false)
+	assertRedirect(t, testRequest(t, a, http.MethodPost, path, manager, values, nil), fmt.Sprintf("/manager/catalog?edit=%d", p.ID), false)
 	if got := testProduct(t, s, p.ID); got.Archived || got.CatalogVersion != 3 || got.SKU != p.SKU {
 		t.Errorf("HTTP product restore changed identity: %+v", got)
 	}

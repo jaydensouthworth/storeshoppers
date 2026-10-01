@@ -33,6 +33,13 @@ type App struct {
 	blockedUntil time.Time
 }
 type View struct {
+	BasketDraft, StockDraft                                  *ManagerDraft
+	DemoPasswordHint                                         bool
+	ManagerTab                                               string
+	Baskets                                                  []Basket
+	ManagedBasket                                            Basket
+	BasketEvents                                             []BasketEvent
+	Instructions                                             string
 	Title, Section, Search, Category, Message, Error         string
 	Session                                                  Session
 	Manager, ManagerEnabled, DemoMode                        bool
@@ -87,6 +94,12 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("GET /{$}", a.showStore)
 	a.mux.HandleFunc("GET /cart", a.showCart)
 	a.mux.HandleFunc("POST /cart", a.changeCart)
+	a.mux.HandleFunc("POST /cart/renew", a.renewCart)
+	a.mux.HandleFunc("GET /manager/baskets", a.showBaskets)
+	a.mux.HandleFunc("GET /manager/baskets/{id}", a.showBasket)
+	a.mux.HandleFunc("POST /manager/baskets/practice", a.createPracticeBaskets)
+	a.mux.HandleFunc("POST /manager/baskets/{id}/items", a.managerChangeBasket)
+	a.mux.HandleFunc("POST /manager/baskets/{id}/renew", a.managerRenewBasket)
 	a.mux.HandleFunc("POST /checkout", a.checkout)
 	a.mux.HandleFunc("GET /orders", a.showOrders)
 	a.mux.HandleFunc("GET /orders/{id}", a.showOrder)
@@ -95,6 +108,8 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("POST /manager/login", a.login)
 	a.mux.HandleFunc("POST /manager/logout", a.logout)
 	a.mux.HandleFunc("GET /manager", a.showManager)
+	a.mux.HandleFunc("GET /manager/orders", a.showManager)
+	a.mux.HandleFunc("GET /manager/stock", a.showManager)
 	a.mux.HandleFunc("GET /manager/catalog", a.showCatalog)
 	a.mux.HandleFunc("POST /manager/catalog/products", a.saveCatalogProduct)
 	a.mux.HandleFunc("POST /manager/catalog/products/{id}", a.saveCatalogProduct)
@@ -160,7 +175,10 @@ func (a *App) view(w http.ResponseWriter, r *http.Request) (View, bool) {
 		a.fail(w, e)
 		return View{}, false
 	}
-	return View{Session: s, Basket: b, Manager: a.config.ManagerPassword != "" && s.ManagerUntil > time.Now().Unix(), ManagerEnabled: a.config.ManagerPassword != "", DemoMode: a.config.DemoMode}, true
+	// Expiry reconciliation may advance the basket revision. Use the same
+	// displayed revision for subsequent customer forms.
+	s.Revision = b.Revision
+	return View{DemoPasswordHint: a.config.DemoMode && a.config.ManagerPassword == "password", Session: s, Basket: b, Manager: a.config.ManagerPassword != "" && s.ManagerUntil > time.Now().Unix(), ManagerEnabled: a.config.ManagerPassword != "", DemoMode: a.config.DemoMode}, true
 }
 func (a *App) render(w http.ResponseWriter, r *http.Request, v View, status int) {
 	name := "layout"
@@ -270,11 +288,12 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 	}
 	pid, e1 := num(r.PostForm.Get("product_id"))
 	qty, e2 := num(r.PostForm.Get("quantity"))
+	revision, e3 := num(r.PostForm.Get("revision"))
 	var e error
-	if e1 != nil || e2 != nil {
+	if e1 != nil || e2 != nil || e3 != nil {
 		e = ErrInvalid
 	} else {
-		e = a.store.SetCart(s.ID, pid, qty, r.PostForm.Get("mode") == "add")
+		e = a.store.SetCartVersion(s.ID, pid, qty, r.PostForm.Get("mode") == "add", revision)
 	}
 	v, ok := a.view(w, r)
 	if !ok {
@@ -288,7 +307,7 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 	v.Search = r.PostForm.Get("q")
 	v.Category = r.PostForm.Get("category")
 	if e != nil {
-		if !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrNotFound) && !errors.Is(e, ErrUnavailable) {
+		if !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrNotFound) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrConflict) {
 			a.fail(w, e)
 			return
 		}
@@ -321,7 +340,7 @@ func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
 	rev, e := num(r.PostForm.Get("revision"))
 	var id int64
 	if e == nil {
-		id, e = a.store.Checkout(s.ID, r.PostForm.Get("checkout_key"), rev, r.PostForm.Get("quote"))
+		id, e = a.store.CheckoutWithInstructions(s.ID, r.PostForm.Get("checkout_key"), rev, r.PostForm.Get("quote"), r.PostForm.Get("instructions"))
 	} else {
 		e = ErrInvalid
 	}
@@ -329,7 +348,7 @@ func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, fmt.Sprintf("/orders/%d", id))
 		return
 	}
-	if !errors.Is(e, ErrConflict) && !errors.Is(e, ErrEmpty) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrQuote) && !errors.Is(e, ErrUnavailable) {
+	if !errors.Is(e, ErrConflict) && !errors.Is(e, ErrEmpty) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrQuote) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrHold) {
 		a.fail(w, e)
 		return
 	}
@@ -337,6 +356,7 @@ func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	v.Instructions = r.PostForm.Get("instructions")
 	v.Title = "Review your basket"
 	v.Section = "cart"
 	v.Error = e.Error()
@@ -454,6 +474,11 @@ func (a *App) managerView(w http.ResponseWriter, r *http.Request, message string
 		return
 	}
 	v.Title = "Store workspace"
+	v.ManagerTab = "orders"
+	if r.URL.Path == "/manager/stock" || r.URL.Path == "/manager/inventory" {
+		v.ManagerTab = "stock"
+	}
+	v.Search = managerSearch(r)
 	v.Section = "manager"
 	v.Message = message
 	if e != nil {
@@ -464,7 +489,7 @@ func (a *App) managerView(w http.ResponseWriter, r *http.Request, message string
 		a.fail(w, err)
 		return
 	}
-	if v.Orders, err = a.store.Orders(v.Session.ID, !a.config.DemoMode); err != nil {
+	if v.Orders, err = a.store.OrdersSearch(v.Session.ID, !a.config.DemoMode, v.Search); err != nil {
 		a.fail(w, err)
 		return
 	}
@@ -491,6 +516,19 @@ func (a *App) managerView(w http.ResponseWriter, r *http.Request, message string
 			v.OpenOrders++
 		}
 	}
+	if e != nil && r.Method == http.MethodPost && r.URL.Path == "/manager/inventory" {
+		v.StockDraft = managerDraft(r, "stock")
+	}
+	if v.ManagerTab == "stock" && v.Search != "" {
+		filtered := []Product{}
+		needle := strings.ToLower(v.Search)
+		for _, p := range v.Products {
+			if strings.Contains(strings.ToLower(p.Name+" "+p.SKU+" "+p.Category), needle) || (v.StockDraft != nil && v.StockDraft.ProductID == p.ID) {
+				filtered = append(filtered, p)
+			}
+		}
+		v.Products = filtered
+	}
 	a.render(w, r, v, 200)
 }
 func (a *App) showManager(w http.ResponseWriter, r *http.Request) { a.managerView(w, r, "", nil) }
@@ -513,7 +551,7 @@ func (a *App) inventory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if e == nil && r.Header.Get("HX-Request") != "true" {
-		redirect(w, r, "/manager")
+		redirect(w, r, "/manager/stock"+searchQuery(managerSearch(r)))
 		return
 	}
 	message := ""
@@ -542,7 +580,7 @@ func (a *App) advance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil && r.Header.Get("HX-Request") != "true" {
-		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id))
+		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id)+searchQuery(managerSearch(r)))
 		return
 	}
 	message := ""
@@ -577,14 +615,16 @@ func (a *App) pickingView(w http.ResponseWriter, r *http.Request, id int64, mess
 	}
 
 	if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
-		target := fmt.Sprintf("/manager/orders/%d", id)
+		target := fmt.Sprintf("/manager/orders/%d", id) + searchQuery(managerSearch(r))
 		current, _ := url.Parse(r.Header.Get("HX-Current-URL"))
-		if current == nil || current.Path != target {
+		if current == nil || current.RequestURI() != target {
 			w.Header().Set("HX-Push-Url", target)
 		}
 	}
 	v.Title = "Pick " + v.Order.Reference
 	v.Section = "picking"
+	v.ManagerTab = "orders"
+	v.Search = managerSearch(r)
 	v.Message = message
 	if problem != nil {
 		v.Error = problem.Error()
@@ -619,7 +659,7 @@ func (a *App) recordPicked(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil && r.Header.Get("HX-Request") != "true" {
-		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id))
+		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id)+searchQuery(managerSearch(r)))
 		return
 	}
 	message := ""

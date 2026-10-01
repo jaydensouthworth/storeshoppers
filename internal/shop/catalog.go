@@ -12,13 +12,13 @@ import (
 
 // Catalog writes keep merchant SKUs separate from barcode identities. Archived
 // rows and their unique identifiers are retained permanently by the application.
-const productSelect = `p.id,p.name,p.description,c.name,p.barcode,p.icon,p.price,p.stock,p.version,p.sku,COALESCE(t.name,''),p.sale_unit,p.category_id,COALESCE(p.type_id,0),p.archived,p.catalog_version,p.price_version,p.price_basis,p.quantity_step`
+const productSelect = `p.id,p.name,p.description,c.name,p.barcode,p.icon,p.price,p.stock,p.version,p.sku,COALESCE(t.name,''),p.sale_unit,p.category_id,COALESCE(p.type_id,0),p.archived,p.catalog_version,p.price_version,p.price_basis,p.quantity_step,(SELECT COALESCE(SUM(reserved),0) FROM cart WHERE product_id=p.id)`
 const productJoins = ` FROM products p JOIN categories c ON c.id=p.category_id LEFT JOIN product_types t ON t.id=p.type_id `
 
 type scanner interface{ Scan(...any) error }
 
 func productFields(p *Product) []any {
-	return []any{&p.ID, &p.Name, &p.Description, &p.Category, &p.Barcode, &p.Icon, &p.Price, &p.Stock, &p.Version, &p.SKU, &p.ProductType, &p.SaleUnit, &p.CategoryID, &p.TypeID, &p.Archived, &p.CatalogVersion, &p.PriceVersion, &p.PriceBasis, &p.QuantityStep}
+	return []any{&p.ID, &p.Name, &p.Description, &p.Category, &p.Barcode, &p.Icon, &p.Price, &p.Stock, &p.Version, &p.SKU, &p.ProductType, &p.SaleUnit, &p.CategoryID, &p.TypeID, &p.Archived, &p.CatalogVersion, &p.PriceVersion, &p.PriceBasis, &p.QuantityStep, &p.Reserved}
 }
 func scanProduct(row scanner) (Product, error) {
 	var p Product
@@ -26,6 +26,9 @@ func scanProduct(row scanner) (Product, error) {
 	return p, err
 }
 func (s *Store) catalogProducts(search, category string, archived bool) ([]Product, error) {
+	if err := s.ExpireHolds(); err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(`SELECT `+productSelect+productJoins+`WHERE (? OR p.archived=0) AND (?='' OR instr(lower(p.name || ' ' || p.description),lower(?))>0) AND (?='' OR c.name=?) ORDER BY p.id`, archived, search, search, category, category)
 	if err != nil {
 		return nil, err
@@ -244,6 +247,9 @@ func activeTaxonomy(tx *sql.Tx, kind string, id int64) (string, error) {
 	return name, err
 }
 func (s *Store) SaveProduct(p Product) (int64, error) {
+	if err := s.ExpireHolds(); err != nil {
+		return 0, err
+	}
 	if err := validateProduct(&p); err != nil {
 		return 0, err
 	}
@@ -326,7 +332,7 @@ func saveProduct(tx *sql.Tx, p Product) (int64, error) {
 		if err = tx.QueryRow(`SELECT COUNT(*) FROM order_items WHERE product_id=?`, p.ID).Scan(&used); err != nil {
 			return 0, err
 		}
-		if used > 0 || old.Stock != 0 {
+		if used > 0 || old.Stock != 0 || old.Reserved != 0 {
 			return 0, ErrUnitLocked
 		}
 	}
@@ -374,6 +380,9 @@ func (s *Store) ArchiveProduct(id, version int64) error {
 // Legacy numbers are deliberately never treated as UPC/GTIN identifiers. Code
 // resolution does not authorize or execute any picking or stock mutation.
 func (s *Store) ResolveProductCode(raw, detectedFormat string) (Product, error) {
+	if err := s.ExpireHolds(); err != nil {
+		return Product{}, err
+	}
 	format := strings.ToLower(strings.ReplaceAll(detectedFormat, "_", ""))
 	if format != "code128" || len(raw) > 64 || !strings.HasPrefix(raw, "SHOPDEMO-") {
 		return Product{}, ErrNotFound

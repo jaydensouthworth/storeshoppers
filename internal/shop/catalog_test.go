@@ -466,8 +466,8 @@ func TestWeightMetadataIsDeferredNotCountedOrOrderable(t *testing.T) {
 		t.Errorf("weighted cart accepted = %v", err)
 	}
 	// Corrupt/legacy cart data must fail safely without treating grams as unit counts.
-	testExec(t, s, `INSERT INTO cart(session_id,product_id,quantity) VALUES(?,?,?)`, owner.ID, p.ID, 50)
 	testCart(t, s, owner.ID, 1, 2)
+	testExec(t, s, `INSERT INTO cart(basket_id,product_id,quantity) VALUES(?,?,?)`, testBasket(t, s, owner.ID).ID, p.ID, 50)
 	b := testBasket(t, s, owner.ID)
 	if b.CanCheckout || b.Count != 2 {
 		t.Errorf("weighted basket counted grams as items or became orderable: %+v", b)
@@ -476,7 +476,7 @@ func TestWeightMetadataIsDeferredNotCountedOrOrderable(t *testing.T) {
 	if _, err := s.Checkout(owner.ID, session.CheckoutKey, session.Revision, b.Quote); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("weighted checkout = %v", err)
 	}
-	if testCount(t, s, "orders") != 0 || testProduct(t, s, 1).Stock != 24 {
+	if testCount(t, s, "orders") != 0 || testProduct(t, s, 1).Stock != 22 {
 		t.Error("weighted rejection left partial order or stock changes")
 	}
 	if err := s.SetCart(owner.ID, p.ID, 0, false); err != nil {

@@ -5,6 +5,7 @@ from http.cookiejar import CookieJar
 from pathlib import Path
 import os
 import socket
+import sqlite3
 import subprocess
 import tempfile
 import time
@@ -84,10 +85,14 @@ def main():
             assert "ZgotmplZ" not in home
             assert "htmx" in get("/static/htmx.min.js")
             csrf = Fields(home).fields["csrf"]
-            _, basket = post("/cart", {"csrf":csrf,"product_id":1,"quantity":2,"mode":"add","return":"cart"})
+            _, basket = post("/cart", {"csrf":csrf,"revision":Fields(home).fields["revision"],"product_id":1,"quantity":2,"mode":"add","return":"cart"})
             assert "$6.98" in basket
             fields = Fields(basket).fields
-            receipt_path, receipt = post("/checkout", {key:fields[key] for key in ("csrf","revision","checkout_key","quote")})
+            checkout_fields = {key:fields[key] for key in ("csrf","revision","checkout_key","quote")}
+            checkout_fields["instructions"] = "Keep demo bread apart <script>fake</script>"
+            receipt_path, receipt = post("/checkout", checkout_fields)
+            assert "Keep demo bread apart &lt;script&gt;fake&lt;/script&gt;" in receipt
+            assert "0% shopped" in receipt
             assert "DEMO-" in receipt and "$6.98" in receipt and "Placed" in receipt
             replay_path, _ = post("/checkout", {key:fields[key] for key in ("csrf","revision","checkout_key","quote")})
             assert replay_path == receipt_path
@@ -115,7 +120,7 @@ def main():
             process.terminate(); process.wait(timeout=5)
             process = start()
             assert "Ready" in get(receipt_path)
-            assert "HTTP smoke restock" in get("/manager")
+            assert "HTTP smoke restock" in get("/manager/stock")
             manager = get(picking_path)
             _, completed = post(picking_path + "/advance", {"csrf":Fields(manager).fields["csrf"],"status":"Ready"})
             assert "Completed" in get(receipt_path)
@@ -139,7 +144,7 @@ def main():
             _, stock_page = post("/manager/inventory", {"csrf":csrf,"product_id":product_id,
                 "version":1,"delta":4,"reason":"Smoke new product stock"})
             assert "Smoke new product stock" in stock_page
-            _, basket = post("/cart", {"csrf":csrf,"product_id":product_id,"quantity":1,"mode":"add","return":"cart"})
+            _, basket = post("/cart", {"csrf":csrf,"revision":Fields(get("/")).fields["revision"],"product_id":product_id,"quantity":1,"mode":"add","return":"cart"})
             old_quote = {key:Fields(basket).fields[key] for key in ("csrf","revision","checkout_key","quote")}
             assert "$8.99" in basket
             product.update(price=949, catalog_version=1)
@@ -178,10 +183,50 @@ def main():
             assert "Smoke shelf crackers" in get("/")
             assert "$9.49" in get(catalog_receipt_path)
             assert "Smoke shelf crackers" in get("/manager/catalog")
+            # Stock holds survive actual restart and expire once, keeping contents.
+            home = get("/")
+            csrf = Fields(home).fields["csrf"]
+            _, basket = post("/cart", {"csrf":csrf,"revision":Fields(home).fields["revision"],"product_id":1,"quantity":2,"return":"cart"})
+            assert "reserved for you" in basket and "15-MINUTE BASKET HOLD" in basket
+            with sqlite3.connect(env["DATABASE_PATH"]) as db:
+                basket_id, revision, deadline = db.execute("SELECT b.id,b.revision,b.hold_until FROM baskets b JOIN cart c ON c.basket_id=b.id WHERE b.synthetic=0 AND c.product_id=1").fetchone()
+                available = db.execute("SELECT stock FROM products WHERE id=1").fetchone()[0]
+            detail = get("/manager/baskets/" + basket_id)
+            assert "Honeycrisp apples" in detail
+            _, overridden = post("/manager/baskets/" + basket_id + "/items", {"csrf":csrf,"revision":revision,"product_id":1,"quantity":3,"reason":"HTTP basket override"})
+            assert "HTTP basket override" in overridden
+            basket = get("/cart")
+            assert Fields(basket).fields["revision"] != str(revision)
+            _, practices = post("/manager/baskets/practice", {"csrf":csrf})
+            assert "Synthetic practice basket" in practices
+            post("/manager/baskets/practice", {"csrf":csrf})
+            with sqlite3.connect(env["DATABASE_PATH"]) as db:
+                assert db.execute("SELECT COUNT(*) FROM baskets WHERE synthetic=1").fetchone()[0] == 2
+                original_deadline = db.execute("SELECT hold_until FROM baskets WHERE id=?", (basket_id,)).fetchone()[0]
+            get("/cart"); get("/manager/baskets/" + basket_id)
+            with sqlite3.connect(env["DATABASE_PATH"]) as db:
+                assert db.execute("SELECT hold_until FROM baskets WHERE id=?", (basket_id,)).fetchone()[0] == original_deadline
+            process.terminate(); process.wait(timeout=5)
+            with sqlite3.connect(env["DATABASE_PATH"]) as db:
+                db.execute("UPDATE baskets SET hold_until=1 WHERE id=?", (basket_id,))
+            process = start()
+            expired = get("/cart")
+            assert "review" in expired.lower() and "Honeycrisp apples" in expired
+            with sqlite3.connect(env["DATABASE_PATH"]) as db:
+                assert db.execute("SELECT stock FROM products WHERE id=1").fetchone()[0] == available + 2
+                assert db.execute("SELECT reserved FROM cart WHERE basket_id=? AND product_id=1", (basket_id,)).fetchone()[0] == 0
+            get("/cart"); get("/manager/stock")
+            with sqlite3.connect(env["DATABASE_PATH"]) as db:
+                assert db.execute("SELECT stock FROM products WHERE id=1").fetchone()[0] == available + 2
+            _, renewed = post("/cart/renew", {"csrf":csrf,"revision":Fields(expired).fields["revision"]})
+            assert "Reserved until" in renewed and "reserved for you" in renewed
+            with sqlite3.connect(env["DATABASE_PATH"]) as db:
+                assert db.execute("SELECT stock FROM products WHERE id=1").fetchone()[0] == available - 1
+            assert "Keep demo bread apart &lt;script&gt;fake&lt;/script&gt;" in get(receipt_path)
             manager = get("/manager")
             post("/manager/logout", {"csrf":Fields(manager).fields["csrf"]})
             assert "Manager demo access" in get("/manager")
-            print("PASS: real HTTP catalog, static asset, basket, checkout replay, manager login, stock audit, guarded picking, status fragment, process restart, collection, configurable catalog, taxonomy, stale-price reconfirmation, archive history, guarded taxonomy/product recovery and logout")
+            print("PASS: real HTTP catalog, static asset, basket, checkout replay, manager login, stock audit, guarded picking, status fragment, process restart, collection, configurable catalog, taxonomy, stale-price reconfirmation, archive history, guarded taxonomy/product recovery and logout, persisted timed holds, scoped basket overrides, explicit practice setup, expiry/review/reacquisition, plaintext instructions and percentages")
         finally:
             process.terminate()
             process.wait(timeout=5)
