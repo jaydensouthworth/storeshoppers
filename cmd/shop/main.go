@@ -63,7 +63,7 @@ func main() {
 	if e != nil {
 		log.Fatalf("invalid APP_ORIGIN: %v", e)
 	}
-	app, e := shop.New(s, shop.Config{Origin: origin, ManagerPassword: os.Getenv("MANAGER_PASSWORD"), SecureCookies: u.Scheme == "https"})
+	app, e := shop.New(s, shop.Config{Origin: origin, ManagerPassword: os.Getenv("MANAGER_PASSWORD"), SecureCookies: u.Scheme == "https", DemoMode: os.Getenv("DEMO_MODE") == "true"})
 	if e != nil {
 		log.Fatal(e)
 	}
@@ -79,6 +79,9 @@ func main() {
 		}
 	}()
 	log.Printf("Neighborhood Market demo at %s (listening %s)", origin, addr)
+	if os.Getenv("DEMO_MODE") == "true" {
+		log.Print("Shared demo mode enabled: use fake data only; visitors may be able to change demo inventory and orders")
+	}
 	if os.Getenv("MANAGER_PASSWORD") == "" {
 		log.Print("Manager access disabled: set MANAGER_PASSWORD to enable it")
 	}

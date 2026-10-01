@@ -33,7 +33,7 @@ Orders move only Placed → Picking → Ready → Completed. Updates include the
 - Random 256-bit server-side sessions in SQLite; a supplied unknown cookie does not select a new session ID
 - HttpOnly, SameSite=Lax cookies; Secure cookies when the configured origin uses HTTPS
 - Session-bound CSRF tokens on all mutating forms, plus exact Origin and trusted Host checks
-- Manager access disabled by default; public management requires HTTPS and a unique password of at least 24 characters. Loopback development permits a 12-character minimum. Constant-time digest comparison, short manager sessions and bounded attempt lockout apply.
+- Manager access disabled by default; public management requires HTTPS. Normally a public password has a 24-character minimum and loopback development has a 12-character minimum. Explicit `DEMO_MODE=true` permits a simple shared password for fake-data demonstrations and shows a warning banner; it never relaxes HTTPS or request authorization. Constant-time digest comparison, short manager sessions and bounded attempt lockout apply.
 - CSRF token rotation at manager sign-in/sign-out; handlers enforce manager authorization on every inventory/order mutation
 - Order reads limited to their owning session or a manager, including guessed numeric IDs
 - Request body size limits, strict numeric bounds, parameterized SQL and autoescaped Go templates

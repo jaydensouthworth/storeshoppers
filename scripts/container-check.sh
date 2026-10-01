@@ -38,4 +38,18 @@ if docker run --rm -e APP_ORIGIN=http://market.example \
   echo 'ERROR: public HTTP manager configuration was accepted' >&2
   exit 1
 fi
-echo 'PASS: non-root container, health probe, persistent volume, disabled management and HTTP manager refusal'
+# The explicit shared demo flag may use a simple password, but never over public HTTP.
+if docker run --rm -e APP_ORIGIN=http://market.example -e DEMO_MODE=true \
+  -e MANAGER_PASSWORD=password storeshoppers:test; then
+  echo 'ERROR: demo mode bypassed public HTTPS requirement' >&2
+  exit 1
+fi
+docker rm -f "$name" >/dev/null
+docker run -d --name "$name" -e APP_ORIGIN=https://market.example \
+  -e DEMO_MODE=true -e MANAGER_PASSWORD=password -v "$volume:/data" storeshoppers:test >/dev/null
+for attempt in $(seq 1 30); do
+  if docker exec "$name" /usr/local/bin/shop healthcheck >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+docker exec "$name" /usr/local/bin/shop healthcheck
+echo 'PASS: non-root container, health probe, persistent volume, management defaults and HTTPS-only shared demo mode' 

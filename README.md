@@ -51,8 +51,11 @@ The root Dockerfile builds a non-root, single-service image. It listens on port 
 | `APP_ORIGIN` | Exact public origin, including `http://` or `https://`, without a trailing slash |
 | `DATABASE_PATH` | SQLite path, `/data/shop.db` in the container |
 | `MANAGER_PASSWORD` | Optional demo manager gate; unset disables management |
+| `DEMO_MODE` | Set exactly `true` to allow a simple shared demo password; off by default |
 
 Public HTTP is suitable only for a fake-data storefront demonstration with management disabled. The app refuses public HTTP manager access. To enable management, first configure working HTTPS and use a unique password of at least 24 characters supplied through the hosting platform’s environment settings. HTTPS origins force Secure cookies. Do not commit real secrets or expose the container port directly around a TLS reverse proxy.
+
+For an intentionally shared, fake-data demo, explicitly set `DEMO_MODE=true` and `MANAGER_PASSWORD=password` in runtime environment settings. This permits a simple password while keeping public HTTPS, CSRF, ownership checks and manager checks in place. Anyone who knows or guesses that shared password can change demo inventory and order statuses. A visible shared-demo banner is shown. Leave `DEMO_MODE` unset or set it to `false` to retain the normal password requirements. Do not enable shared demo mode with real or private data.
 
 The shared manager password is a limited demo gate, not production identity. Named accounts, hardened access control, full browser/accessibility verification, versioned migrations and operational hardening remain before real-world use.
 

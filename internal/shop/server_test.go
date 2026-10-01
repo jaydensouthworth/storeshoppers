@@ -420,3 +420,73 @@ func TestPublicManagerRequiresTLSAndStrongPassword(t *testing.T) {
 		})
 	}
 }
+
+func TestWeakPasswordRequiresExplicitDemoMode(t *testing.T) {
+	s := newTestStore(t)
+	for _, tc := range []struct {
+		name, origin, password string
+		demo, wantError        bool
+	}{
+		{"normal HTTPS rejects password", "https://market.example", "password", false, true},
+		{"demo HTTPS permits password", "https://market.example", "password", true, false},
+		{"demo public HTTP still rejected", "http://market.example", "password", true, true},
+		{"normal local rejects password", "http://127.0.0.1", "password", false, true},
+		{"demo local permits password", "http://127.0.0.1", "password", true, false},
+		{"demo without password remains disabled", "https://market.example", "", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, err := New(s, Config{Origin: tc.origin, ManagerPassword: tc.password, DemoMode: tc.demo})
+			if (err != nil) != tc.wantError {
+				t.Fatalf("error=%v, wantError=%v", err, tc.wantError)
+			}
+			if err != nil {
+				return
+			}
+			session := testSession(t, s, "")
+			r := httptest.NewRequest(http.MethodGet, tc.origin+"/", nil)
+			r.AddCookie(&http.Cookie{Name: "shop_session", Value: session.ID})
+			w := httptest.NewRecorder()
+			a.ServeHTTP(w, r)
+			if tc.demo && !strings.Contains(w.Body.String(), "Shared demo mode.") {
+				t.Error("shared demo warning missing")
+			}
+			if strings.HasPrefix(tc.origin, "https:") && !a.config.SecureCookies {
+				t.Error("demo mode weakened Secure cookies")
+			}
+			if tc.password == "" && a.config.ManagerPassword != "" {
+				t.Error("empty demo password unexpectedly enabled management")
+			}
+		})
+	}
+}
+
+func TestDemoLoginStillRequiresPasswordAndCSRF(t *testing.T) {
+	s := newTestStore(t)
+	a, err := New(s, Config{Origin: testOrigin, ManagerPassword: "password", DemoMode: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := testSession(t, s, "")
+	w := testRequest(t, a, http.MethodPost, "/manager/login", session, url.Values{"password": {"password"}}, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("missing CSRF status=%d", w.Code)
+	}
+	w = testRequest(t, a, http.MethodPost, "/manager/login", session, url.Values{"csrf": {session.CSRF}, "password": {"wrong"}}, nil)
+	if testSession(t, s, session.ID).ManagerUntil != 0 {
+		t.Fatal("wrong password granted manager access")
+	}
+	w = testRequest(t, a, http.MethodPost, "/manager/login", session, url.Values{"csrf": {session.CSRF}, "password": {"password"}}, nil)
+	assertRedirect(t, w, "/manager", false)
+	if testSession(t, s, session.ID).ManagerUntil <= time.Now().Unix() {
+		t.Fatal("explicit demo password did not authenticate")
+	}
+}
+
+func TestCatalogSingularResult(t *testing.T) {
+	s := newTestStore(t)
+	a := testApp(t, s, "")
+	w := testRequest(t, a, http.MethodGet, "/?q=apples", Session{}, nil, nil)
+	if !strings.Contains(w.Body.String(), "1 product ·") || strings.Contains(w.Body.String(), "1 products") {
+		t.Fatal("single result must use singular product")
+	}
+}

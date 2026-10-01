@@ -21,7 +21,7 @@ import (
 
 type Config struct {
 	Origin, ManagerPassword string
-	SecureCookies           bool
+	SecureCookies, DemoMode bool
 }
 type App struct {
 	store        *Store
@@ -35,7 +35,7 @@ type App struct {
 type View struct {
 	Title, Section, Search, Category, Message, Error string
 	Session                                          Session
-	Manager, ManagerEnabled                          bool
+	Manager, ManagerEnabled, DemoMode                bool
 	Products                                         []Product
 	Basket                                           Basket
 	Orders                                           []Order
@@ -57,14 +57,14 @@ func New(store *Store, cfg Config) (*App, error) {
 		if u.Scheme != "https" {
 			return nil, errors.New("manager access requires an HTTPS public origin; leave MANAGER_PASSWORD unset for an HTTP storefront demo")
 		}
-		if len(cfg.ManagerPassword) < 24 || cfg.ManagerPassword == "local-demo-only" {
+		if !cfg.DemoMode && (len(cfg.ManagerPassword) < 24 || cfg.ManagerPassword == "local-demo-only") {
 			return nil, errors.New("public manager access requires a unique password of at least 24 characters")
 		}
 	}
 	if u.Scheme == "https" {
 		cfg.SecureCookies = true
 	}
-	if cfg.ManagerPassword != "" && len(cfg.ManagerPassword) < 12 {
+	if !cfg.DemoMode && cfg.ManagerPassword != "" && len(cfg.ManagerPassword) < 12 {
 		return nil, errors.New("MANAGER_PASSWORD must contain at least 12 characters")
 	}
 	tmpl, e := template.New("").Funcs(template.FuncMap{"categories": func() []string { return []string{"Produce", "Bakery", "Dairy", "Pantry"} }, "money": Money, "nextStatus": func(s string) string {
@@ -144,7 +144,7 @@ func (a *App) view(w http.ResponseWriter, r *http.Request) (View, bool) {
 		a.fail(w, e)
 		return View{}, false
 	}
-	return View{Session: s, Basket: b, Manager: a.config.ManagerPassword != "" && s.ManagerUntil > time.Now().Unix(), ManagerEnabled: a.config.ManagerPassword != ""}, true
+	return View{Session: s, Basket: b, Manager: a.config.ManagerPassword != "" && s.ManagerUntil > time.Now().Unix(), ManagerEnabled: a.config.ManagerPassword != "", DemoMode: a.config.DemoMode}, true
 }
 func (a *App) render(w http.ResponseWriter, r *http.Request, v View, status int) {
 	name := "layout"
