@@ -89,7 +89,7 @@ func testCart(t *testing.T, s *Store, sid string, pid, quantity int64) {
 func testCheckout(t *testing.T, s *Store, sid string) int64 {
 	t.Helper()
 	session := testSession(t, s, sid)
-	id, err := s.Checkout(sid, session.CheckoutKey, session.Revision)
+	id, err := s.Checkout(sid, session.CheckoutKey, session.Revision, testBasket(t, s, sid).Quote)
 	if err != nil {
 		t.Fatalf("Checkout: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestCheckoutAllOrNothing(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			id, err := s.Checkout(session.ID, beforeSession.CheckoutKey, beforeSession.Revision)
+			id, err := s.Checkout(session.ID, beforeSession.CheckoutKey, beforeSession.Revision, beforeBasket.Quote)
 			if err == nil || id != 0 {
 				t.Fatalf("failed checkout = (%d, %v), want (0, error)", id, err)
 			}
@@ -162,11 +162,13 @@ func TestConcurrentLastUnitNeverOversells(t *testing.T) {
 	testExec(t, first, "UPDATE products SET stock=1 WHERE id=1")
 	const shoppers = 16
 	sessions := make([]Session, shoppers)
+	quotes := make([]string, shoppers)
 	for i := range sessions {
 		s := stores[i%len(stores)]
 		session := testSession(t, s, "")
 		testCart(t, s, session.ID, 1, 1)
 		sessions[i] = testSession(t, s, session.ID)
+		quotes[i] = testBasket(t, s, session.ID).Quote
 	}
 	type outcome struct {
 		index int
@@ -181,7 +183,7 @@ func TestConcurrentLastUnitNeverOversells(t *testing.T) {
 		go func(i int, session Session) {
 			defer wg.Done()
 			<-start
-			id, err := stores[i%len(stores)].Checkout(session.ID, session.CheckoutKey, session.Revision)
+			id, err := stores[i%len(stores)].Checkout(session.ID, session.CheckoutKey, session.Revision, quotes[i])
 			results <- outcome{i, id, err}
 		}(i, session)
 	}
@@ -223,6 +225,7 @@ func TestCheckoutIdempotentReplay(t *testing.T) {
 	session := testSession(t, s, "")
 	testCart(t, s, session.ID, 1, 2)
 	session = testSession(t, s, session.ID)
+	quote := testBasket(t, s, session.ID).Quote
 	const retries = 12
 	ids := make(chan int64, retries)
 	errs := make(chan error, retries)
@@ -231,7 +234,7 @@ func TestCheckoutIdempotentReplay(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			id, err := s.Checkout(session.ID, session.CheckoutKey, session.Revision)
+			id, err := s.Checkout(session.ID, session.CheckoutKey, session.Revision, quote)
 			ids <- id
 			errs <- err
 		}()
@@ -266,7 +269,7 @@ func TestCheckoutIdempotentReplay(t *testing.T) {
 	// An old retry must not consume a new basket built after the first order.
 	testCart(t, s, session.ID, 2, 1)
 	newBasket := testBasket(t, s, session.ID)
-	id, err := s.Checkout(session.ID, session.CheckoutKey, session.Revision)
+	id, err := s.Checkout(session.ID, session.CheckoutKey, session.Revision, quote)
 	if err != nil || id != first {
 		t.Fatalf("old replay = (%d, %v), want (%d, nil)", id, err, first)
 	}
@@ -286,7 +289,7 @@ func TestCheckoutRejectsStaleRevisionAndWrongKey(t *testing.T) {
 		rev  int64
 	}{{"stale revision", current.CheckoutKey, session.Revision}, {"wrong key", "wrong-key", current.Revision}} {
 		t.Run(tc.name, func(t *testing.T) {
-			if id, err := s.Checkout(session.ID, tc.key, tc.rev); id != 0 || !errors.Is(err, ErrConflict) {
+			if id, err := s.Checkout(session.ID, tc.key, tc.rev, testBasket(t, s, session.ID).Quote); id != 0 || !errors.Is(err, ErrConflict) {
 				t.Fatalf("Checkout = (%d, %v), want (0, ErrConflict)", id, err)
 			}
 		})
@@ -465,7 +468,7 @@ func TestCartValidationAndSessionIsolation(t *testing.T) {
 		t.Error("zero quantity did not remove item")
 	}
 	current := testSession(t, s, owner.ID)
-	if _, err := s.Checkout(owner.ID, current.CheckoutKey, current.Revision); !errors.Is(err, ErrEmpty) {
+	if _, err := s.Checkout(owner.ID, current.CheckoutKey, current.Revision, testBasket(t, s, owner.ID).Quote); !errors.Is(err, ErrEmpty) {
 		t.Errorf("empty checkout = %v, want ErrEmpty", err)
 	}
 }
@@ -511,7 +514,7 @@ func TestRelativeDatabasePathPersistsAcrossReopen(t *testing.T) {
 	if p := testProduct(t, reopened, 1); p.Stock != 25 || p.Version != 3 {
 		t.Errorf("stock/version reset on restart: %+v", p)
 	}
-	if testCount(t, reopened, "products") != 8 || testCount(t, reopened, "orders") != 1 || testCount(t, reopened, "adjustments") != 1 {
+	if testCount(t, reopened, "products") != 70 || testCount(t, reopened, "orders") != 1 || testCount(t, reopened, "adjustments") != 1 {
 		t.Error("reopening duplicated or lost persisted data")
 	}
 }

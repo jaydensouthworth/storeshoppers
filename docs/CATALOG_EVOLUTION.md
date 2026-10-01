@@ -1,24 +1,26 @@
 # Catalog and fulfillment evolution
 
-This is an implementation roadmap. Weighted checkout, substitutions and camera scanning are not current capabilities. Each phase must preserve existing IDs, sessions, baskets, stock allocations, receipt snapshots and picking state through versioned migrations.
+This document distinguishes the implemented version 3 catalog foundation from later fulfillment work. Weighted checkout, substitutions, generated labels and camera scanning are not current capabilities. Each later phase must preserve existing IDs, sessions, baskets, stock allocations, receipt snapshots and picking state through versioned migrations.
 
-## Version 2 boundary
+## Preserved version 2 boundary
 
 The current foundation adds a picking quantity and version to order items. It does not reinterpret quantities, replace receipt rows, create tenant stores or reset inventory. Shared demo managers can prepare only their browser session’s orders; catalog inventory remains intentionally shared.
 
-## Next foundation: configurable catalog
+## Completed version 3: configurable catalog
 
-- Categories and optional product types become ordinary rows with stable IDs, normalized unique names, archive state and optimistic versions. They are configurable without rebuilding the application.
-- Taxonomy labels never decide whether an item is weighed. Products separately declare counted (`each`) or weighed (`g`) measurement metadata.
-- A stable merchant SKU is separate from any barcode identity. Do not reuse either identifier after archive.
-- Manager create/edit/archive uses bounded fields and existing CSRF/access/version guards. Products referenced by receipts are archived rather than deleted. Archiving a category/type requires active products to be reassigned or archived first.
-- Seed only during initial store creation. The current fixed-ID `INSERT OR IGNORE` seed behavior must not resurrect deliberately removed records after restart.
-- Archives disappear from new sales; old receipts and pick tickets remain readable with their original item descriptions and prices.
-- A price edit or archive between basket display and checkout must cause explicit review/reconfirmation. Use a price version or quote fingerprint rather than the inventory version, which changes for unrelated stock activity. Checkout must reject unavailable/archived items atomically.
+- Manager `/manager/catalog` supports product create/edit/archive/restore and category/type create/rename/archive/restore inside the existing monolith. Products can reuse eight bundled illustrations; arbitrary image upload is deferred.
+- Categories and optional types are ordinary rows with stable IDs, normalized unique names, archive state and optimistic versions. Product assignment follows IDs through renames; taxonomy labels never decide whether an item is weighed.
+- Products retain their IDs and have an immutable, case-insensitive merchant SKU. User SKUs are bounded ASCII letters/digits/dashes/underscores; a blank create assigns a `SHOPDEMO-` SKU. That namespace is reserved for generated identities. Neither SKUs nor normalized taxonomy names can be reused after archive.
+- Product fields, unit metadata and taxonomy assignments are bounded. New products always start with zero stock; adding stock requires the separate reasoned inventory adjustment. Catalog and inventory edits use independent optimistic versions.
+- Receipt snapshots retain names, SKUs, unit rates, selling-unit metadata, quantities and subtotals. Archived products remain in history and can still be picked against an existing ticket. Active taxonomy references prevent archive until products are reassigned or archived. Taxonomy restore preserves the archived label’s ID/name and does not silently restore products. Product restore is an explicit, separately version-guarded command requiring active labels; it preserves stock/SKU/code IDs and advances the price quote version. It never restores unrelated products.
+- Successful catalog commands write a transactional change-log event; a failed audit write rolls back the catalog change. The manager sees the latest 20 snapshot-based events. The shared demo gate does not identify individual actors.
+- A basket snapshot includes its quote. Checkout checks that quote inside the same atomic placement transaction. Changed prices require explicit review and a new submission; unavailable/archived products block checkout and remain removable. Stock-only activity does not change the financial quote. Replay of an already committed checkout key still returns the original owned order.
+- Fresh databases seed 70 fake products inside initialization. The one-time v3 migration expands only an exact original eight-product catalog, requiring total count eight plus all original IDs and placeholder codes. It preserves manager edits to those records; the same eight with any additional custom product receive no expansion. Partial/custom legacy catalogs and established empty schemas receive no seed products. Reopening does not recreate removed records.
+- `product_codes` preserves existing numeric strings as `legacy_placeholder` and separately stores unique `demo_local` identities for ordinary Code 128. The read-only local-code resolution boundary does not change picking state or claim retail GTIN validation. Generated labels and camera UI remain deferred.
 
-A catalog foundation may store weighed-item metadata while keeping those products unavailable to order until weighted quantity and quote semantics are implemented. The interface must label this clearly rather than offering a nonfunctional weighted checkout.
+Counted products use `each`, basis 1 and step 1. Weighed metadata uses `g`, basis 1000 and step 1–1000, but weighed products are visibly unavailable for sale. The current 1–99 cart quantity and 0–10000 stock constraints have not been reinterpreted. Neither weighted checkout nor integer weighted line pricing is enabled. Unit/price-basis conversion after receipt use is rejected. Timed basket reservations, customer special instructions, actual-weight reconciliation and manager substitutions are separate milestones; carts currently do not reserve stock.
 
-## Integer measurement and pricing
+## Deferred: integer measurement and pricing
 
 Use integer quantities in the product’s base unit: units for counted goods and grams for weighed goods. Store weighed rates as cents per 1000 grams. Snapshot the unit, requested quantity, rate, price basis and rounded subtotal on the order.
 
@@ -26,7 +28,7 @@ For non-negative values, round once per line with `(grams × cents_per_kg + 500)
 
 Mixed-unit views must not sum grams and units into one misleading item count. Show line progress and each line’s quantity/unit. The original 1–99 cart-quantity and 0–10000 stock constraints require a dedicated migration before supporting weighed quantities. Selling unit/price basis changes after use should be rejected unless a deliberate replacement product/version is introduced. Changing SQLite quantity/stock CHECK constraints requires the controlled table-rebuild migration procedure and a foreign-key integrity check, not just relaxed Go validation. Do not toggle foreign_keys inside an active transaction.
 
-## Substitution and actual-weight reconciliation
+## Deferred: substitution and actual-weight reconciliation
 
 Keep `order_items` and the placed `orders.total` as immutable requested snapshots. Introduce separate fulfillment/allocation rows keyed by the original `(order_id, requested_product_id)`, with actual product, reserved and picked base quantity, unit/rate/basis snapshots, resolution, final subtotal and version. Two requested lines may substitute to the same actual product; keying by replacement product would lose one of them.
 
@@ -38,7 +40,7 @@ Physically missing stock cannot simply be returned to available inventory. Model
 
 ## Barcode identities and the two-screen demo
 
-A SKU is a merchant code; a barcode carries an identifier. A future `product_codes` table should retain product ID, scheme, raw value, normalized value, symbology and archive state, with uniqueness across the scheme/canonical value and no reuse after archive. Preserve leading zeroes.
+A SKU is a merchant code; a barcode carries an identifier. The implemented `product_codes` table retains product ID, scheme, raw value, normalized value, symbology and archive state, with uniqueness across the scheme/canonical value and no reuse after archive. Preserve leading zeroes.
 
 Existing seed numbers are `legacy_placeholder` values, not validated retail UPC/GTINs. First generated demo labels should be plain Code 128 with an explicit local prefix such as `SHOPDEMO-000001`. Do not claim GS1 registration or label ordinary Code 128 as GS1-128. If GS1 aliases are added later, validate GTIN check digits and canonicalize equivalent GTIN-12/13/14 forms to a consistent 14-digit identity.
 
@@ -46,11 +48,13 @@ The eventual desktop “demo shop” page and product-label SVG route should rea
 
 A shelf code identifies a weighed product, not the bag’s weight. Begin with manual actual-gram entry. Later, optional package-label records can associate a server-issued token with a product and measured grams. Never trust barcode-supplied prices or invent a universal variable-measure prefix parser.
 
-`ResolveProductCode(rawValue, detectedFormat)` should be read-only, returning a product identity and optional package measurement. Resolution does not mark an item picked. Manual entry and camera capture must call the same authorized picking command, with CSRF, scoped order ownership, expected line version and a request idempotency key. Two deliberate scans of the same unit barcode can be valid; deduplicate network retries by request key, not forever by barcode.
+`ResolveProductCode(rawValue, detectedFormat)` is currently a read-only local Code 128 resolver returning a product identity. Optional package measurements, GS1 aliases and retail-code validation remain deferred. Resolution does not mark an item picked. Manual entry and camera capture must call the same authorized picking command, with CSRF, scoped order ownership, expected line version and a request idempotency key. Two deliberate scans of the same unit barcode can be valid; deduplicate network retries by request key, not forever by barcode.
 
 Camera UI is deferred. When built, require HTTPS, user-triggered camera access, runtime format support detection, a locally bundled maintained decoding fallback when necessary and manual entry throughout. Stop camera tracks on exit. Test the intended phones rather than assuming native BarcodeDetector support.
 
 ## Acceptance gates
+
+Gates 1–3 and 5 are covered by the current catalog foundation. The remaining weighted, substitution and label gates apply to later milestones; existing counted-item oversell and session-isolation tests remain mandatory.
 
 1. Upgrade populated older databases and reopen repeatedly without changing receipt amounts, identifiers, sessions or fulfillment state
 2. Add/reassign/archive categories, types and products without code changes or restart resurrection

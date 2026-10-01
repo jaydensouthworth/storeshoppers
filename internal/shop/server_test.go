@@ -58,7 +58,7 @@ func assertRedirect(t *testing.T, w *httptest.ResponseRecorder, path string, htm
 }
 
 func TestHTTPRejectsCSRFOnEveryMutation(t *testing.T) {
-	for _, path := range []string{"/cart", "/checkout", "/manager/login", "/manager/logout", "/manager/inventory", "/manager/orders/1/advance", "/manager/orders/1/items/1"} {
+	for _, path := range []string{"/cart", "/checkout", "/manager/login", "/manager/logout", "/manager/inventory", "/manager/orders/1/advance", "/manager/orders/1/items/1", "/manager/catalog/products", "/manager/catalog/products/1", "/manager/catalog/products/1/archive", "/manager/catalog/products/1/restore", "/manager/catalog/categories", "/manager/catalog/categories/1", "/manager/catalog/categories/1/archive", "/manager/catalog/categories/1/restore", "/manager/catalog/types", "/manager/catalog/types/1", "/manager/catalog/types/1/archive", "/manager/catalog/types/1/restore"} {
 		for _, tokenKind := range []string{"missing", "incorrect", "another session", "query string only"} {
 			t.Run(path+"/"+tokenKind, func(t *testing.T) {
 				s := newTestStore(t)
@@ -79,7 +79,7 @@ func TestHTTPRejectsCSRFOnEveryMutation(t *testing.T) {
 				case "query string only":
 					requestPath += "?csrf=" + session.CSRF
 				}
-				values := url.Values{"csrf": {csrf}, "product_id": {"1"}, "quantity": {"2"}, "picked": {"1"}, "delta": {"1"}, "version": {"1"}, "reason": {"Restock"}, "status": {"Placed"}, "password": {testManagerPassword}, "checkout_key": {session.CheckoutKey}, "revision": {fmt.Sprint(session.Revision)}}
+				values := url.Values{"csrf": {csrf}, "product_id": {"1"}, "quantity": {"2"}, "picked": {"1"}, "delta": {"1"}, "version": {"1"}, "reason": {"Restock"}, "status": {"Placed"}, "password": {testManagerPassword}, "checkout_key": {session.CheckoutKey}, "revision": {fmt.Sprint(session.Revision)}, "quote": {testBasket(t, s, session.ID).Quote}}
 				w := testRequest(t, a, http.MethodPost, requestPath, session, values, nil)
 				if w.Code != http.StatusForbidden {
 					t.Fatalf("response = %d, want 403; body %s", w.Code, w.Body.String())
@@ -152,7 +152,7 @@ func TestHTTPUnauthorizedManagerMutations(t *testing.T) {
 				if htmx {
 					headers["HX-Request"] = "true"
 				}
-				for _, path := range []string{"/manager/inventory", fmt.Sprintf("/manager/orders/%d/advance", id), fmt.Sprintf("/manager/orders/%d/items/1", id)} {
+				for _, path := range []string{"/manager/inventory", fmt.Sprintf("/manager/orders/%d/advance", id), fmt.Sprintf("/manager/orders/%d/items/1", id), "/manager/catalog/products", "/manager/catalog/products/1", "/manager/catalog/products/1/archive", "/manager/catalog/products/1/restore", "/manager/catalog/categories", "/manager/catalog/categories/1", "/manager/catalog/categories/1/archive", "/manager/catalog/categories/1/restore", "/manager/catalog/types", "/manager/catalog/types/1", "/manager/catalog/types/1/archive", "/manager/catalog/types/1/restore"} {
 					w := testRequest(t, a, http.MethodPost, path, unauthorized, url.Values{"csrf": {unauthorized.CSRF}, "product_id": {"1"}, "version": {"2"}, "delta": {"1"}, "reason": {"Restock"}, "status": {"Placed"}}, headers)
 					assertRedirect(t, w, "/manager/login", htmx)
 				}
@@ -368,7 +368,7 @@ func TestHTTPCheckoutStaleRevisionAndReplay(t *testing.T) {
 			if htmx {
 				headers["HX-Request"] = "true"
 			}
-			values := url.Values{"csrf": {session.CSRF}, "checkout_key": {session.CheckoutKey}, "revision": {fmt.Sprint(session.Revision)}}
+			values := url.Values{"csrf": {session.CSRF}, "checkout_key": {session.CheckoutKey}, "revision": {fmt.Sprint(session.Revision)}, "quote": {testBasket(t, s, session.ID).Quote}}
 			w := testRequest(t, a, http.MethodPost, "/checkout", session, values, headers)
 			if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), ErrConflict.Error()) {
 				t.Fatalf("stale checkout did not render conflict: status %d", w.Code)
@@ -447,7 +447,7 @@ func TestWeakPasswordRequiresExplicitDemoMode(t *testing.T) {
 			r.AddCookie(&http.Cookie{Name: "shop_session", Value: session.ID})
 			w := httptest.NewRecorder()
 			a.ServeHTTP(w, r)
-			if tc.demo && !strings.Contains(w.Body.String(), "Fake inventory is shared by all visitors.") {
+			if tc.demo && !strings.Contains(w.Body.String(), "Fake catalog and inventory are shared by all visitors.") {
 				t.Error("shared demo warning missing")
 			}
 			if strings.HasPrefix(tc.origin, "https:") && !a.config.SecureCookies {
@@ -485,7 +485,7 @@ func TestDemoLoginStillRequiresPasswordAndCSRF(t *testing.T) {
 func TestCatalogSingularResult(t *testing.T) {
 	s := newTestStore(t)
 	a := testApp(t, s, "")
-	w := testRequest(t, a, http.MethodGet, "/?q=apples", Session{}, nil, nil)
+	w := testRequest(t, a, http.MethodGet, "/?q=Honeycrisp", Session{}, nil, nil)
 	if !strings.Contains(w.Body.String(), "1 product /") || strings.Contains(w.Body.String(), "1 products") {
 		t.Fatal("single result must use singular product")
 	}

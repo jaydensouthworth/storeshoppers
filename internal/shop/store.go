@@ -3,6 +3,7 @@ package shop
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	_ "embed"
 	"encoding/hex"
@@ -42,10 +43,6 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if err = s.seed(); err != nil {
-		db.Close()
-		return nil, err
-	}
 	return s, nil
 }
 func (s *Store) Close() error { return s.db.Close() }
@@ -55,29 +52,6 @@ func token() string {
 		panic(err)
 	}
 	return hex.EncodeToString(b)
-}
-func (s *Store) seed() error {
-	products := []Product{
-		{1, "Honeycrisp apples", "Crisp, sweet and ready for the fruit bowl.", "Produce", "000000000101", "apple", 349, 24, 1},
-		{2, "Baby spinach", "Tender leaves for quick lunches and green dinners.", "Produce", "000000000102", "leaf", 299, 18, 1},
-		{3, "Sourdough loaf", "A golden crust and a soft, tangy center.", "Bakery", "000000000103", "bread", 599, 10, 1},
-		{4, "Whole milk", "A half gallon of the everyday essential.", "Dairy", "000000000104", "milk", 429, 16, 1},
-		{5, "Free range eggs", "A dozen large eggs for a well-stocked kitchen.", "Dairy", "000000000105", "egg", 649, 6, 1},
-		{6, "Penne pasta", "A pantry staple made for your favorite sauce.", "Pantry", "000000000106", "pasta", 249, 30, 1},
-		{7, "Extra virgin olive oil", "Smooth and peppery. Finish something delicious.", "Pantry", "000000000107", "oil", 1099, 8, 1},
-		{8, "Strawberry jam", "Small-batch style preserves for your morning toast.", "Pantry", "000000000108", "jam", 479, 0, 1},
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	for _, p := range products {
-		if _, err = tx.Exec(`INSERT OR IGNORE INTO products(id,name,description,category,barcode,icon,price,stock) VALUES(?,?,?,?,?,?,?,?)`, p.ID, p.Name, p.Description, p.Category, p.Barcode, p.Icon, p.Price, p.Stock); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
 }
 func (s *Store) Session(id string) (Session, error) {
 	var v Session
@@ -93,20 +67,7 @@ func (s *Store) Session(id string) (Session, error) {
 	return v, err
 }
 func (s *Store) Products(search, category string) ([]Product, error) {
-	rows, err := s.db.Query(`SELECT id,name,description,category,barcode,icon,price,stock,version FROM products WHERE (?='' OR instr(lower(name || ' ' || description),lower(?))>0) AND (?='' OR category=?) ORDER BY id`, search, search, category, category)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var all []Product
-	for rows.Next() {
-		var p Product
-		if err = rows.Scan(&p.ID, &p.Name, &p.Description, &p.Category, &p.Barcode, &p.Icon, &p.Price, &p.Stock, &p.Version); err != nil {
-			return nil, err
-		}
-		all = append(all, p)
-	}
-	return all, rows.Err()
+	return s.catalogProducts(search, category, false)
 }
 
 type querier interface {
@@ -115,28 +76,37 @@ type querier interface {
 
 func basket(q querier, sid string) (Basket, error) {
 	b := Basket{CanCheckout: true}
-	rows, err := q.Query(`SELECT p.id,p.name,p.description,p.category,p.barcode,p.icon,p.price,p.stock,p.version,c.quantity FROM cart c JOIN products p ON p.id=c.product_id WHERE c.session_id=? ORDER BY p.id`, sid)
+	rows, err := q.Query(`SELECT `+productSelect+`,cart.quantity`+productJoins+`JOIN cart ON cart.product_id=p.id WHERE cart.session_id=? ORDER BY p.id`, sid)
 	if err != nil {
 		return b, err
 	}
 	defer rows.Close()
+	quote := sha256.New()
+	fmt.Fprintf(quote, "basket-v3:%s;", sid)
 	for rows.Next() {
 		var l CartLine
-		p := &l.Product
-		if err = rows.Scan(&p.ID, &p.Name, &p.Description, &p.Category, &p.Barcode, &p.Icon, &p.Price, &p.Stock, &p.Version, &l.Quantity); err != nil {
+		fields := append(productFields(&l.Product), &l.Quantity)
+		if err = rows.Scan(fields...); err != nil {
 			return b, err
 		}
-		l.Subtotal = l.Quantity * p.Price
-		b.Total += l.Subtotal
-		b.Count += l.Quantity
-		if l.Quantity > p.Stock {
+		p := l.Product
+		// Weighed products are metadata-only until quantity constraints and weighted
+		// checkout are deliberately migrated. Never add grams to an item count.
+		if p.SaleUnit == "each" {
+			l.Subtotal = l.Quantity * p.Price
+			b.Total += l.Subtotal
+			b.Count += l.Quantity
+		}
+		if p.Archived || p.SaleUnit != "each" || l.Quantity > p.Stock {
 			b.CanCheckout = false
 		}
+		fmt.Fprintf(quote, "%d:%d:%d:%d:%t:%s:%d:%d:%q;", p.ID, l.Quantity, p.Price, p.PriceVersion, p.Archived, p.SaleUnit, p.PriceBasis, p.QuantityStep, p.Name)
 		b.Lines = append(b.Lines, l)
 	}
-	if b.Count == 0 {
+	if len(b.Lines) == 0 {
 		b.CanCheckout = false
 	}
+	b.Quote = hex.EncodeToString(quote.Sum(nil))
 	return b, rows.Err()
 }
 func (s *Store) Basket(sid string) (Basket, error) { return basket(s.db, sid) }
@@ -150,7 +120,9 @@ func (s *Store) SetCart(sid string, pid, qty int64, add bool) error {
 	}
 	defer tx.Rollback()
 	var stock, current int64
-	if e = tx.QueryRow(`SELECT stock FROM products WHERE id=?`, pid).Scan(&stock); e != nil {
+	var archived bool
+	var unit string
+	if e = tx.QueryRow(`SELECT stock,archived,sale_unit FROM products WHERE id=?`, pid).Scan(&stock, &archived, &unit); e != nil {
 		if errors.Is(e, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -165,6 +137,9 @@ func (s *Store) SetCart(sid string, pid, qty int64, add bool) error {
 	}
 	if qty > 99 {
 		return ErrInvalid
+	}
+	if qty > 0 && (archived || unit != "each") {
+		return ErrUnavailable
 	}
 	if qty > stock {
 		return ErrStock
@@ -182,7 +157,7 @@ func (s *Store) SetCart(sid string, pid, qty int64, add bool) error {
 	}
 	return tx.Commit()
 }
-func (s *Store) Checkout(sid, key string, revision int64) (int64, error) {
+func (s *Store) Checkout(sid, key string, revision int64, quote string) (int64, error) {
 	tx, e := s.db.BeginTx(context.Background(), nil)
 	if e != nil {
 		return 0, e
@@ -208,8 +183,16 @@ func (s *Store) Checkout(sid, key string, revision int64) (int64, error) {
 	if e != nil {
 		return 0, e
 	}
-	if b.Count == 0 {
+	if len(b.Lines) == 0 {
 		return 0, ErrEmpty
+	}
+	for _, l := range b.Lines {
+		if l.Product.Archived || l.Product.SaleUnit != "each" {
+			return 0, ErrUnavailable
+		}
+	}
+	if len(quote) != 64 || quote != b.Quote {
+		return 0, ErrQuote
 	}
 	if !b.CanCheckout {
 		return 0, ErrStock
@@ -223,7 +206,7 @@ func (s *Store) Checkout(sid, key string, revision int64) (int64, error) {
 		return 0, e
 	}
 	for _, l := range b.Lines {
-		result, e = tx.Exec(`UPDATE products SET stock=stock-?,version=version+1 WHERE id=? AND stock>=?`, l.Quantity, l.Product.ID, l.Quantity)
+		result, e = tx.Exec(`UPDATE products SET stock=stock-?,version=version+1 WHERE id=? AND stock>=? AND archived=0 AND sale_unit='each'`, l.Quantity, l.Product.ID, l.Quantity)
 		if e != nil {
 			return 0, e
 		}
@@ -234,7 +217,7 @@ func (s *Store) Checkout(sid, key string, revision int64) (int64, error) {
 		if n != 1 {
 			return 0, ErrStock
 		}
-		if _, e = tx.Exec(`INSERT INTO order_items(order_id,product_id,name,price,quantity) VALUES(?,?,?,?,?)`, id, l.Product.ID, l.Product.Name, l.Product.Price, l.Quantity); e != nil {
+		if _, e = tx.Exec(`INSERT INTO order_items(order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step,subtotal) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, l.Product.ID, l.Product.Name, l.Product.Price, l.Quantity, l.Product.SKU, l.Product.SaleUnit, l.Product.PriceBasis, l.Product.QuantityStep, l.Subtotal); e != nil {
 			return 0, e
 		}
 	}
@@ -250,7 +233,7 @@ func (s *Store) Checkout(sid, key string, revision int64) (int64, error) {
 	return id, nil
 }
 func (s *Store) Orders(sid string, manager bool) ([]Order, error) {
-	rows, e := s.db.Query(`SELECT o.id,o.reference,o.status,o.created,o.total,COALESCE(SUM(i.picked_quantity),0),COALESCE(SUM(i.quantity),0) FROM orders o LEFT JOIN order_items i ON i.order_id=o.id WHERE (? OR o.session_id=?) GROUP BY o.id ORDER BY o.id DESC LIMIT 100`, manager, sid)
+	rows, e := s.db.Query(`SELECT o.id,o.reference,o.status,o.created,o.total,COALESCE(SUM(CASE WHEN i.sale_unit='each' THEN i.picked_quantity ELSE 0 END),0),COALESCE(SUM(CASE WHEN i.sale_unit='each' THEN i.quantity ELSE 0 END),0) FROM orders o LEFT JOIN order_items i ON i.order_id=o.id WHERE (? OR o.session_id=?) GROUP BY o.id ORDER BY o.id DESC LIMIT 100`, manager, sid)
 	if e != nil {
 		return nil, e
 	}
@@ -275,20 +258,21 @@ func (s *Store) Order(id int64, sid string, manager bool) (Order, error) {
 	if e != nil {
 		return o, e
 	}
-	rows, e := s.db.Query(`SELECT product_id,name,price,quantity,picked_quantity,pick_version FROM order_items WHERE order_id=? ORDER BY product_id`, id)
+	rows, e := s.db.Query(`SELECT product_id,name,price,quantity,picked_quantity,pick_version,sku,sale_unit,price_basis,quantity_step,subtotal FROM order_items WHERE order_id=? ORDER BY product_id`, id)
 	if e != nil {
 		return o, e
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var i OrderItem
-		if e = rows.Scan(&i.ProductID, &i.Name, &i.Price, &i.Quantity, &i.Picked, &i.PickVersion); e != nil {
+		if e = rows.Scan(&i.ProductID, &i.Name, &i.Price, &i.Quantity, &i.Picked, &i.PickVersion, &i.SKU, &i.SaleUnit, &i.PriceBasis, &i.QuantityStep, &i.Subtotal); e != nil {
 			return o, e
 		}
-		i.Subtotal = i.Price * i.Quantity
 		o.Items = append(o.Items, i)
-		o.PickedCount += i.Picked
-		o.RequiredCount += i.Quantity
+		if i.SaleUnit == "each" {
+			o.PickedCount += i.Picked
+			o.RequiredCount += i.Quantity
+		}
 	}
 	o.AllPicked = o.RequiredCount > 0 && o.PickedCount == o.RequiredCount
 	return o, rows.Err()
@@ -303,7 +287,7 @@ func (s *Store) Adjust(pid, delta, version int64, reason string) error {
 		return e
 	}
 	defer tx.Rollback()
-	result, e := tx.Exec(`UPDATE products SET stock=stock+?,version=version+1 WHERE id=? AND version=? AND stock+? BETWEEN 0 AND 10000`, delta, pid, version, delta)
+	result, e := tx.Exec(`UPDATE products SET stock=stock+?,version=version+1 WHERE id=? AND version=? AND stock+? BETWEEN 0 AND 10000 AND archived=0`, delta, pid, version, delta)
 	if e != nil {
 		return e
 	}
@@ -314,13 +298,13 @@ func (s *Store) Adjust(pid, delta, version int64, reason string) error {
 	if n != 1 {
 		return ErrConflict
 	}
-	if _, e = tx.Exec(`INSERT INTO adjustments(product_id,delta,reason) VALUES(?,?,?)`, pid, delta, reason); e != nil {
+	if _, e = tx.Exec(`INSERT INTO adjustments(product_id,delta,reason,sale_unit) SELECT id,?,?,sale_unit FROM products WHERE id=?`, delta, reason, pid); e != nil {
 		return e
 	}
 	return tx.Commit()
 }
 func (s *Store) Adjustments() ([]Adjustment, error) {
-	rows, e := s.db.Query(`SELECT p.name,a.delta,a.reason,a.created FROM adjustments a JOIN products p ON p.id=a.product_id ORDER BY a.id DESC LIMIT 10`)
+	rows, e := s.db.Query(`SELECT p.name,a.delta,a.reason,a.created,a.sale_unit FROM adjustments a JOIN products p ON p.id=a.product_id ORDER BY a.id DESC LIMIT 10`)
 	if e != nil {
 		return nil, e
 	}
@@ -328,7 +312,7 @@ func (s *Store) Adjustments() ([]Adjustment, error) {
 	var all []Adjustment
 	for rows.Next() {
 		var a Adjustment
-		if e = rows.Scan(&a.Product, &a.Delta, &a.Reason, &a.Created); e != nil {
+		if e = rows.Scan(&a.Product, &a.Delta, &a.Reason, &a.Created, &a.SaleUnit); e != nil {
 			return nil, e
 		}
 		all = append(all, a)

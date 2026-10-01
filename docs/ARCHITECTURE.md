@@ -5,26 +5,34 @@
 ```text
 Browser
   ├─ Storefront: browse → basket → demo checkout → order receipt
-  └─ Manager: demo sign-in → inventory and audit trail → order queue
+  └─ Manager: demo sign-in → catalog / inventory and audit trail / order queue
           ↓ HTML form requests; HTMX enhances partial updates
 Go net/http + html/template
   ├─ Request and form boundaries: host, origin, CSRF, session, manager guard
-  ├─ Catalog and cart
+  ├─ Versioned product catalog, categories, optional types and local codes
+  ├─ Cart snapshot and price quote
   ├─ Inventory adjustments with optimistic version checks
   └─ Checkout and order status transitions
           ↓ parameterized SQL; transactions
-SQLite: products, sessions, cart, orders, order_items, adjustments
+SQLite: products, categories, product_types, product_codes,
+        sessions, cart, orders, order_items, adjustments, catalog_events
 ```
 
 The server returns HTML rather than a JSON API. Forms work with ordinary browser requests; HTMX swaps the shared workspace for live cart, filter and management updates. The underlying behavior is server-owned. Full-page navigation is intentionally plain HTML, keeping history and access checks predictable. HTMX history snapshots are disabled so manager/session pages are not saved in its local history cache.
 
 ## Data and invariants
 
-Prices and totals are integer USD cents, never floating point. Products have stable IDs and placeholder barcode values. Order items snapshot product name, unit price and quantity so later catalog edits cannot rewrite a receipt.
+Prices and totals are integer USD cents, never floating point. Products have stable IDs and immutable merchant SKUs. Categories and optional product types have stable IDs, clean display names, whitespace/case-normalized unique names and optimistic versions. Their labels never determine selling units. An active product requires an active category; types are optional. Referenced categories/types must be reassigned or their active products archived before taxonomy archive. A version-guarded restore reactivates the same label ID/name without restoring archived products.
 
-Available stock is deducted at order placement, not during browsing or cart editing. Checkout runs under a SQLite immediate transaction, rereads the basket, checks the session checkout key and cart revision, conditionally decrements every product, creates the order and item snapshots, clears the basket and rotates its checkout key. The commit is all-or-nothing. A repeat with an already committed key returns the original session-owned order. Insufficient stock leaves the basket and database unchanged.
+Products have separate inventory, catalog and price versions. Catalog edits do not overwrite stock, stock edits do not stale price quotes, and stale manager edits fail rather than overwriting a newer change. Manager-created products begin with zero stock and are restocked through the reasoned inventory audit. SKU and taxonomy identities stay reserved after archive. Eight bundled SVG illustration choices are reused across the demo; uploading arbitrary images is not implemented.
 
-The current app uses one DB connection per process and SQLite WAL with foreign keys, check constraints, an immediate write transaction and a five-second busy timeout. This is a deliberate single-instance demo architecture, not a horizontally scaled service. No negative stock or partial order is permitted. A manager’s stale inventory form cannot overwrite a checkout: the product’s version increments on both checkout and manual adjustments. Manual adjustments record a reason and delta atomically.
+Order items snapshot product name, SKU, unit price, selling unit, price basis, quantity step, quantity and subtotal so later catalog edits cannot rewrite a receipt. Product archives disappear from new sales while old receipts and pick tickets remain readable. A previously added archived line stays visible and removable in its basket, with checkout blocked. Explicit product restoration requires matching catalog version and active category/type labels; it restores only that product and its stored code identities, preserving stock and SKU. Both archive and restore advance price/catalog versions, so an old pre-archive quote remains invalid after recovery.
+
+Counted products use unit quantities, a price basis of one and a step of one. Future weighed products store base unit `g`, cents per 1000 grams and a bounded 1–1000 gram step. They cannot currently enter checkout. Unit-count totals exclude grams; a corrupt or legacy weighed basket line blocks checkout rather than treating grams as item units. Unit/price-basis changes after receipt use are rejected. Weighted execution, quantity/stock constraint expansion and rounding policy require their own future migration.
+
+Available stock is deducted at order placement, not during browsing or cart editing. Checkout runs under a SQLite immediate transaction, rereads the basket, checks the session checkout key, cart revision and the price quote returned from the same displayed basket snapshot, conditionally decrements every product, creates the order and item snapshots, clears the basket and rotates its checkout key. The commit is all-or-nothing. A repeat with an already committed key returns the original session-owned order. Insufficient stock or a changed quote leaves the basket and database unchanged. A price change requires the customer to review the newly rendered total and submit its new quote; the handler never silently accepts current prices on an old submission. Inventory-only version changes do not invalidate an otherwise identical quote. Carts do not currently reserve stock or have a hold timeout.
+
+The current app uses one DB connection per process and SQLite WAL with foreign keys, check constraints, an immediate write transaction and a five-second busy timeout. This is a deliberate single-instance demo architecture, not a horizontally scaled service. No negative stock or partial order is permitted. A manager’s stale inventory form cannot overwrite a checkout: the product’s version increments on both checkout and manual adjustments. Manual adjustments record a reason, delta and selling-unit snapshot atomically. Every successful manager product/category/type create, edit, archive or restore, writes a catalog event in the same transaction. Audit failure rolls back the command; stale/invalid commands create no event. The catalog displays the latest 20 events with name/detail snapshots. This shared-password demo records the change, not a verified human actor.
 
 Orders move only Placed → Picking → Ready → Completed. Each line stores an absolute picked quantity and an optimistic pick version. Picking only edits progress; prices, ordered quantities, totals and stock deductions remain unchanged. Ready is checked inside a transaction and refused until all lines are fully picked. Expected-state and version guards reject stale or repeated actions. Customer status refreshes as an HTMX fragment, while an ordinary refresh link and full-page route remain available. Cancellation/restocking and substitutions need separate policies before implementation.
 
@@ -34,7 +42,7 @@ Orders move only Placed → Picking → Ready → Completed. Each line stores an
 - HttpOnly, SameSite=Lax cookies; Secure cookies when the configured origin uses HTTPS
 - Session-bound CSRF tokens on all mutating forms, plus exact Origin and trusted Host checks
 - Manager access disabled by default; public management requires HTTPS. Normally a public password has a 24-character minimum and loopback development has a 12-character minimum. Explicit `DEMO_MODE=true` permits a simple shared password for fake-data demonstrations and shows a warning banner; it never relaxes HTTPS or request authorization. Constant-time digest comparison, short manager sessions and bounded attempt lockout apply.
-- CSRF token rotation at manager sign-in/sign-out; handlers enforce manager authorization on every inventory/order mutation
+- CSRF token rotation at manager sign-in/sign-out; handlers enforce manager authorization on every catalog, inventory and order mutation
 - In shared demo mode, order lists, receipts, status fragments, picking and transitions are restricted to the current session, even after manager sign-in. Normal manager mode retains store-wide order access. Guessed IDs do not reveal another session’s receipt.
 - Request body size limits, strict numeric bounds, parameterized SQL and autoescaped Go templates
 - No inline scripts, no external scripts, no eval, no embedding, no-store for dynamic responses, reduced referrer exposure
@@ -50,8 +58,14 @@ The storefront and manager are responsive now. The future shopper flow will add 
 
 ## Versioned migrations
 
-The original version-one schema is preserved as the baseline. Startup opens an immediate transaction, initializes an empty database if necessary, reads its schema version, applies missing migrations in order and commits. An unsupported future version is refused. Version 2 adds `picked_quantity` and `pick_version` to order items. Ready/Completed legacy orders are backfilled as picked because their manager had already declared them ready; Placed/Picking orders start with zero recorded progress. No orders, cart rows, sessions or stock records are dropped or reseeded. Migration and restart tests use a frozen populated v1 fixture, including injected failure rollback.
+The original version-one schema is preserved as the baseline. Startup opens an immediate transaction, initializes an empty database if necessary, reads its schema version, applies missing migrations in order and commits. An unsupported future version is refused. Version 2 adds `picked_quantity` and `pick_version` to order items. Ready/Completed legacy orders are backfilled as picked because their manager had already declared them ready; Placed/Picking orders start with zero recorded progress. No orders, cart rows, sessions or stock records are dropped or reseeded. Version 3 adds categories, types, SKU and unit metadata, archived states, version domains, product-code identities and receipt measurement snapshots. Existing product IDs, leading-zero placeholder values, stock, sessions, carts, order totals and picking progress survive. A transaction failure rolls back schema changes, data backfills and version markers together; unsupported future versions remain refused.
+
+Fresh database creation seeds 70 fake products within the migration transaction. The v3 upgrade expands only an exact original eight-product catalog: the total must be eight and every original product ID and placeholder value must match. Manager changes to names, prices or stock on those eight are preserved. The eight originals plus any additional custom product form a customized catalog and receive no expansion. Partial/custom catalogs and established empty schemas are never seeded. Later opens cannot resurrect removed rows. Tests keep independent populated v1/v2 fixtures, inject failure at the final version marker, and verify empty-store, expansion, reopen and foreign-key integrity behavior.
 
 ## Public demo ownership
 
 `DEMO_MODE=true` is an intentionally shared fake-data mode, not a full tenant system. Inventory and its audit trail are shared. Each session’s customer and manager views share the same server-side cookie and can operate that session’s orders. They cannot browse or change another visitor’s orders, including through status fragments or guessed picking URLs. Browser sessions currently last 24 hours; closing and reopening the server preserves them until expiry. There is no destructive global reset. A future per-visitor store/reset requires a dedicated data-lifecycle design rather than silently clearing the current store.
+
+## Product identity and scanning boundary
+
+`product_codes` keeps the old numeric values as `legacy_placeholder` and separately records a generated `demo_local` code such as `SHOPDEMO-000001`, preserving leading zeroes and uniqueness across archived rows. A custom SKU does not change the local demo code. These local codes are intended for ordinary Code 128, not GS1-128 or registered GTINs. The read-only resolver accepts the local Code 128 boundary; it does not validate legacy placeholders as retail codes, mutate orders, or mark items picked. No generated barcode labels, camera UI or scanner workflow are shipped in this milestone. All future scanning and fulfillment remain modules of this same Go/HTMX application.

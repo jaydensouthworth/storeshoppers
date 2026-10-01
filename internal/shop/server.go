@@ -33,15 +33,19 @@ type App struct {
 	blockedUntil time.Time
 }
 type View struct {
-	Title, Section, Search, Category, Message, Error string
-	Session                                          Session
-	Manager, ManagerEnabled, DemoMode                bool
-	Products                                         []Product
-	Basket                                           Basket
-	Orders                                           []Order
-	Order                                            Order
-	Adjustments                                      []Adjustment
-	ProductCount, Units, LowStock, OpenOrders        int64
+	Title, Section, Search, Category, Message, Error         string
+	Session                                                  Session
+	Manager, ManagerEnabled, DemoMode                        bool
+	Products                                                 []Product
+	CatalogProducts                                          []Product
+	Categories, Types                                        []Taxonomy
+	CatalogEvents                                            []CatalogEvent
+	CatalogDraft                                             *Product
+	Basket                                                   Basket
+	Orders                                                   []Order
+	Order                                                    Order
+	Adjustments                                              []Adjustment
+	ProductCount, CategoryCount, Units, LowStock, OpenOrders int64
 }
 
 func New(store *Store, cfg Config) (*App, error) {
@@ -67,7 +71,7 @@ func New(store *Store, cfg Config) (*App, error) {
 	if !cfg.DemoMode && cfg.ManagerPassword != "" && len(cfg.ManagerPassword) < 12 {
 		return nil, errors.New("MANAGER_PASSWORD must contain at least 12 characters")
 	}
-	tmpl, e := template.New("").Funcs(template.FuncMap{"categories": func() []string { return []string{"Produce", "Bakery", "Dairy", "Pantry"} }, "money": Money, "nextStatus": func(s string) string {
+	tmpl, e := template.New("").Funcs(template.FuncMap{"catalogForm": catalogForm, "catalogTaxonomyPanel": catalogTaxonomyPanel, "newCatalogProduct": newCatalogProduct, "illustrations": catalogIllustrations, "money": Money, "nextStatus": func(s string) string {
 		return map[string]string{"Placed": "Picking", "Picking": "Ready", "Ready": "Completed"}[s]
 	}, "eqInt": func(a, b int64) bool { return a == b }}).ParseFS(web.Files, "templates/*.html")
 	if e != nil {
@@ -91,6 +95,15 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("POST /manager/login", a.login)
 	a.mux.HandleFunc("POST /manager/logout", a.logout)
 	a.mux.HandleFunc("GET /manager", a.showManager)
+	a.mux.HandleFunc("GET /manager/catalog", a.showCatalog)
+	a.mux.HandleFunc("POST /manager/catalog/products", a.saveCatalogProduct)
+	a.mux.HandleFunc("POST /manager/catalog/products/{id}", a.saveCatalogProduct)
+	a.mux.HandleFunc("POST /manager/catalog/products/{id}/archive", a.archiveCatalogProduct)
+	a.mux.HandleFunc("POST /manager/catalog/products/{id}/restore", a.restoreCatalogProduct)
+	a.mux.HandleFunc("POST /manager/catalog/{kind}", a.saveCatalogTaxonomy)
+	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}", a.saveCatalogTaxonomy)
+	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}/archive", a.archiveCatalogTaxonomy)
+	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}/restore", a.restoreCatalogTaxonomy)
 	a.mux.HandleFunc("GET /manager/orders/{id}", a.showPicking)
 	a.mux.HandleFunc("POST /manager/orders/{id}/items/{product_id}", a.recordPicked)
 	a.mux.HandleFunc("POST /manager/inventory", a.inventory)
@@ -205,9 +218,23 @@ func redirect(w http.ResponseWriter, r *http.Request, path string) {
 }
 func num(v string) (int64, error) { return strconv.ParseInt(v, 10, 64) }
 func (a *App) populateStore(v *View) error {
-	p, e := a.store.Products(v.Search, v.Category)
-	v.Products = p
-	return e
+	var err error
+	if v.Categories, err = a.store.Taxonomies("category", false); err != nil {
+		return err
+	}
+	v.CategoryCount = int64(len(v.Categories))
+	if v.Products, err = a.store.Products(v.Search, v.Category); err != nil {
+		return err
+	}
+	v.ProductCount = int64(len(v.Products))
+	if v.Search != "" || v.Category != "" {
+		all, err := a.store.Products("", "")
+		if err != nil {
+			return err
+		}
+		v.ProductCount = int64(len(all))
+	}
+	return nil
 }
 func (a *App) showStore(w http.ResponseWriter, r *http.Request) {
 	v, ok := a.view(w, r)
@@ -261,7 +288,7 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 	v.Search = r.PostForm.Get("q")
 	v.Category = r.PostForm.Get("category")
 	if e != nil {
-		if !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrNotFound) {
+		if !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrNotFound) && !errors.Is(e, ErrUnavailable) {
 			a.fail(w, e)
 			return
 		}
@@ -294,7 +321,7 @@ func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
 	rev, e := num(r.PostForm.Get("revision"))
 	var id int64
 	if e == nil {
-		id, e = a.store.Checkout(s.ID, r.PostForm.Get("checkout_key"), rev)
+		id, e = a.store.Checkout(s.ID, r.PostForm.Get("checkout_key"), rev, r.PostForm.Get("quote"))
 	} else {
 		e = ErrInvalid
 	}
@@ -302,7 +329,7 @@ func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, fmt.Sprintf("/orders/%d", id))
 		return
 	}
-	if !errors.Is(e, ErrConflict) && !errors.Is(e, ErrEmpty) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrInvalid) {
+	if !errors.Is(e, ErrConflict) && !errors.Is(e, ErrEmpty) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrQuote) && !errors.Is(e, ErrUnavailable) {
 		a.fail(w, e)
 		return
 	}
@@ -445,11 +472,18 @@ func (a *App) managerView(w http.ResponseWriter, r *http.Request, message string
 		a.fail(w, err)
 		return
 	}
+	if v.Categories, err = a.store.Taxonomies("category", false); err != nil {
+		a.fail(w, err)
+		return
+	}
 	v.ProductCount = int64(len(v.Products))
+	v.CategoryCount = int64(len(v.Categories))
 	for _, p := range v.Products {
-		v.Units += p.Stock
-		if p.Stock < 8 {
-			v.LowStock++
+		if p.SaleUnit == "each" {
+			v.Units += p.Stock
+			if p.Stock < 8 {
+				v.LowStock++
+			}
 		}
 	}
 	for _, o := range v.Orders {
@@ -474,7 +508,7 @@ func (a *App) inventory(w http.ResponseWriter, r *http.Request) {
 	} else {
 		e = a.store.Adjust(pid, delta, ver, r.PostForm.Get("reason"))
 	}
-	if e != nil && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrConflict) {
+	if e != nil && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrConflict) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrNotFound) {
 		a.fail(w, e)
 		return
 	}

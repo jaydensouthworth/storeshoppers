@@ -22,6 +22,29 @@ class Fields(HTMLParser):
         if tag == "input" and attrs.get("type") == "hidden":
             self.fields.setdefault(attrs.get("name"), attrs.get("value", ""))
 
+class Forms(HTMLParser):
+    """Collect named inputs by form action without relying on layout/order."""
+    def __init__(self, text):
+        super().__init__()
+        self.forms = []
+        self.current = None
+        self.feed(text)
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "form":
+            self.current = {"action": attrs.get("action", ""), "fields": {}}
+        elif tag == "input" and self.current is not None and attrs.get("name"):
+            self.current["fields"][attrs["name"]] = attrs.get("value", "")
+    def handle_endtag(self, tag):
+        if tag == "form" and self.current is not None:
+            self.forms.append(self.current)
+            self.current = None
+    def named(self, field, value, action_prefix):
+        for form in self.forms:
+            if form["action"].startswith(action_prefix) and form["fields"].get(field) == value:
+                return form
+        raise AssertionError(f"Form for {field}={value!r} absent")
+
 def main():
     with tempfile.TemporaryDirectory(prefix="shopper-smoke-") as directory:
         with socket.socket() as sock:
@@ -64,9 +87,9 @@ def main():
             _, basket = post("/cart", {"csrf":csrf,"product_id":1,"quantity":2,"mode":"add","return":"cart"})
             assert "$6.98" in basket
             fields = Fields(basket).fields
-            receipt_path, receipt = post("/checkout", {key:fields[key] for key in ("csrf","revision","checkout_key")})
+            receipt_path, receipt = post("/checkout", {key:fields[key] for key in ("csrf","revision","checkout_key","quote")})
             assert "DEMO-" in receipt and "$6.98" in receipt and "Placed" in receipt
-            replay_path, _ = post("/checkout", {key:fields[key] for key in ("csrf","revision","checkout_key")})
+            replay_path, _ = post("/checkout", {key:fields[key] for key in ("csrf","revision","checkout_key","quote")})
             assert replay_path == receipt_path
             login = get("/manager/login")
             _, manager = post("/manager/login", {"csrf":Fields(login).fields["csrf"],"password":"smoke-demo-password"})
@@ -96,10 +119,69 @@ def main():
             manager = get(picking_path)
             _, completed = post(picking_path + "/advance", {"csrf":Fields(manager).fields["csrf"],"status":"Ready"})
             assert "Completed" in get(receipt_path)
+            # Catalog forms use real manager authorization, stable identities and versions.
+            catalog = get("/manager/catalog")
+            csrf = Fields(catalog).fields["csrf"]
+            _, catalog = post("/manager/catalog/categories", {"csrf":csrf,"name":"Smoke department"})
+            category_form = Forms(catalog).named("name", "Smoke department", "/manager/catalog/categories/")
+            category_id = category_form["action"].split("/")[-1]
+            _, catalog = post("/manager/catalog/types", {"csrf":csrf,"name":"Smoke product type"})
+            type_form = Forms(catalog).named("name", "Smoke product type", "/manager/catalog/types/")
+            type_id = type_form["action"].split("/")[-1]
+            product = {"csrf":csrf,"sku":"HTTP-SMOKE-ITEM","name":"Smoke shelf crackers",
+                       "description":"Created through real HTTP forms","category_id":category_id,
+                       "type_id":type_id,"icon":"bread","price":899,"sale_unit":"each","quantity_step":1}
+            _, catalog = post("/manager/catalog/products", product)
+            product_form = Forms(catalog).named("name", product["name"], "/manager/catalog/products/")
+            product_id = product_form["action"].split("/")[-1]
+            assert product_form["fields"]["sku"] == "HTTP-SMOKE-ITEM"
+            assert product_form["fields"]["catalog_version"] == "1"
+            _, stock_page = post("/manager/inventory", {"csrf":csrf,"product_id":product_id,
+                "version":1,"delta":4,"reason":"Smoke new product stock"})
+            assert "Smoke new product stock" in stock_page
+            _, basket = post("/cart", {"csrf":csrf,"product_id":product_id,"quantity":1,"mode":"add","return":"cart"})
+            old_quote = {key:Fields(basket).fields[key] for key in ("csrf","revision","checkout_key","quote")}
+            assert "$8.99" in basket
+            product.update(price=949, catalog_version=1)
+            _, catalog = post(product_form["action"], product)
+            _, stale = post("/checkout", old_quote)
+            assert "Review the current basket" in stale and "$9.49" in stale
+            fresh = {key:Fields(stale).fields[key] for key in ("csrf","revision","checkout_key","quote")}
+            assert fresh["quote"] != old_quote["quote"]
+            catalog_receipt_path, catalog_receipt = post("/checkout", fresh)
+            assert "$9.49" in catalog_receipt and "Smoke shelf crackers" in catalog_receipt
+            # Archiving removes new-sale availability, but never rewrites old receipts.
+            _, catalog = post(product_form["action"] + "/archive", {"csrf":csrf,"catalog_version":2})
+            assert "Smoke shelf crackers" not in get("/")
+            assert "Smoke shelf crackers" in get(catalog_receipt_path)
+            post(category_form["action"] + "/archive", {"csrf":csrf,"version":1})
+            post(type_form["action"] + "/archive", {"csrf":csrf,"version":1})
+            _, restored = post(category_form["action"] + "/restore", {"csrf":csrf,"version":2})
+            restored_form = Forms(restored).named("name", "Smoke department", "/manager/catalog/categories/")
+            assert restored_form["action"] == category_form["action"]
+            assert restored_form["fields"]["version"] == "3"
+            assert "Smoke shelf crackers" not in get("/")
+            # Recovery is explicit and waits for every assigned label to be active.
+            _, blocked_restore = post(product_form["action"] + "/restore", {"csrf":csrf,"catalog_version":3})
+            assert 'role="alert"' in blocked_restore
+            assert "Smoke shelf crackers" not in get("/")
+            post(type_form["action"] + "/restore", {"csrf":csrf,"version":2})
+            assert "Smoke shelf crackers" not in get("/")
+            _, recovered = post(product_form["action"] + "/restore", {"csrf":csrf,"catalog_version":3})
+            recovered_form = Forms(recovered).named("name", "Smoke shelf crackers", "/manager/catalog/products/")
+            assert recovered_form["action"] == product_form["action"]
+            assert recovered_form["fields"]["sku"] == "HTTP-SMOKE-ITEM"
+            assert recovered_form["fields"]["catalog_version"] == "4"
+            assert "Smoke shelf crackers" in get("/")
+            process.terminate(); process.wait(timeout=5)
+            process = start()
+            assert "Smoke shelf crackers" in get("/")
+            assert "$9.49" in get(catalog_receipt_path)
+            assert "Smoke shelf crackers" in get("/manager/catalog")
             manager = get("/manager")
             post("/manager/logout", {"csrf":Fields(manager).fields["csrf"]})
             assert "Manager demo access" in get("/manager")
-            print("PASS: real HTTP catalog, static asset, basket, checkout replay, manager login, stock audit, guarded picking, status fragment, process restart, collection and logout")
+            print("PASS: real HTTP catalog, static asset, basket, checkout replay, manager login, stock audit, guarded picking, status fragment, process restart, collection, configurable catalog, taxonomy, stale-price reconfirmation, archive history, guarded taxonomy/product recovery and logout")
         finally:
             process.terminate()
             process.wait(timeout=5)
