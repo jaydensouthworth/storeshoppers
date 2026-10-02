@@ -25,6 +25,7 @@ var ErrTaxonomyInactive = errors.New("Restore this product’s department and pr
 var ErrNotFound = errors.New("That item could not be found.")
 
 type Product struct {
+	ImageHash                                                      string
 	PricingBoundary                                                int64
 	SalePrice, PromotionID, PromotionVersion, SaleStarts, SaleEnds int64
 	Featured                                                       bool

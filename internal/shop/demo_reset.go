@@ -99,6 +99,9 @@ func (s *Store) resetDemo(opts DemoResetOptions, install func(*sql.DB, *sql.DB) 
 		return result, fmt.Errorf("prepare demo baseline; original data retained: %w", err)
 	}
 	defer fresh.Close()
+	if err = retainProductImages(db, fresh); err != nil {
+		return result, fmt.Errorf("retain image library before reset; original data retained: %w", err)
+	}
 	if err = installDemoBaseline(db, fresh, install); err != nil {
 		return result, fmt.Errorf("install demo baseline failed; pre-reset state retained at %q: %w", result.BackupPath, err)
 	}

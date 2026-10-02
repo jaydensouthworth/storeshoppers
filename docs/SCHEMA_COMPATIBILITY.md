@@ -1,9 +1,10 @@
 # Runtime schema compatibility
 
-This preparatory release still uses **schema 8**. It does not add weighted
-checkout, change any quantity meaning, rebuild tables or migrate stored data.
-It adds a compatibility fence for a guarded binary that remains running while
-another process upgrades the same database.
+The compatibility fence was introduced in a preparatory **schema 8** release.
+The current image release uses **schema 9**, adding only image metadata and
+retained assets; quantity meanings and receipt data are unchanged. The fence
+protects a guarded binary that remains running while another process upgrades
+the same database.
 
 ## Mutation boundary
 
@@ -45,14 +46,14 @@ process is running. Another compatible process can start normally.
 
 ## Requests, rendering and readiness
 
-All dynamic routes, including `/healthz` and scoped manager product-picker GETs,
+All dynamic routes, including `/healthz`, product media and scoped manager product-picker GETs,
 check compatibility before dispatch.
 HTML, status, cookies and redirect headers are buffered until the handler
 finishes and compatibility is checked again. This prevents a response assembled
 across a detected upgrade from displaying quantities with the old binary's
 interpretation. Template output and the dynamic response buffer each have a
 4 MiB limit; oversize responses fail without sending partial content.
-Static assets bypass compatibility buffering and remain available.
+Static assets bypass compatibility buffering and remain available. Dynamic responses report the serving binary’s supported version in `X-Shop-Schema`; this is a diagnostic, not proof that every other replica has stopped.
 
 A mismatch or unreadable marker returns **503 Service Unavailable**, a plain
 temporary-update message, `Retry-After: 3` and `Cache-Control: no-store`.

@@ -227,3 +227,6 @@ func filterCatalogProducts(products []Product, f CatalogFilters, codeMatches map
 	})
 	return filtered
 }
+
+// QueryString preserves bounded catalog context on the dedicated image editor.
+func (f CatalogFilters) QueryString() string { return f.values().Encode() }

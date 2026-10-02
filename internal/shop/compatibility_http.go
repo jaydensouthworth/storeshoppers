@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"net/http"
+	"strconv"
 )
 
 const maxDynamicResponseBytes = 4 << 20
@@ -55,6 +56,7 @@ func (w *compatibilityResponse) Write(p []byte) (int, error) {
 }
 
 func (a *App) serveCompatible(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-Shop-Schema", strconv.Itoa(latestSchemaVersion))
 	if err := a.store.CheckCompatibility(r.Context()); err != nil {
 		a.fail(w, err)
 		return

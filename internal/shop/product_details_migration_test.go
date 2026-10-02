@@ -81,8 +81,8 @@ func assertProductDetailsAbsent(t *testing.T, db *sql.DB) {
 func assertProductDetailsSchema8(t *testing.T, db *sql.DB) {
 	t.Helper()
 	var version, count int
-	if err := db.QueryRow(`SELECT MAX(version),COUNT(*) FROM schema_version`).Scan(&version, &count); err != nil || version != 8 || count != 8 || latestSchemaVersion != 8 {
-		t.Fatalf("product details schema: max=%d count=%d latest=%d error=%v; want 8", version, count, latestSchemaVersion, err)
+	if err := db.QueryRow(`SELECT MAX(version),COUNT(*) FROM schema_version`).Scan(&version, &count); err != nil || version != latestSchemaVersion || count != latestSchemaVersion {
+		t.Fatalf("product details schema: max=%d count=%d latest=%d error=%v; want current version", version, count, latestSchemaVersion, err)
 	}
 	if err := checkSQLite(db); err != nil {
 		t.Fatal(err)

@@ -612,7 +612,7 @@ func populatedReservationV3(t *testing.T) (string, Session) {
 func TestReservationsV4MigrationPreservesPopulatedV3AndReopens(t *testing.T) {
 	path, owner := populatedReservationV3(t)
 	db := migrationRawDB(t, path)
-	queries := map[string]string{"products": `SELECT * FROM products ORDER BY id`, "sessions": `SELECT * FROM sessions ORDER BY id`, "orders": `SELECT id,reference,session_id,checkout_key,total,status,created FROM orders ORDER BY id`, "order_items": `SELECT * FROM order_items ORDER BY order_id,product_id`, "adjustments": `SELECT * FROM adjustments ORDER BY id`, "codes": `SELECT * FROM product_codes ORDER BY id`}
+	queries := map[string]string{"products": `SELECT ` + priorTableProjection(t, db, "products") + ` FROM products ORDER BY id`, "sessions": `SELECT * FROM sessions ORDER BY id`, "orders": `SELECT id,reference,session_id,checkout_key,total,status,created FROM orders ORDER BY id`, "order_items": `SELECT * FROM order_items ORDER BY order_id,product_id`, "adjustments": `SELECT * FROM adjustments ORDER BY id`, "codes": `SELECT * FROM product_codes ORDER BY id`}
 	snapshots := make(map[string][][]any)
 	for name, q := range queries {
 		snapshots[name] = migrationQuerySnapshot(t, db, q)

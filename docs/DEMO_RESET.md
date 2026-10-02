@@ -46,3 +46,7 @@ Archives are created in a private `0700` directory with `0600` files. They are o
 ## Verification
 
 `./scripts/check.sh` covers unit/race tests, normal HTTP persistence and `scripts/demo_reset_smoke.py`: real-process demo restart persistence followed by GET confirmation and protected POST reset. Fixtures cover old schemas, crash-left WAL, complete backup restore, competing SQLite ownership, alternate page sizes, cap refusal, deliberately interrupted replacement rollback, authorization/session invalidation, concurrent checkout, duplicate reset and bounded request-drain recovery. `scripts/container-check.sh` additionally verifies the non-root image keeps data on ordinary container restart and performs explicit reset with a readable snapshot on the same persistent volume.
+
+## Retained image assets
+
+Schema9 uploads are immutable normalized JPEG variants. Confirmed reset restores the seeded product associations and preserves the image library plus persistent decode budgets; reset cannot replenish storage or upload limits. The pre-reset snapshot also preserves the old associations. Each retained asset is validated before baseline installation; corruption or an over-budget library refuses reset while leaving the live database intact. Uploaded assets are never purged automatically.

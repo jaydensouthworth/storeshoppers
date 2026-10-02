@@ -32,7 +32,7 @@ Verification for this release: 246 top-level Go tests, 21 JavaScript interaction
 
 ## Ordered implementation backlog
 
-**Current priority:** publish the tested schema-8 compatibility safeguard, then implement weighted execution and safe image uploads in isolated, reviewed phases. Mixed regular/sale Featured rows and persistent System/Light/Dark appearance are live and checked on desktop and narrow screens. The compact circular is live: 306 CSS pixels at 1366×768 and 1440×901, with catalog controls/products above the fold. Routine manager controls and visible stale-form recovery are verified; see [Manager workflows](MANAGER_WORKFLOWS.md). The missing hosting volume was added and exact sale/audit records survived a deployment. Continue compatibility safeguards, weighted execution, safe image uploads and remaining manager workflows in tested phases without overwriting visitor changes.
+**Current priority:** complete release verification of additive schema9 image uploads, then integrate weighted execution as schema10 with its independent migration/overlap review. The preparatory schema-8 compatibility safeguard is published with passing CI. Mixed regular/sale Featured rows and persistent System/Light/Dark appearance are live and checked on desktop and narrow screens. The compact circular is live: 306 CSS pixels at 1366×768 and 1440×901, with catalog controls/products above the fold. Routine manager controls and visible stale-form recovery are verified; see [Manager workflows](MANAGER_WORKFLOWS.md). The missing hosting volume was added and exact sale/audit records survived a deployment. Continue compatibility safeguards, weighted execution, safe image uploads and remaining manager workflows in tested phases without overwriting visitor changes.
 
 ### 1. Manager usability and explicit reset
 
@@ -64,7 +64,7 @@ Implemented and live-verified in schema v7: Promotions and Featured management w
 
 ### 5. Complete individual product pages and catalog presentation
 
-Implemented and live-verified in schema v8: full product pages, manager-editable body and package details, optional clearly illustrative food nutrition, and counted deodorant/razor examples with bundled illustrations. Existing catalog migration invents no metadata or stock; a demo-only reviewed action can add the two examples without overwriting edits. Details remain separate from selling-unit execution and immutable order snapshots. See [Product details](PRODUCT_DETAILS.md). Constrained local uploads remain later work; no arbitrary server-side URL fetching or unsanitized SVG.
+Implemented and live-verified in schema v8: full product pages, manager-editable body and package details, optional clearly illustrative food nutrition, and counted deodorant/razor examples with bundled illustrations. Existing catalog migration invents no metadata or stock; a demo-only reviewed action can add the two examples without overwriting edits. Details remain separate from selling-unit execution and immutable order snapshots. See [Product details](PRODUCT_DETAILS.md). The next schema9 image slice is implemented and under end-to-end release verification: bounded JPEG/PNG previews, confirmed attachment, normalized immutable variants and retained recovery storage. No arbitrary URL fetching or SVG upload.
 
 **Acceptance:** product details, available stock, units and basket actions agree; archived/referenced products retain their history, and both food and non-food items render sensibly on mobile.
 

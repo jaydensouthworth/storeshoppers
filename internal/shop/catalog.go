@@ -13,13 +13,13 @@ import (
 
 // Catalog writes keep merchant SKUs separate from barcode identities. Archived
 // rows and their unique identifiers are retained permanently by the application.
-const productSelect = `p.id,p.name,p.description,c.name,p.barcode,p.icon,p.price,p.stock,p.version,p.sku,COALESCE(t.name,''),p.sale_unit,p.category_id,COALESCE(p.type_id,0),p.archived,p.catalog_version,p.price_version,p.price_basis,p.quantity_step,(SELECT COALESCE(SUM(reserved),0) FROM cart WHERE product_id=p.id)`
+const productSelect = `p.id,p.name,p.description,c.name,p.barcode,p.icon,p.price,p.stock,p.version,p.sku,COALESCE(t.name,''),p.sale_unit,p.category_id,COALESCE(p.type_id,0),p.archived,p.catalog_version,p.price_version,p.price_basis,p.quantity_step,(SELECT COALESCE(SUM(reserved),0) FROM cart WHERE product_id=p.id),COALESCE(p.image_hash,'')`
 const productJoins = ` FROM products p JOIN categories c ON c.id=p.category_id LEFT JOIN product_types t ON t.id=p.type_id `
 
 type scanner interface{ Scan(...any) error }
 
 func productFields(p *Product) []any {
-	return []any{&p.ID, &p.Name, &p.Description, &p.Category, &p.Barcode, &p.Icon, &p.Price, &p.Stock, &p.Version, &p.SKU, &p.ProductType, &p.SaleUnit, &p.CategoryID, &p.TypeID, &p.Archived, &p.CatalogVersion, &p.PriceVersion, &p.PriceBasis, &p.QuantityStep, &p.Reserved}
+	return []any{&p.ID, &p.Name, &p.Description, &p.Category, &p.Barcode, &p.Icon, &p.Price, &p.Stock, &p.Version, &p.SKU, &p.ProductType, &p.SaleUnit, &p.CategoryID, &p.TypeID, &p.Archived, &p.CatalogVersion, &p.PriceVersion, &p.PriceBasis, &p.QuantityStep, &p.Reserved, &p.ImageHash}
 }
 func scanProduct(row scanner) (Product, error) {
 	var p Product

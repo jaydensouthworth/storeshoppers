@@ -110,3 +110,7 @@ docs/              Architecture and roadmap
 ```
 
 HTMX is bundled locally with its license. No frontend build service or runtime CDN is required.
+
+### Product images
+
+Open a product in Products and choose **Manage product image**. Preview a JPEG or PNG, review the normalized orientation/colors, then confirm that the demo artwork may be public. The app stores resized JPEG variants and strips filenames/embedded metadata. Existing illustrations stay available. Uploads have strict input, pixel, concurrency, rate and retained-storage limits; resets preserve recovery assets and budgets. See [Product images](docs/PRODUCT_IMAGES.md) for limits and recovery behavior.

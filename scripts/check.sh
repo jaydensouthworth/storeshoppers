@@ -19,3 +19,4 @@ python3 scripts/order_overrides_smoke.py
 python3 scripts/shoppers_smoke.py
 python3 scripts/promotions_smoke.py
 python3 scripts/product_details_smoke.py
+python3 scripts/product_images_smoke.py

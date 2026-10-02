@@ -8,7 +8,7 @@ The current foundation adds a picking quantity and version to order items. It do
 
 ## Completed version 3: configurable catalog
 
-- Manager `/manager/catalog` supports product create/edit/archive/restore and category/type create/rename/archive/restore inside the existing monolith. Products can reuse ten bundled illustrations; arbitrary image upload is deferred.
+- Manager `/manager/catalog` supports product create/edit/archive/restore and category/type create/rename/archive/restore inside the existing monolith. Products can reuse ten bundled illustrations; schema9 adds constrained JPEG/PNG upload previews and immutable normalized variants.
 - Categories and optional types are ordinary rows with stable IDs, normalized unique names, archive state and optimistic versions. Product assignment follows IDs through renames; taxonomy labels never decide whether an item is weighed.
 - Products retain their IDs and have an immutable, case-insensitive merchant SKU. User SKUs are bounded ASCII letters/digits/dashes/underscores; a blank create assigns a `SHOPDEMO-` SKU. That namespace is reserved for generated identities. Neither SKUs nor normalized taxonomy names can be reused after archive.
 - Product fields, unit metadata and taxonomy assignments are bounded. New products always start with zero stock; adding stock requires the separate reasoned inventory adjustment. Catalog and inventory edits use independent optimistic versions.
@@ -52,11 +52,11 @@ Any actual-weight change needs an explicit preview of grams, amount and stock co
 
 Migration must preserve populated historical each orders, stable IDs, sessions, baskets, allocations and receipts. Rebuild the affected SQLite tables on a pinned connection with foreign-key enforcement disabled before the transaction, then restore it and verify integrity. Preserve sequence high-water marks and prove failed migration rollback and restart. Test concurrent old/new application processes: unsupported schema must refuse ordinary requests and all legacy writes must fail before quantity semantics change. A source compatibility guard alone is insufficient proof of actual deployment overlap safety.
 
-## Planned uploaded-image boundary
+## Completed schema9: constrained product images
 
-The bundled illustration picker remains available. A later manager upload/library flow should accept only bounded JPEG/PNG inputs, inspect dimensions before decoding, re-encode normalized pixels to remove metadata, and provide a review before attachment. Never fetch arbitrary URLs or accept unsanitized SVG. Retained image records and new order-image snapshots need additive versioned migrations; historical receipts without images must not gain invented snapshots.
+The bundled illustration picker remains available. A dedicated manager image editor accepts bounded JPEG/PNG input, inspects dimensions and scan/chunk structure before decoding, re-encodes normalized pixels, and requires review and explicit public-demo confirmation before attachment. It never fetches a URL or accepts SVG. Current product associations are separate from text-only historical receipts; the migration invents no old image snapshots.
 
-Keep normalized variants, deduplication, quotas, rate limits and attachment audit transactional. Demo reset must retain uploaded assets and its global quota/rate state, so repeated resets cannot defeat storage limits. Provide reusable local-library selection and clear refusal when the bounded library or recovery-backup budget is full; do not silently purge history. Image upload and weight execution remain explicitly unimplemented until their respective end-to-end checks pass.
+Variants, deduplication, byte/count quotas, catalog versions, replay identity and attachment audit are transactional. Preview decoding is bounded across uploads and confirmations, with a persistent global attempt budget. Reset retains image blobs and that budget; recovery snapshots retain the original catalog association. There is no purge or asset deletion endpoint. Re-uploading the same normalized image reuses its stored identity. A full gallery/browser for retained images remains a later usability refinement. See [Product images](PRODUCT_IMAGES.md). Weighted execution is the following, separately reviewed migration.
 
 ## Barcode identities and the two-screen demo
 

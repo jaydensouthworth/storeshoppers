@@ -49,23 +49,52 @@ func populatedShopperV5(t *testing.T) (string, Session) {
 	return path, owner
 }
 
-func shopperPriorTables(t *testing.T, db *sql.DB) map[string][][]any {
+type priorTableSnapshot struct {
+	projection string
+	rows       [][]any
+}
+
+func shopperPriorTables(t *testing.T, db *sql.DB) map[string]priorTableSnapshot {
 	t.Helper()
 	tables := migrationQuerySnapshot(t, db, `SELECT name FROM sqlite_master WHERE type='table' AND (name NOT LIKE 'sqlite_%' OR name='sqlite_sequence') AND name!='schema_version' ORDER BY name`)
-	before := make(map[string][][]any, len(tables))
+	before := make(map[string]priorTableSnapshot, len(tables))
 	for _, table := range tables {
 		name := table[0].(string)
-		before[name] = migrationQuerySnapshot(t, db, `SELECT * FROM `+quoteIdentifier(name)+` ORDER BY rowid`)
+		projection := priorTableProjection(t, db, name)
+		before[name] = priorTableSnapshot{projection: projection, rows: migrationQuerySnapshot(t, db, `SELECT `+projection+` FROM `+quoteIdentifier(name)+` ORDER BY rowid`)}
 	}
 	return before
 }
 
-func assertShopperPriorTables(t *testing.T, db *sql.DB, before map[string][][]any) {
+func priorTableProjection(t *testing.T, db *sql.DB, name string) string {
+	t.Helper()
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?) ORDER BY cid`, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var columns []string
+	for rows.Next() {
+		var column string
+		if err = rows.Scan(&column); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		columns = append(columns, quoteIdentifier(column))
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Join(columns, ",")
+}
+
+func assertShopperPriorTables(t *testing.T, db *sql.DB, before map[string]priorTableSnapshot) {
 	t.Helper()
 	for name, want := range before {
-		got := migrationQuerySnapshot(t, db, `SELECT * FROM `+quoteIdentifier(name)+` ORDER BY rowid`)
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("shopper upgrade changed existing %s: got %v, want %v", name, got, want)
+		got := migrationQuerySnapshot(t, db, `SELECT `+want.projection+` FROM `+quoteIdentifier(name)+` ORDER BY rowid`)
+		if !reflect.DeepEqual(got, want.rows) {
+			t.Errorf("shopper upgrade changed existing %s: got %v, want %v", name, got, want.rows)
 		}
 	}
 }

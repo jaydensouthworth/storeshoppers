@@ -94,7 +94,7 @@ func TestSchemaGuardRejectsEveryMutationWithoutChangingData(t *testing.T) {
 
 func TestSchemaGuardFailsClosedOnInvalidMarker(t *testing.T) {
 	for _, query := range []string{
-		`DELETE FROM schema_version WHERE version=8`,
+		fmt.Sprintf(`DELETE FROM schema_version WHERE version=%d`, latestSchemaVersion),
 		`DELETE FROM schema_version`,
 		`DROP TABLE schema_version`,
 	} {
@@ -131,7 +131,7 @@ func TestSchemaGuardMigrationWinsWriterLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer migration.Rollback()
-	if _, err = migration.Exec(`UPDATE products SET stock=1200,sale_unit='g',price_basis=1000,quantity_step=50 WHERE id=1; INSERT INTO schema_version VALUES(9)`); err != nil {
+	if _, err = migration.Exec(fmt.Sprintf(`UPDATE products SET stock=1200,sale_unit='g',price_basis=1000,quantity_step=50 WHERE id=1; INSERT INTO schema_version VALUES(%d)`, latestSchemaVersion+1)); err != nil {
 		t.Fatal(err)
 	}
 	started, result := make(chan struct{}), make(chan error, 1)
@@ -194,7 +194,7 @@ func TestSchemaGuardCommandWinsWriterLock(t *testing.T) {
 			err = errors.New("migration did not see complete earlier command")
 		}
 		if err == nil {
-			_, err = migration.Exec(`INSERT INTO schema_version VALUES(9)`)
+			_, err = migration.Exec(fmt.Sprintf(`INSERT INTO schema_version VALUES(%d)`, latestSchemaVersion+1))
 		}
 		if err == nil {
 			err = migration.Commit()
@@ -234,7 +234,7 @@ func TestSchemaGuardHTTPRefusesDynamicRequestsButServesAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := testSession(t, s, "")
-	testExec(t, s, `INSERT INTO schema_version VALUES(9)`)
+	testExec(t, s, fmt.Sprintf(`INSERT INTO schema_version VALUES(%d)`, latestSchemaVersion+1))
 	before := fingerprintTest(t, s.db)
 	for _, path := range []string{"/", "/products/1", "/cart", "/orders/1/status", "/manager", "/healthz", demoResetPath} {
 		for _, method := range []string{http.MethodGet, http.MethodPost} {
@@ -321,7 +321,7 @@ func TestSchemaGuardDiscardsResponseIfMigrationCommitsDuringHandler(t *testing.T
 		w.Header().Set("Content-Length", "12345")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("future grams rendered as units must not leak"))
-		testExec(t, future, `INSERT INTO schema_version VALUES(9)`)
+		testExec(t, future, fmt.Sprintf(`INSERT INTO schema_version VALUES(%d)`, latestSchemaVersion+1))
 	})
 	w := testRequest(t, a, http.MethodGet, "/compatibility-race", Session{}, nil, nil)
 	assertSchemaUnavailable(t, w)
@@ -361,7 +361,7 @@ func TestSchemaGuardCommittedCheckoutStillReplaysAfterResponseRefusal(t *testing
 		if err != nil {
 			t.Fatal(err)
 		}
-		testExec(t, future, `INSERT INTO schema_version VALUES(9)`)
+		testExec(t, future, fmt.Sprintf(`INSERT INTO schema_version VALUES(%d)`, latestSchemaVersion+1))
 		redirect(w, r, "/orders")
 	})
 	w := testRequest(t, a, http.MethodPost, "/checkout-before-migration", session, nil, nil)
@@ -378,7 +378,7 @@ func TestSchemaGuardCommittedCheckoutStillReplaysAfterResponseRefusal(t *testing
 	}
 	// This simulation changes only the version marker. Remove it to represent a
 	// compatible client resuming; the existing receipt/key still supplies replay.
-	testExec(t, future, `DELETE FROM schema_version WHERE version=9`)
+	testExec(t, future, fmt.Sprintf(`DELETE FROM schema_version WHERE version=%d`, latestSchemaVersion+1))
 	replayed, err := s.Checkout(session.ID, session.CheckoutKey, session.Revision, basket.Quote)
 	if err != nil || replayed != orderID || testCount(t, s, "orders") != 1 {
 		t.Fatalf("replay lost: %d, %v", replayed, err)
@@ -415,7 +415,7 @@ func TestSchemaGuardAcrossRunningProcesses(t *testing.T) {
 	if line, err := reader.ReadString('\n'); err != nil || line != "ready\n" {
 		t.Fatalf("child readiness = %q, %v, %s", line, err, stderr.String())
 	}
-	testExec(t, s, `INSERT INTO schema_version VALUES(9)`)
+	testExec(t, s, fmt.Sprintf(`INSERT INTO schema_version VALUES(%d)`, latestSchemaVersion+1))
 	before := fingerprintTest(t, s.db)
 	if _, err = stdin.Write([]byte("check\n")); err != nil {
 		t.Fatal(err)
@@ -455,7 +455,7 @@ func TestSchemaGuardProcessHelper(t *testing.T) {
 func TestSchemaGuardResetRefusesFutureWithoutArchiveOrInstall(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "shop.db")
 	s := openTestStore(t, path)
-	testExec(t, s, `INSERT INTO schema_version VALUES(9)`)
+	testExec(t, s, fmt.Sprintf(`INSERT INTO schema_version VALUES(%d)`, latestSchemaVersion+1))
 	before := fingerprintTest(t, s.db)
 	result, err := s.resetDemo(DemoResetOptions{}, func(_, _ *sql.DB) error { t.Fatal("incompatible reset reached installation"); return nil })
 	if !errors.Is(err, ErrSchemaIncompatible) || result.Reset || result.BackupPath != "" {
@@ -471,8 +471,8 @@ func TestSchemaGuardResetRefusesFutureWithoutArchiveOrInstall(t *testing.T) {
 
 func TestSchemaGuardResetRefusesIncompatibleSourceBeforeCopy(t *testing.T) {
 	for _, query := range []string{
-		`DELETE FROM schema_version WHERE version=8`,
-		`INSERT INTO schema_version VALUES(9)`,
+		fmt.Sprintf(`DELETE FROM schema_version WHERE version=%d`, latestSchemaVersion),
+		fmt.Sprintf(`INSERT INTO schema_version VALUES(%d)`, latestSchemaVersion+1),
 		`DELETE FROM schema_version`,
 		`DROP TABLE schema_version`,
 	} {

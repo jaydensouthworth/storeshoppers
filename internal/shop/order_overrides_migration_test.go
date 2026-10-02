@@ -37,8 +37,10 @@ func TestOrderOverridesV4MigrationPreservesAllHistoryAndRetries(t *testing.T) {
 			path, owner := populatedV4(t)
 			db := migrationRawDB(t, path)
 			old := map[string][][]any{}
+			projections := map[string]string{}
 			for _, table := range []string{"products", "sessions", "cart", "baskets", "order_items", "orders", "adjustments"} {
-				old[table] = migrationQuerySnapshot(t, db, `SELECT * FROM `+table)
+				projections[table] = priorTableProjection(t, db, table)
+				old[table] = migrationQuerySnapshot(t, db, `SELECT `+projections[table]+` FROM `+table)
 			}
 			if failure {
 				migrationExec(t, db, `CREATE TRIGGER fail_v5 BEFORE INSERT ON schema_version WHEN NEW.version=5 BEGIN SELECT RAISE(ABORT,'injected v5 failure'); END`)
@@ -52,7 +54,7 @@ func TestOrderOverridesV4MigrationPreservesAllHistoryAndRetries(t *testing.T) {
 				}
 				db = migrationRawDB(t, path)
 				for table, want := range old {
-					if got := migrationQuerySnapshot(t, db, `SELECT * FROM `+table); !reflect.DeepEqual(want, got) {
+					if got := migrationQuerySnapshot(t, db, `SELECT `+projections[table]+` FROM `+table); !reflect.DeepEqual(want, got) {
 						t.Fatalf("rollback changed %s", table)
 					}
 				}
@@ -68,7 +70,7 @@ func TestOrderOverridesV4MigrationPreservesAllHistoryAndRetries(t *testing.T) {
 				if table == "orders" {
 					continue
 				}
-				if got := migrationQuerySnapshot(t, s.db, `SELECT * FROM `+table); !reflect.DeepEqual(want, got) {
+				if got := migrationQuerySnapshot(t, s.db, `SELECT `+projections[table]+` FROM `+table); !reflect.DeepEqual(want, got) {
 					t.Fatalf("upgrade changed %s", table)
 				}
 			}

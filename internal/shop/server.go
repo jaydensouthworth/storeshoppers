@@ -25,6 +25,7 @@ type Config struct {
 	DemoBackupMaxBytes      int64
 }
 type App struct {
+	images       imagePreviewCache
 	store        *Store
 	config       Config
 	templates    *template.Template
@@ -36,6 +37,7 @@ type App struct {
 	resetPending atomic.Bool
 }
 type View struct {
+	Images                                                   *ImageWorkspace
 	CartDraft                                                *ManagerDraft
 	ProductPicker                                            *ProductPicker
 	ProductPage                                              *ProductDetailPage
@@ -109,7 +111,7 @@ func New(store *Store, cfg Config) (*App, error) {
 	if e != nil {
 		return nil, e
 	}
-	a := &App{store: store, config: cfg, templates: tmpl, mux: http.NewServeMux()}
+	a := &App{store: store, config: cfg, templates: tmpl, mux: http.NewServeMux(), images: imagePreviewCache{entries: make(map[string]ImagePreview), decode: make(chan struct{}, 1)}}
 	statics, _ := fs.Sub(web.Files, "static")
 	a.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(statics))))
 	a.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -150,6 +152,12 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("GET /manager/featured", a.showPromotions)
 	a.mux.HandleFunc("POST /manager/featured/{id}", a.setFeatured)
 	a.mux.HandleFunc("GET /manager/catalog", a.showCatalog)
+	a.mux.HandleFunc("GET /media/products/{hash}/{variant}", a.serveProductImage)
+	a.mux.HandleFunc("GET /manager/catalog/products/{id}/image", a.showProductImage)
+	a.mux.HandleFunc("POST /manager/catalog/products/{id}/image/preview", a.uploadProductImage)
+	a.mux.HandleFunc("GET /manager/catalog/products/{id}/image/preview/{token}", a.showImagePreview)
+	a.mux.HandleFunc("POST /manager/catalog/products/{id}/image/confirm", a.confirmProductImage)
+	a.mux.HandleFunc("POST /manager/catalog/products/{id}/image/illustration", a.useProductIllustration)
 	a.mux.HandleFunc("GET /manager/catalog/examples", a.showProductExamples)
 	a.mux.HandleFunc("POST /manager/catalog/examples", a.createProductExamples)
 	a.mux.HandleFunc("POST /manager/catalog/products", a.saveCatalogProduct)
@@ -234,6 +242,9 @@ func (a *App) view(w http.ResponseWriter, r *http.Request) (View, bool) {
 		a.fail(w, e)
 		return View{}, false
 	}
+	return a.viewForSession(w, s)
+}
+func (a *App) viewForSession(w http.ResponseWriter, s Session) (View, bool) {
 	b, e := a.store.Basket(s.ID)
 	if e != nil {
 		a.fail(w, e)
