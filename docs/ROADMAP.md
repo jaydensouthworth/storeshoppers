@@ -56,7 +56,9 @@ public fake-data boundary and independent visitor/phone authorization. See
 [Handheld demo](HANDHELD.md) and the [expanded sourced project plan](https://chatgpt.com/space/page_6abd4f41ae448191a351b73099da8658).
 The foundation passed [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37049056947), and live welcome/label desktop/narrow checks passed. Chromium blocked the pairing POST with ERR_BLOCKED_BY_CLIENT; no cause or permission requirement was inferred, no bypass was attempted, and connected camera/pick browser acceptance remains open. Physical S23 Ultra optics are a distinct check.
 
-**Current implementation candidate:** phone measured-weight preview/confirmation and selected-item manager-review reports, using existing schema14 records and shared transactions. Local independent-session process coverage includes exact/stale retries, stock/amount/receipt invariants, report privacy/release/replay, restart and revocation. Aggregate checks and independent review gate publication; this source candidate is not yet live.
+**Deployed phone weights/reports:** [ce0737e](https://github.com/jaydensouthworth/storeshoppers/commit/ce0737ea8e802d589c0db0a5a46c4dbd2c683d2a) passed 419 Go tests, 107 JavaScript checks, 14 process suites, independent review and [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37052613149). Changed assets match live and all 77 storefront records remain unchanged. The connected-browser/physical-phone acceptance limitation still applies.
+
+**Current candidate:** schema15 independent customer/shopper message threads, strict owner/assignment scope, separate revisions and immutable attribution, bounded plain text/history/rates/storage, and explicit uncertain-send recovery. Message traffic must never invalidate pick/weight reviews, reconcile baskets, copy manager-only notes or imply substitution consent. See [Order messages](ORDER_MESSAGES.md). Aggregate checks, independent review, migration/process tests and release verification remain required before calling this candidate deployed.
 
 ### 1. Manager usability and explicit reset
 

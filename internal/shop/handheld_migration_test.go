@@ -129,18 +129,18 @@ func TestHandheldMigrationFencesOldV13WritersAndFutureReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := fingerprintTest(t, s.db)
-	if _, err = statement.Exec(); err == nil || !strings.Contains(err.Error(), "writer 14") {
+	if _, err = statement.Exec(); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("writer %d", latestSchemaVersion)) {
 		t.Fatal("old prepared writer accepted", err)
 	}
-	for _, q := range []string{`UPDATE handheld_state SET epoch='stale'`, `DELETE FROM handheld_grants`, `UPDATE products SET stock=0 WHERE id=1`, `DELETE FROM order_event_actors`, `INSERT INTO schema_version VALUES(15)`} {
-		if _, err = old.Exec(q); err == nil || !strings.Contains(err.Error(), "writer 14") {
+	for _, q := range []string{`UPDATE handheld_state SET epoch='stale'`, `DELETE FROM handheld_grants`, `UPDATE products SET stock=0 WHERE id=1`, `DELETE FROM order_event_actors`, fmt.Sprintf(`INSERT INTO schema_version VALUES(%d)`, latestSchemaVersion+1)} {
+		if _, err = old.Exec(q); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("writer %d", latestSchemaVersion)) {
 			t.Fatal("old write accepted", q, err)
 		}
 	}
 	if before != fingerprintTest(t, s.db) {
 		t.Fatal("old binary changed data")
 	}
-	testExec(t, s, `INSERT INTO schema_version VALUES(15)`)
+	testExec(t, s, `INSERT INTO schema_version VALUES(?)`, latestSchemaVersion+1)
 	if _, _, err = s.HandheldTask(g.Token); !errors.Is(err, ErrSchemaIncompatible) {
 		t.Fatal("future projection accepted", err)
 	}

@@ -67,7 +67,7 @@ These are not evidence of physical camera optics. Live desktop/narrow-screen QA 
 The [project plan](https://chatgpt.com/space/page_6abd4f41ae448191a351b73099da8658) includes sourced workflow research and the detailed acceptance matrix. Next releases should preserve the same authorization/transaction boundaries:
 
 1. Complete live connected-device acceptance for measured-weight review and item reporting
-2. Session-scoped customer/shopper message threads with separate message revisions, no external notifications or real personal data
+2. Schema15 customer/shopper message threads with separate revisions are implemented in the next source increment; complete their live connected acceptance. See [Order messages](ORDER_MESSAGES.md)
 3. Structured substitution preferences and proposal/approve/reject transitions; chat alone is never consent
 4. Unavailable outcomes and explicit manager overrides with stock/audit invariants
 5. Staging and pickup handoff with separate authority after Ready, because Ready currently closes the picking assignment

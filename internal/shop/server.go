@@ -130,6 +130,7 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("GET /products/{id}", a.showProduct)
 	a.mux.HandleFunc("GET /products/{id}/barcode.png", a.showProductBarcode)
 	a.registerHandheldRoutes()
+	a.registerMessageRoutes()
 	a.mux.HandleFunc("GET /cart", a.showCart)
 	a.mux.HandleFunc("POST /cart", a.changeCart)
 	a.mux.HandleFunc("POST /cart/renew", a.renewCart)

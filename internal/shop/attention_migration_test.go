@@ -73,7 +73,7 @@ func TestAttentionMigrationPopulatedV10AdditiveUpgradeRollbackAndRestart(t *test
 			path, now, owner := populatedAttentionV10(t)
 			old := migrationTestStore(t, path, now)
 			before := shopperPriorTables(t, old.db)
-			roots := migrationQuerySnapshot(t, old.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events','handheld_state','handheld_pair_sessions','handheld_invitations','handheld_grants','order_event_actors','handheld_pick_commands','handheld_pair_commands') ORDER BY name`)
+			roots := migrationQuerySnapshot(t, old.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events','handheld_state','handheld_pair_sessions','handheld_invitations','handheld_grants','order_event_actors','handheld_pick_commands','handheld_pair_commands','order_messages') ORDER BY name`)
 			objects := migrationQuerySnapshot(t, old.db, `SELECT type,name,sql FROM sqlite_schema WHERE name LIKE 'retained_%' ORDER BY type,name`)
 			oldEvents := migrationQuerySnapshot(t, old.db, `SELECT order_id,action,reason,details,created FROM order_events ORDER BY id`)
 			if failure {
@@ -101,7 +101,7 @@ func TestAttentionMigrationPopulatedV10AdditiveUpgradeRollbackAndRestart(t *test
 			}
 			s := openPromotionMigrationStore(t, path, now)
 			assertShopperPriorTables(t, s.db, before)
-			if got := migrationQuerySnapshot(t, s.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events','handheld_state','handheld_pair_sessions','handheld_invitations','handheld_grants','order_event_actors','handheld_pick_commands','handheld_pair_commands') ORDER BY name`); !reflect.DeepEqual(roots, got) {
+			if got := migrationQuerySnapshot(t, s.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events','handheld_state','handheld_pair_sessions','handheld_invitations','handheld_grants','order_event_actors','handheld_pick_commands','handheld_pair_commands','order_messages') ORDER BY name`); !reflect.DeepEqual(roots, got) {
 				t.Fatal("attention migration rebuilt existing tables or added unrelated tables")
 			}
 			if got := migrationQuerySnapshot(t, s.db, `SELECT type,name,sql FROM sqlite_schema WHERE name LIKE 'retained_%' ORDER BY type,name`); !reflect.DeepEqual(objects, got) {

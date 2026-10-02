@@ -98,7 +98,7 @@ def main():
 
         try:
             process = start()
-            assert query("SELECT max(version) FROM schema_version") == [(14,)], "Unexpected schema"
+            assert query("SELECT max(version) FROM schema_version") == [(15,)], "Unexpected schema"
             _, home = desktop.get("/")
             desktop.submit(home, "add-1", {"quantity": "2", "return": "cart"})
             _, home = desktop.get("/")
