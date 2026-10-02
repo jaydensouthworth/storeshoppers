@@ -134,7 +134,7 @@ main { width: min(1280px, 100%); margin: auto; padding: 0 40px 60px; }
 .cart-info > p { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
 .cart-info form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .cart-info label { margin: 0; }
-.cart-info input { width: 60px; min-height: 44px; padding: 8px; }
+.cart-info input { width: 110px; max-width: 100%; min-height: 44px; padding: 8px; }
 .quantity-note { font-size: 10px; }
 .line-total { font-size: 14px; }
 .receipt { border: 2px solid var(--ink); border-top: 7px solid var(--ink); font-family: "Courier New", monospace; padding: 26px; background: #fff; box-shadow: 6px 6px 0 var(--yellow); }
@@ -384,7 +384,7 @@ footer strong { font-size: 9px; letter-spacing: .045em; }
   .cart-info h3 { font-size: 14px; }
   .cart-info > p { font-size: 10px; }
   .cart-info form { gap: 7px; }
-  .cart-info input { font-size: 16px; width: 57px; }
+  .cart-info input { font-size: 16px; }
   .line-total { grid-column: 2; font-size: 13px; justify-self: end; }
   .quantity-note { display: block; font-size: 10px; }
   .receipt { padding: 26px 23px; max-width: calc(100% - 6px) !important; }
