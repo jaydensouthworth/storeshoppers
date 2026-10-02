@@ -38,6 +38,22 @@ Schema v5 keeps `order_items` and `orders.total` as immutable placed snapshots a
 
 A future richer allocation model may preserve multiple independently priced fulfillment lines per original requested line and split replacements. That extension must migrate current stable IDs/history, preserve all quantity and stock invariants, and avoid losing provenance when two requested lines select the same replacement. Mixed-unit substitutions and actual weights require explicit integer-unit rounding, tolerances and price policy; they are not implemented by the counted model.
 
+## Planned weighted execution acceptance contract
+
+The next quantity migration is a coherent checkout-to-fulfillment change. Counted lines retain their present bounds (99 per line, 10000 available plus basket holds); weighed lines use integer grams with a planned 100000 g per-line and 1000000 g available-plus-held cap. Recheck all additions, multiplication, reservation deltas and totals before a write. Basket holds convert at checkout without a second deduction.
+
+Original receipt quantities stay requested quantities. A working weighed line separately records its target, accepted allocation, actual picked grams and measurement confirmation. Measuring the original product retains the order's recorded rate. A new replacement uses its reviewed effective quote; a previously present working product retains its working rate. Initial substitutions stay within the same selling unit. Changing a target invalidates the old measurement and requires remeasurement.
+
+Any actual-weight change needs an explicit preview of grams, amount and stock consequences, followed by a versioned, replay-safe manager confirmation. There is no implicit tolerance or silent price increase. Reserve or release only the allocation difference in the same transaction as the line, estimate and audit. A missing/damaged allocation never becomes phantom sellable stock. Ready requires every weighed line measured or explicitly resolved and freezes the final amount. Mixed orders use product-line progress and separately labelled counted units and grams.
+
+Migration must preserve populated historical each orders, stable IDs, sessions, baskets, allocations and receipts. Rebuild the affected SQLite tables on a pinned connection with foreign-key enforcement disabled before the transaction, then restore it and verify integrity. Preserve sequence high-water marks and prove failed migration rollback and restart. Test concurrent old/new application processes: unsupported schema must refuse ordinary requests and all legacy writes must fail before quantity semantics change. A source compatibility guard alone is insufficient proof of actual deployment overlap safety.
+
+## Planned uploaded-image boundary
+
+The bundled illustration picker remains available. A later manager upload/library flow should accept only bounded JPEG/PNG inputs, inspect dimensions before decoding, re-encode normalized pixels to remove metadata, and provide a review before attachment. Never fetch arbitrary URLs or accept unsanitized SVG. Retained image records and new order-image snapshots need additive versioned migrations; historical receipts without images must not gain invented snapshots.
+
+Keep normalized variants, deduplication, quotas, rate limits and attachment audit transactional. Demo reset must retain uploaded assets and its global quota/rate state, so repeated resets cannot defeat storage limits. Provide reusable local-library selection and clear refusal when the bounded library or recovery-backup budget is full; do not silently purge history. Image upload and weight execution remain explicitly unimplemented until their respective end-to-end checks pass.
+
 ## Barcode identities and the two-screen demo
 
 A SKU is a merchant code; a barcode carries an identifier. The implemented `product_codes` table retains product ID, scheme, raw value, normalized value, symbology and archive state, with uniqueness across the scheme/canonical value and no reuse after archive. Preserve leading zeroes.
