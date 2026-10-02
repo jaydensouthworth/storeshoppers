@@ -123,7 +123,7 @@ func (s *Store) publicProductDetails(id int64) (Product, ProductDetails, error) 
 	if err := s.ExpireHolds(); err != nil {
 		return Product{}, ProductDetails{}, err
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return Product{}, ProductDetails{}, err
 	}

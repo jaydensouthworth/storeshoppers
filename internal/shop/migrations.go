@@ -37,6 +37,22 @@ func (s *Store) migrate() error {
 		return err
 	}
 	defer tx.Rollback()
+	// Refuse a future database before even running the baseline's IF NOT EXISTS
+	// statements. Runtime commands use beginWrite; migration must allow older
+	// versions so it intentionally obtains the immediate transaction directly.
+	var hasVersion int
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_version'`).Scan(&hasVersion); err != nil {
+		return err
+	}
+	if hasVersion != 0 {
+		var version int
+		if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_version`).Scan(&version); err != nil {
+			return err
+		}
+		if version > latestSchemaVersion {
+			return fmt.Errorf("%w: database schema %d is newer than supported schema %d", ErrSchemaIncompatible, version, latestSchemaVersion)
+		}
+	}
 	var existing int
 	if err = tx.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='products'`).Scan(&existing); err != nil {
 		return err
@@ -47,9 +63,6 @@ func (s *Store) migrate() error {
 	var version int
 	if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_version`).Scan(&version); err != nil {
 		return err
-	}
-	if version > latestSchemaVersion {
-		return fmt.Errorf("database schema %d is newer than supported schema %d", version, latestSchemaVersion)
 	}
 	if existing == 0 {
 		if err = seedOriginal(tx); err != nil {

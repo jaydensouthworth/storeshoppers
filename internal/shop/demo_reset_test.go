@@ -166,24 +166,21 @@ func TestDemoCrashWALBackupIsCompleteAndRestorable(t *testing.T) {
 		t.Fatal("restore lost data")
 	}
 }
-func TestDemoOldSchemaBackupPrecedesFreshBaseline(t *testing.T) {
+func TestDemoResetRefusesOldSchemaWithoutBackupOrInstall(t *testing.T) {
 	path, _ := populatedV1(t)
 	db := migrationRawDB(t, path)
 	testExec(t, &Store{db: db}, "PRAGMA journal_mode=WAL")
 	s := &Store{db: db, now: time.Now}
-	result := resetTest(t, s)
-	assertDemoSeed(t, s)
-	backup, err := openBackupReadOnly(result.BackupPath)
-	if err != nil {
-		t.Fatal(err)
+	before := fingerprintTest(t, db)
+	result, err := s.ResetDemo(DemoResetOptions{})
+	if !errors.Is(err, ErrSchemaIncompatible) || result.Reset || result.BackupPath != "" {
+		t.Fatalf("old schema reset = %+v, %v", result, err)
 	}
-	defer backup.Close()
-	var version, products, orders int
-	backup.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&version)
-	backup.QueryRow(`SELECT COUNT(*) FROM products`).Scan(&products)
-	backup.QueryRow(`SELECT COUNT(*) FROM orders`).Scan(&orders)
-	if version != 1 || products != 2 || orders != 4 {
-		t.Fatalf("old state lost: version%d products%d orders%d", version, products, orders)
+	if after := fingerprintTest(t, db); after != before {
+		t.Fatal("old schema changed during refused reset")
+	}
+	if _, err = os.Stat(path + ".demo-backups"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("refused reset created backup directory: %v", err)
 	}
 }
 func TestDemoFailedInstallRollsBackAndReusesBackup(t *testing.T) {

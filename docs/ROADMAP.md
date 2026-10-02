@@ -14,7 +14,7 @@ Each phase is accepted only when the intended task works end to end, relevant in
 
 ## Verified live foundation
 
-As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/af1e468813659415e1b20be025f08e4fe0062b16). This checkpoint contains 123 verified published files.
+As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/b43a76e95cded1c8ce0fe1c851dfb7ab6b717dd7). This checkpoint contains 127 verified published files.
 
 - 72 fake products; configurable categories/types; create, edit, archive and restore; dedicated editors and a manager sidebar
 - Safe bundled illustration picker, immutable SKU and separate demo-local product codes; uploads, generated scan labels and camera scanning are not implemented
@@ -28,11 +28,11 @@ As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdad
 - Versioned populated-data migrations and restart persistence; server-side validation, CSRF and non-negative transactional inventory
 - The public known-password hint appears only when the configured password matches the demo value; this remains intentionally limited demo access
 
-Verification for this release: 245 top-level Go tests, 9 JavaScript interaction tests, 83.8% core coverage, race checks, vet, build, seven HTTP/restart smoke suites and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36961461552). Live desktop and 402 CSS-pixel actions covered basket edits, visible expired-form feedback, direct Mark picked/start, partial picking, searched substitutions, working-item additions/removals and own-order cancellation with stock audit. Physical-phone testing and a fuller accessibility audit remain open.
+Verification for this release: 246 top-level Go tests, 21 JavaScript interaction/theme tests, 83.8% core coverage, race checks, vet, build, seven HTTP/restart smoke suites and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36963942277). Live desktop and 402 CSS-pixel actions covered basket edits, visible expired-form feedback, direct Mark picked/start, partial picking, searched substitutions, working-item additions/removals and own-order cancellation with stock audit. Physical-phone testing and a fuller accessibility audit remain open.
 
 ## Ordered implementation backlog
 
-**Current priority:** align the secondary Featured strip for mixed regular/sale products and integrate the retained persistent theme control. The compact circular is live: 306 CSS pixels at 1366×768 and 1440×901, with catalog controls/products above the fold. Routine manager controls and visible stale-form recovery are verified; see [Manager workflows](MANAGER_WORKFLOWS.md). The missing hosting volume was added and exact sale/audit records survived a deployment. Continue compatibility safeguards, weighted execution, safe image uploads and remaining manager workflows in tested phases without overwriting visitor changes.
+**Current priority:** publish the tested schema-8 compatibility safeguard, then implement weighted execution and safe image uploads in isolated, reviewed phases. Mixed regular/sale Featured rows and persistent System/Light/Dark appearance are live and checked on desktop and narrow screens. The compact circular is live: 306 CSS pixels at 1366×768 and 1440×901, with catalog controls/products above the fold. Routine manager controls and visible stale-form recovery are verified; see [Manager workflows](MANAGER_WORKFLOWS.md). The missing hosting volume was added and exact sale/audit records survived a deployment. Continue compatibility safeguards, weighted execution, safe image uploads and remaining manager workflows in tested phases without overwriting visitor changes.
 
 ### 1. Manager usability and explicit reset
 
@@ -74,9 +74,9 @@ Gram measurement metadata already exists, but weighted checkout and actual-weigh
 
 **Acceptance:** populated migrations, rounding/bounds, competing orders and above/below-requested weights preserve history and stock; failed reconciliation rolls back every effect.
 
-### 7. Add low-priority dark mode
+### 7. Persistent dark mode
 
-After core manager/fulfillment work, add a persistent toggle and system-default behavior to both storefront and manager. Preserve the distinctive palette, hierarchy, focus indicators and readable contrast in both modes.
+Implemented and live-verified: System, Light and Dark choices on storefront and manager, persistent explicit choice, system-default behavior, HTMX/history continuity and a no-JavaScript system fallback. Desktop and 402/321 CSS-pixel layouts preserve readable controls and the bold palette. See [Appearance](DARK_MODE.md). Continue checking new manager controls and product imagery in both themes.
 
 ### 8. Build the later two-screen barcode demo
 

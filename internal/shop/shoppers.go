@@ -66,7 +66,7 @@ func activeAssignment(q assignmentQuerier, id int64) (*ShopperAssignment, error)
 // AssignShopper changes task ownership, never order allocation or picking. The
 // order revision serializes assignment edits with working edits and closure.
 func (s *Store) AssignShopper(id int64, sid string, allOrders bool, c ShopperCommand) error {
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func (s *Store) Shoppers(f ShopperFilters, sid string, allOrders bool, selected 
 		}
 		out.Selected = &ShopperTask{Order: o, Assignment: o.Assignment}
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return nil, err
 	}

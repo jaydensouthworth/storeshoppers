@@ -107,7 +107,7 @@ func (s *Store) SaveTaxonomy(kind string, id, version int64, name string) (int64
 	if id != 0 && version < 1 {
 		return 0, ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return 0, err
 	}
@@ -168,7 +168,7 @@ func (s *Store) ArchiveTaxonomy(kind string, id, version int64) error {
 	if id < 1 || version < 1 {
 		return ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ func (s *Store) saveProductAndDetails(p Product, details *ProductDetails) (int64
 	if err := validateProduct(&p); err != nil {
 		return 0, err
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return 0, err
 	}
@@ -376,7 +376,7 @@ func (s *Store) ArchiveProduct(id, version int64) error {
 	if id < 1 || version < 1 {
 		return ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -457,7 +457,7 @@ func (s *Store) RestoreTaxonomy(kind string, id, version int64) error {
 	if id < 1 || version < 1 {
 		return ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -489,7 +489,7 @@ func (s *Store) RestoreProduct(id, version int64) error {
 	if id < 1 || version < 1 {
 		return ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}

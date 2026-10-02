@@ -24,6 +24,10 @@ Counted products use `each`, basis 1 and step 1. Weighed metadata uses `g`, basi
 
 [Product details](PRODUCT_DETAILS.md) adds public product pages, longer descriptions, bounded package labels/details, optional explicitly illustrative food nutrition and nonfood deodorant/razor examples. Package grams/counts remain display metadata, not executable weighed quantities. Details share catalog concurrency and transaction audit; archived records retain metadata and historical receipt snapshots are unchanged. Existing migrations do not invent metadata or stock, and demo example creation requires a reviewed confirmation.
 
+## Preparatory schema-8 runtime safety
+
+[Runtime schema compatibility](SCHEMA_COMPATIBILITY.md) adds an immediate-transaction version check to every mutation and checks dynamic responses/readiness for incompatible databases. It preserves schema 8 and all counted quantity semantics. Before a weighted migration, verify old-process drain or implement and prove database-enforced protection for unguarded legacy writers; publishing this preparatory release alone does not establish that boundary.
+
 ## Deferred: integer measurement and pricing
 
 Use integer quantities in the product’s base unit: units for counted goods and grams for weighed goods. Store weighed rates as cents per 1000 grams. Snapshot the unit, requested quantity, rate, price basis and rounded subtotal on the order.

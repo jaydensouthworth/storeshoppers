@@ -38,6 +38,9 @@ func (s *Store) ResetDemo(opts DemoResetOptions) (DemoResetResult, error) {
 }
 
 func (s *Store) resetDemo(opts DemoResetOptions, install func(*sql.DB, *sql.DB) error) (result DemoResetResult, err error) {
+	if err = s.CheckCompatibility(context.Background()); err != nil {
+		return result, err
+	}
 	if opts.BackupMaxBytes == 0 {
 		opts.BackupMaxBytes = DefaultDemoBackupMaxBytes
 	}
@@ -72,15 +75,12 @@ func (s *Store) resetDemo(opts DemoResetOptions, install func(*sql.DB, *sql.DB) 
 	if _, err = db.Exec("BEGIN EXCLUSIVE; COMMIT;"); err != nil {
 		return result, fmt.Errorf("demo reset ownership unavailable; another database user must disconnect before retrying: %w", err)
 	}
-	if err = checkSQLite(db); err != nil {
+	// Ownership excludes another process migrating after this exact check.
+	if err = s.CheckCompatibility(context.Background()); err != nil {
 		return result, fmt.Errorf("demo reset refused: %w", err)
 	}
-	var version int
-	if err = db.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_version`).Scan(&version); err != nil {
-		return result, err
-	}
-	if version > latestSchemaVersion {
-		return result, fmt.Errorf("demo reset refused: database schema %d is newer than supported schema %d", version, latestSchemaVersion)
+	if err = checkSQLite(db); err != nil {
+		return result, fmt.Errorf("demo reset refused: %w", err)
 	}
 	fingerprint, err := databaseFingerprint(db)
 	if err != nil {
@@ -99,11 +99,21 @@ func (s *Store) resetDemo(opts DemoResetOptions, install func(*sql.DB, *sql.DB) 
 		return result, fmt.Errorf("prepare demo baseline; original data retained: %w", err)
 	}
 	defer fresh.Close()
-	if err = install(db, fresh); err != nil {
+	if err = installDemoBaseline(db, fresh, install); err != nil {
 		return result, fmt.Errorf("install demo baseline failed; pre-reset state retained at %q: %w", result.BackupPath, err)
 	}
 	result.Reset = true
 	return result, nil
+}
+
+// The destination is already held under reset's EXCLUSIVE ownership. The
+// source is a private, freshly constructed baseline, never a stored backup.
+// Check it explicitly before the Backup API can replace any live pages.
+func installDemoBaseline(destination, source *sql.DB, install func(*sql.DB, *sql.DB) error) error {
+	if err := checkSchemaCompatibility(context.Background(), source); err != nil {
+		return fmt.Errorf("demo baseline refused: %w", err)
+	}
+	return install(destination, source)
 }
 
 func freshDemoDatabase(pageSize int) (*sql.DB, error) { return freshDemoDatabaseAt(pageSize, time.Now) }

@@ -59,7 +59,7 @@ func (s *Store) OverrideOrder(id int64, sid string, allOrders bool, c OrderComma
 	encoded, _ := json.Marshal(c)
 	sum := sha256.Sum256(encoded)
 	hash := hex.EncodeToString(sum[:])
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}

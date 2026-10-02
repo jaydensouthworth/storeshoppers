@@ -23,7 +23,7 @@ type querier interface {
 // Clearing reserved quantities and returning stock share one commit, so restart,
 // concurrent requests, and repeated reads cannot return the same units twice.
 func (s *Store) ExpireHolds() error {
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (s *Store) setCart(sid string, pid, qty int64, add bool, revision int64) er
 	if err := s.ExpireHolds(); err != nil {
 		return err
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func (s *Store) RenewBasket(sid string, revision int64) error {
 	if err := s.ExpireHolds(); err != nil {
 		return err
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -435,7 +435,7 @@ func (s *Store) managerBasketCommand(id, sid string, all bool, revision int64, r
 	if err := s.ExpireHolds(); err != nil {
 		return err
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -479,7 +479,7 @@ func (s *Store) BasketEvents(id, sid string, all bool) ([]BasketEvent, error) {
 // Practice baskets are explicit, idempotent, per-visitor fake content. Creation
 // does not allocate shared stock; the manager must review/reserve it explicitly.
 func (s *Store) CreatePracticeBaskets(sid string) error {
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}

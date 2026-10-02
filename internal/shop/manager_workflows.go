@@ -34,7 +34,7 @@ func (s *Store) MarkWorkingLinePicked(orderID, lineID, picked, pickVersion, orde
 	payload, _ := json.Marshal([]any{"mark-picked", lineID, picked, pickVersion, orderVersion, key})
 	sum := sha256.Sum256(payload)
 	hash := hex.EncodeToString(sum[:])
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}

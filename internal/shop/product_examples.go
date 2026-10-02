@@ -90,7 +90,7 @@ func productExamplePlan(q querier) (ProductExamplesWorkspace, error) {
 }
 
 func (s *Store) ProductExamples() (ProductExamplesWorkspace, error) {
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return ProductExamplesWorkspace{}, err
 	}
@@ -167,7 +167,7 @@ func (s *Store) CreateProductExamples(key, quote string) error {
 	if len(key) < 16 || len(key) > 150 || strings.TrimSpace(key) != key || len(quote) != 64 {
 		return ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}

@@ -12,7 +12,7 @@ An in-process request gate lets existing requests finish, prevents new checkouts
 
 Under that exclusive application gate, the existing single SQLite connection temporarily takes **real SQLite EXCLUSIVE locking-mode ownership**. Other connected SQLite readers/writers, including older application binaries, cause reset to fail safely rather than racing a replacement. The same connection is kept throughout; normal locking mode is restored afterward. Run one replica on a local persistent volume with reliable SQLite locking/fsync; do not use a network filesystem for the volume.
 
-1. Check the database's integrity, foreign keys and supported schema version
+1. Require the database's schema version to exactly match this binary before taking ownership and again under ownership; then check integrity and foreign keys. A mismatch creates no archive and installs no baseline
 2. Use SQLite's Online Backup API to capture the complete committed database, including crash-left WAL data, in `DATABASE_PATH.demo-backups/`
 3. Check the snapshot's integrity/foreign keys and full logical fingerprint; close it as a standalone rollback-journal database, sync the file and directory entries, and retain it under a UTC timestamp plus content digest
 4. Build a fresh in-memory database using the existing migrations and seeds, matching the original SQLite page size
@@ -22,6 +22,8 @@ Under that exclusive application gate, the existing single SQLite connection tem
 The live main database, WAL and SHM files are **never renamed, unlinked or manually copied** to implement a reset. The only rename finalizes a closed, separately verified archive snapshot. Backup/preparation failure leaves the current demo unchanged; an interrupted destination transaction rolls back rather than leaving a partial schema. Complete diagnostic paths are logged privately. The page gives a concise retryable message, not a database path or snapshot download.
 
 SQLite primary references: [locking mode](https://sqlite.org/pragma.html#pragma_locking_mode), [exclusive ownership in WAL](https://sqlite.org/wal.html#use_of_wal_without_shared_memory), [Online Backup API and rollback](https://sqlite.org/c3ref/backup_finish.html), and [go-sqlite3 Backup](https://pkg.go.dev/github.com/mattn/go-sqlite3#SQLiteConn.Backup).
+
+Reset is not an upgrade/downgrade path. Existing older databases first pass through ordinary supported startup migrations. See [Runtime schema compatibility](SCHEMA_COMPATIBILITY.md) for the runtime guard and its deployment limits.
 
 ## Bounded archives, without deletion
 

@@ -229,7 +229,7 @@ func savePromotion(tx *sql.Tx, p Promotion, now int64, action string) (int64, er
 	return p.ID, nil
 }
 func (s *Store) SavePromotion(p Promotion) (int64, error) {
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return 0, err
 	}
@@ -248,7 +248,7 @@ func (s *Store) CancelPromotion(id, version int64) error {
 	if id < 1 || version < 1 {
 		return ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -315,7 +315,7 @@ func setFeatured(tx *sql.Tx, id, version int64, featured bool, now int64) error 
 	return err
 }
 func (s *Store) SetFeatured(id, version int64, featured bool) error {
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -385,7 +385,7 @@ func exampleSales(q querier, now int64) ([]Promotion, string, error) {
 	return all, hex.EncodeToString(h.Sum(nil)), nil
 }
 func (s *Store) ExampleSales() ([]Promotion, string, error) {
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return nil, "", err
 	}
@@ -396,7 +396,7 @@ func (s *Store) CreateExampleSales(key, quote string) error {
 	if len(key) < 16 || len(key) > 150 || len(quote) != 64 || strings.TrimSpace(key) != key {
 		return ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}

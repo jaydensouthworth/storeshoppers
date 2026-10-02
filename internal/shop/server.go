@@ -1,7 +1,6 @@
 package shop
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
@@ -209,7 +208,11 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		defer release()
 	}
-	a.mux.ServeHTTP(w, r)
+	if strings.HasPrefix(r.URL.Path, "/static/") {
+		a.mux.ServeHTTP(w, r)
+		return
+	}
+	a.serveCompatible(w, r)
 }
 func (a *App) session(w http.ResponseWriter, r *http.Request) (Session, error) {
 	id := ""
@@ -249,7 +252,7 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, v View, status int)
 	a.renderNamed(w, r, name, v, status)
 }
 func (a *App) renderNamed(w http.ResponseWriter, r *http.Request, name string, v View, status int) {
-	var b bytes.Buffer
+	var b boundedResponseBody
 	if e := a.templates.ExecuteTemplate(&b, name, v); e != nil {
 		a.fail(w, e)
 		return
@@ -261,6 +264,10 @@ func (a *App) renderNamed(w http.ResponseWriter, r *http.Request, name string, v
 }
 func (a *App) fail(w http.ResponseWriter, e error) {
 	log.Printf("request error: %v", e)
+	if errors.Is(e, ErrSchemaIncompatible) {
+		schemaUnavailable(w)
+		return
+	}
 	http.Error(w, "Something went wrong. Please try again.", 500)
 }
 func (a *App) form(w http.ResponseWriter, r *http.Request) (Session, bool) {

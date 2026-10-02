@@ -1,7 +1,6 @@
 package shop
 
 import (
-	"context"
 	"crypto/rand"
 	"database/sql"
 	_ "embed"
@@ -75,7 +74,7 @@ func (s *Store) Session(id string) (Session, error) {
 		return v, err
 	}
 	v = Session{ID: token(), CSRF: token(), CheckoutKey: token(), Revision: 1}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return v, err
 	}
@@ -100,7 +99,7 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 	if err := s.ExpireHolds(); err != nil {
 		return 0, err
 	}
-	tx, e := s.db.BeginTx(context.Background(), nil)
+	tx, e := s.beginWrite()
 	if e != nil {
 		return 0, e
 	}
@@ -291,7 +290,7 @@ func (s *Store) Adjust(pid, delta, version int64, reason string) error {
 	if delta == 0 || delta < -10000 || delta > 10000 || len(reason) < 3 || len(reason) > 120 {
 		return ErrInvalid
 	}
-	tx, e := s.db.Begin()
+	tx, e := s.beginWrite()
 	if e != nil {
 		return e
 	}
@@ -340,7 +339,7 @@ func (s *Store) AdvanceVersioned(id int64, from string, version int64, sid strin
 	if next == "" {
 		return ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -386,7 +385,7 @@ func (s *Store) RecordPicked(orderID, productID, picked, version int64, sid stri
 	if picked < 0 || picked > 99 || version < 1 {
 		return ErrInvalid
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginWrite()
 	if err != nil {
 		return err
 	}
@@ -432,7 +431,12 @@ func (s *Store) Manager(sid string, on bool) error {
 	if on {
 		until = s.now().Add(30 * time.Minute).Unix()
 	}
-	r, e := s.db.Exec(`UPDATE sessions SET manager_until=?,csrf=? WHERE id=?`, until, token(), sid)
+	tx, e := s.beginWrite()
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	r, e := tx.Exec(`UPDATE sessions SET manager_until=?,csrf=? WHERE id=?`, until, token(), sid)
 	if e != nil {
 		return e
 	}
@@ -443,5 +447,5 @@ func (s *Store) Manager(sid string, on bool) error {
 	if n != 1 {
 		return fmt.Errorf("session absent")
 	}
-	return nil
+	return tx.Commit()
 }
