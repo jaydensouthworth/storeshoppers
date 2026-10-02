@@ -228,5 +228,11 @@ func filterCatalogProducts(products []Product, f CatalogFilters, codeMatches map
 	return filtered
 }
 
-// QueryString preserves bounded catalog context on the dedicated image editor.
-func (f CatalogFilters) QueryString() string { return f.values().Encode() }
+// ImageURL preserves bounded catalog context as a complete relative URL.
+func (f CatalogFilters) ImageURL(id int64) string {
+	path := "/manager/catalog/products/" + strconv.FormatInt(id, 10) + "/image"
+	if query := f.values().Encode(); query != "" {
+		path += "?" + query
+	}
+	return path
+}

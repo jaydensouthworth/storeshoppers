@@ -3,6 +3,7 @@ package shop
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -53,12 +54,26 @@ func imagePreviewToken(t *testing.T, w *httptest.ResponseRecorder) string {
 	return m[1]
 }
 
+func assertImageContextURL(t *testing.T, markup string) {
+	t.Helper()
+	match := regexp.MustCompile(`href="(/manager/catalog/products/1/image[^\"]*)"`).FindStringSubmatch(markup)
+	if len(match) != 2 {
+		t.Fatal("image editor link missing")
+	}
+	u, err := url.Parse(html.UnescapeString(match[1]))
+	if err != nil || u.Query().Get("q") != "milk" || u.Query().Get("page") != "2" {
+		t.Fatalf("image context URL = %q, %v", match[1], err)
+	}
+}
+
 func TestHTTPImagePreviewConfirmMediaAndRecovery(t *testing.T) {
 	s := newTestStore(t)
 	a := pickingApp(t, s, true)
 	owner := pickingLogin(t, a, testSession(t, s, ""))
 	im, raw := imageFixture(t, 50)
 	p := testProduct(t, s, 1)
+	catalog := testRequest(t, a, http.MethodGet, "/manager/catalog?edit=1&q=milk&page=2", owner, nil, nil)
+	assertImageContextURL(t, catalog.Body.String())
 	fields := url.Values{"csrf": {owner.CSRF}, "catalog_version": {fmt.Sprint(p.CatalogVersion)}, "q": {"milk"}, "page": {"2"}}
 	page := testRequest(t, a, http.MethodGet, "/manager/catalog/products/1/image?q=milk&page=2", owner, nil, nil)
 	if page.Code != 200 || !strings.Contains(page.Body.String(), `enctype="multipart/form-data"`) || !strings.Contains(page.Body.String(), "q=milk") {
@@ -69,6 +84,7 @@ func TestHTTPImagePreviewConfirmMediaAndRecovery(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	key := imagePreviewToken(t, w)
+	assertImageContextURL(t, w.Body.String())
 	if testProduct(t, s, 1).ImageHash != "" {
 		t.Fatal("preview published image")
 	}
