@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/mattn/go-sqlite3"
@@ -29,6 +30,10 @@ func (s *Store) catalogProducts(search, category string, archived bool) ([]Produ
 	if err := s.ExpireHolds(); err != nil {
 		return nil, err
 	}
+	state, err := loadPricing(s.db, s.now().Unix())
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.db.Query(`SELECT `+productSelect+productJoins+`WHERE (? OR p.archived=0) AND (?='' OR instr(lower(p.name || ' ' || p.description),lower(?))>0) AND (?='' OR c.name=?) ORDER BY p.id`, archived, search, search, category, category)
 	if err != nil {
 		return nil, err
@@ -40,6 +45,7 @@ func (s *Store) catalogProducts(search, category string, archived bool) ([]Produ
 		if e != nil {
 			return nil, e
 		}
+		state.apply(&p)
 		all = append(all, p)
 	}
 	return all, rows.Err()
@@ -258,7 +264,7 @@ func (s *Store) SaveProduct(p Product) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
-	id, err := saveProduct(tx, p)
+	id, err := saveProductAt(tx, p, s.now().Unix())
 	if err != nil {
 		return 0, catalogError(err)
 	}
@@ -279,6 +285,9 @@ func (s *Store) SaveProduct(p Product) (int64, error) {
 	return id, nil
 }
 func saveProduct(tx *sql.Tx, p Product) (int64, error) {
+	return saveProductAt(tx, p, time.Now().Unix())
+}
+func saveProductAt(tx *sql.Tx, p Product, now int64) (int64, error) {
 	category, err := activeTaxonomy(tx, "category", p.CategoryID)
 	if err != nil {
 		return 0, err
@@ -335,6 +344,13 @@ func saveProduct(tx *sql.Tx, p Product) (int64, error) {
 		if used > 0 || old.Stock != 0 || old.Reserved != 0 {
 			return 0, ErrUnitLocked
 		}
+	}
+	var invalidSales int
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM promotions WHERE product_id=? AND cancelled=0 AND ends>? AND (sale_price>=? OR ?)`, p.ID, now, p.Price, unitChanged || old.QuantityStep != p.QuantityStep).Scan(&invalidSales); err != nil {
+		return 0, err
+	}
+	if invalidSales > 0 {
+		return 0, ErrPromotionPrice
 	}
 	priceChanged := old.Price != p.Price || unitChanged || old.QuantityStep != p.QuantityStep
 	_, err = tx.Exec(`UPDATE products SET name=?,description=?,category=?,category_id=?,type_id=?,icon=?,price=?,sale_unit=?,price_basis=?,quantity_step=?,catalog_version=catalog_version+1,price_version=price_version+?,version=version+? WHERE id=? AND catalog_version=? AND archived=0`, p.Name, p.Description, category, p.CategoryID, typeID, p.Icon, p.Price, p.SaleUnit, p.PriceBasis, p.QuantityStep, priceChanged, unitChanged, p.ID, p.CatalogVersion)

@@ -81,7 +81,7 @@ func parseStockFilters(v url.Values) StockFilters {
 	f.Unit = stockChoice(v.Get("unit"), "each", "g")
 	f.Sort = stockChoice(v.Get("sort"), "name", "name_desc", "available", "available_desc", "reserved", "department")
 	f.View = stockChoice(v.Get("view"), "activity")
-	f.Action = stockChoice(v.Get("action"), "stock", "catalog-create", "catalog-edit", "catalog-archive", "catalog-restore", "basket-quantity", "basket-reserve", "basket-practice", "order-placed", "order-change")
+	f.Action = stockChoice(v.Get("action"), "stock", "catalog-create", "catalog-edit", "catalog-archive", "catalog-restore", "basket-quantity", "basket-reserve", "basket-practice", "order-placed", "order-change", "promotion", "featured")
 	for _, field := range []struct {
 		name string
 		dst  *string
@@ -315,6 +315,8 @@ const stockActivitySQL = `WITH events AS (
  UNION ALL
  SELECT 'catalog',e.id,'catalog-'||e.action,e.name,e.details,'',e.created,0,'',e.entity_id,'',CASE WHEN e.kind='product' THEN e.entity_id ELSE 0 END,e.kind FROM catalog_events e
  UNION ALL
+ SELECT 'promotion',e.id,CASE WHEN e.promotion_id IS NULL THEN 'featured' ELSE 'promotion' END,e.name,e.action||': '||e.details,'',e.created,0,'',COALESCE(e.promotion_id,e.product_id),'',e.product_id,CASE WHEN e.promotion_id IS NULL THEN 'featured' ELSE 'promotion' END FROM promotion_events e
+ UNION ALL
  SELECT 'basket',e.id,CASE e.action WHEN 'set quantity' THEN 'basket-quantity' WHEN 'review and reserve' THEN 'basket-reserve' WHEN 'create practice' THEN 'basket-practice' ELSE 'basket-other' END,b.label,e.details,e.reason,e.created,0,'',0,b.id,0,'' FROM basket_events e JOIN baskets b ON b.id=e.basket_id WHERE (? OR b.owner_session_id=?)
  UNION ALL
  SELECT 'order',o.id,'order-placed',o.reference,'Demo order placed; receipt prices and quantities are preserved.','',o.created,0,'',o.id,'',0,'' FROM orders o WHERE (? OR o.session_id=?)
@@ -358,6 +360,14 @@ func (s *Store) StockActivity(f StockFilters, sid string, all bool) (StockActivi
 				e.URL = "/manager/catalog?tab=labels"
 				e.LinkLabel = "Review labels"
 			}
+		case "promotion":
+			if kind == "featured" {
+				e.URL = fmt.Sprintf("/manager/featured?edit=%d", id)
+				e.LinkLabel = "Review featured product"
+			} else {
+				e.URL = fmt.Sprintf("/manager/promotions/%d", id)
+				e.LinkLabel = "Review promotion"
+			}
 		case "basket":
 			e.URL = "/manager/baskets/" + url.PathEscape(basket)
 			e.LinkLabel = "Review basket"
@@ -365,7 +375,7 @@ func (s *Store) StockActivity(f StockFilters, sid string, all bool) (StockActivi
 			e.URL = fmt.Sprintf("/manager/orders/%d", id)
 			e.LinkLabel = "Open pick ticket"
 		}
-		e.Action = map[string]string{"stock": "Stock adjustment", "catalog-create": "Catalog created", "catalog-edit": "Catalog edited", "catalog-archive": "Catalog archived", "catalog-restore": "Catalog restored", "basket-quantity": "Basket quantity changed", "basket-reserve": "Basket reviewed & reserved", "basket-practice": "Practice basket created", "basket-other": "Basket action", "order-placed": "Order placed", "order-change": "Order changed"}[e.Action]
+		e.Action = map[string]string{"stock": "Stock adjustment", "catalog-create": "Catalog created", "catalog-edit": "Catalog edited", "catalog-archive": "Catalog archived", "catalog-restore": "Catalog restored", "basket-quantity": "Basket quantity changed", "basket-reserve": "Basket reviewed & reserved", "basket-practice": "Practice basket created", "basket-other": "Basket action", "order-placed": "Order placed", "order-change": "Order changed", "promotion": "Promotion changed", "featured": "Featured choice changed"}[e.Action]
 		result.Events = append(result.Events, e)
 	}
 	return result, rows.Err()

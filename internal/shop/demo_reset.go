@@ -94,7 +94,7 @@ func (s *Store) resetDemo(opts DemoResetOptions, install func(*sql.DB, *sql.DB) 
 	if err = db.QueryRow("PRAGMA page_size").Scan(&pageSize); err != nil {
 		return result, err
 	}
-	fresh, err := freshDemoDatabase(pageSize)
+	fresh, err := freshDemoDatabaseAt(pageSize, s.now)
 	if err != nil {
 		return result, fmt.Errorf("prepare demo baseline; original data retained: %w", err)
 	}
@@ -106,7 +106,8 @@ func (s *Store) resetDemo(opts DemoResetOptions, install func(*sql.DB, *sql.DB) 
 	return result, nil
 }
 
-func freshDemoDatabase(pageSize int) (*sql.DB, error) {
+func freshDemoDatabase(pageSize int) (*sql.DB, error) { return freshDemoDatabaseAt(pageSize, time.Now) }
+func freshDemoDatabaseAt(pageSize int, now func() time.Time) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", ":memory:?_foreign_keys=on&_txlock=immediate")
 	if err != nil {
 		return nil, err
@@ -122,12 +123,14 @@ func freshDemoDatabase(pageSize int) (*sql.DB, error) {
 	if _, err = db.Exec(fmt.Sprintf("PRAGMA page_size=%d", pageSize)); err != nil {
 		return nil, err
 	}
-	fresh := &Store{db: db, now: time.Now}
+	fresh := &Store{db: db, now: now}
 	if err = fresh.migrate(); err != nil {
 		return nil, err
 	}
-	// Demo-only fixture enrichment belongs here, before the completed fixture is copied. Keep
-	// ordinary Open/migrations free of demo-only offers or other practice data.
+	// Only an explicitly confirmed reset enriches the new fixture.
+	if err = fresh.seedExampleSales(); err != nil {
+		return nil, err
+	}
 	if err = checkSQLite(db); err != nil {
 		return nil, err
 	}

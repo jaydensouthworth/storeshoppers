@@ -4,7 +4,7 @@ Ordinary restarts and deployments preserve data in **both normal and demo mode**
 
 With `DEMO_MODE=true`, open **`/manager/demo/reset`** after signing into the manager workspace, or use its **Reset shared demo** link. GET only displays the confirmation page. The POST requires the current manager session, its CSRF token and the explicit confirmation checkbox. Both routes return 404 in normal mode.
 
-The action restores the current seeded demo: 70 products and their starting prices/stock, standard labels, and empty sessions, baskets, orders, picking, stock adjustments and visitor edits. All visitors lose their old sessions and managers must sign in again. The page warns that the shared demo password is intentionally public and this reset affects **every visitor's fake data**. There is no unauthenticated reset action and no reset on a simple link visit.
+The action restores the current seeded demo: 70 products and their starting prices/stock, standard labels, three current-UTC-week sample sales and matching featured choices, and empty sessions, baskets, orders, picking, stock adjustments and visitor edits. All visitors lose their old sessions and managers must sign in again. The page warns that the shared demo password is intentionally public and this reset affects **every visitor's fake data**. There is no unauthenticated reset action and no reset on a simple link visit.
 
 ## Concurrency and durable reset
 
@@ -29,7 +29,7 @@ The default `DEMO_BACKUP_MAX_BYTES` is **268435456 bytes (256 MiB)**. It counts 
 
 No automatic pruning, expiry, overwrite or deletion of old archives is implemented. To resolve a cap refusal, an operator must retain/move selected archives elsewhere or deliberately increase the positive integer byte limit. Never remove recoverable history blindly. Failed `.incomplete` files are retained for operator review and counted toward the budget; they are not valid backups.
 
-The fingerprint covers all schema objects and table data, including unknown extension tables. A verified identical snapshot is reused after a failed reset, avoiding repeated full archives of unchanged data. Every successful explicit reset builds the current fresh fixture. Demo-only future fixture additions belong immediately after migration in `freshDemoDatabase`; ordinary Open/migrations must keep established stores intact.
+The fingerprint covers all schema objects and table data, including unknown extension tables. A verified identical snapshot is reused after a failed reset, avoiding repeated full archives of unchanged data. Every successful explicit reset builds the current fresh fixture. Demo-only future fixture additions belong immediately after migration in `freshDemoDatabase`; ordinary Open/migrations must keep established stores intact. The confirmed fresh fixture includes the bounded sample offers described in [Promotions](PROMOTIONS.md); later restarts do not refresh their dates.
 
 Archives are created in a private `0700` directory with `0600` files. They are outside embedded public assets and have no HTTP download route. They contain the previous database's complete session and order data: do not upload or publish them. Repository/build ignores exclude archives.
 

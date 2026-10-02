@@ -37,6 +37,12 @@ type App struct {
 	resetPending atomic.Bool
 }
 type View struct {
+	FeaturedCount                                            int
+	FeaturedOnly                                             bool
+	Promotions                                               *PromotionWorkspace
+	WeeklySales, FeaturedProducts                            []Product
+	SaleCount                                                int
+	SalesOnly                                                bool
 	Shoppers                                                 *ShoppersWorkspace
 	OrderCatalogQuote                                        string
 	OrderOverrideDraft                                       map[string]string
@@ -126,6 +132,17 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("GET /manager/shoppers", a.showShoppers)
 	a.mux.HandleFunc("POST /manager/shoppers/orders/{id}", a.changeShopper)
 	a.mux.HandleFunc("GET /manager/stock", a.showStock)
+
+	a.mux.HandleFunc("GET /manager/promotions", a.showPromotions)
+	a.mux.HandleFunc("GET /manager/promotions/new", a.showPromotions)
+	a.mux.HandleFunc("GET /manager/promotions/examples", a.showPromotions)
+	a.mux.HandleFunc("POST /manager/promotions/examples", a.createExampleSales)
+	a.mux.HandleFunc("GET /manager/promotions/{id}", a.showPromotions)
+	a.mux.HandleFunc("POST /manager/promotions", a.savePromotion)
+	a.mux.HandleFunc("POST /manager/promotions/{id}", a.savePromotion)
+	a.mux.HandleFunc("POST /manager/promotions/{id}/cancel", a.cancelPromotion)
+	a.mux.HandleFunc("GET /manager/featured", a.showPromotions)
+	a.mux.HandleFunc("POST /manager/featured/{id}", a.setFeatured)
 	a.mux.HandleFunc("GET /manager/catalog", a.showCatalog)
 	a.mux.HandleFunc("POST /manager/catalog/products", a.saveCatalogProduct)
 	a.mux.HandleFunc("POST /manager/catalog/products/{id}", a.saveCatalogProduct)
@@ -274,16 +291,38 @@ func (a *App) populateStore(v *View) error {
 		return err
 	}
 	v.CategoryCount = int64(len(v.Categories))
-	if v.Products, err = a.store.Products(v.Search, v.Category); err != nil {
+	all, err := a.store.Products("", "")
+	if err != nil {
 		return err
 	}
-	v.ProductCount = int64(len(v.Products))
-	if v.Search != "" || v.Category != "" {
-		all, err := a.store.Products("", "")
-		if err != nil {
-			return err
+	v.ProductCount = int64(len(all))
+	v.Products = nil
+	for _, p := range all {
+		if p.OnSale() {
+			v.SaleCount++
+			if len(v.WeeklySales) < 3 {
+				v.WeeklySales = append(v.WeeklySales, p)
+			}
 		}
-		v.ProductCount = int64(len(all))
+		if p.Featured && !p.Archived && p.SaleUnit == "each" {
+			v.FeaturedCount++
+			if len(v.FeaturedProducts) < 4 {
+				v.FeaturedProducts = append(v.FeaturedProducts, p)
+			}
+		}
+		if v.FeaturedOnly && (!p.Featured || p.SaleUnit != "each") {
+			continue
+		}
+		if v.SalesOnly && !p.OnSale() {
+			continue
+		}
+		if v.Category != "" && p.Category != v.Category {
+			continue
+		}
+		if v.Search != "" && !strings.Contains(strings.ToLower(p.Name+" "+p.Description), strings.ToLower(v.Search)) {
+			continue
+		}
+		v.Products = append(v.Products, p)
 	}
 	return nil
 }
@@ -296,6 +335,8 @@ func (a *App) showStore(w http.ResponseWriter, r *http.Request) {
 	v.Section = "store"
 	v.Search = strings.TrimSpace(r.URL.Query().Get("q"))
 	v.Category = r.URL.Query().Get("category")
+	v.SalesOnly = r.URL.Query().Get("sales") == "1"
+	v.FeaturedOnly = r.URL.Query().Get("featured") == "1"
 	if len(v.Search) > 100 {
 		v.Search = v.Search[:100]
 	}
@@ -339,6 +380,8 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 	v.Title = "Neighborhood Market"
 	v.Search = r.PostForm.Get("q")
 	v.Category = r.PostForm.Get("category")
+	v.SalesOnly = r.PostForm.Get("sales") == "1"
+	v.FeaturedOnly = r.PostForm.Get("featured") == "1"
 	if e != nil {
 		if !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrNotFound) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrConflict) {
 			a.fail(w, e)
@@ -359,6 +402,23 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 		path := "/"
 		if v.Section == "cart" {
 			path = "/cart"
+		} else {
+			values := url.Values{}
+			if v.Search != "" {
+				values.Set("q", v.Search)
+			}
+			if v.Category != "" {
+				values.Set("category", v.Category)
+			}
+			if v.SalesOnly {
+				values.Set("sales", "1")
+			}
+			if v.FeaturedOnly {
+				values.Set("featured", "1")
+			}
+			if len(values) > 0 {
+				path += "?" + values.Encode()
+			}
 		}
 		redirect(w, r, path)
 		return

@@ -81,7 +81,7 @@ def main():
         process = start()
         try:
             home = get("/")
-            assert "The daily shop." in home and "Honeycrisp apples" in home
+            assert "No active sales right now" in home and "Honeycrisp apples" in home
             assert "ZgotmplZ" not in home
             assert "htmx" in get("/static/htmx.min.js")
             csrf = Fields(home).fields["csrf"]

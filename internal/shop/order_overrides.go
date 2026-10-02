@@ -99,10 +99,11 @@ func (s *Store) OverrideOrder(id int64, sid string, allOrders bool, c OrderComma
 			return ErrUnavailable
 		}
 	}
+	now := s.now().Unix()
 	details := ""
 	switch c.Action {
 	case "set":
-		details, err = setWorkingQuantity(tx, id, c.ProductID, c.Quantity, c.Disposition, c.CatalogQuote)
+		details, err = setWorkingQuantity(tx, id, c.ProductID, c.Quantity, c.Disposition, c.CatalogQuote, now)
 	case "substitute":
 		if c.ProductID < 1 || c.ReplacementID < 1 || c.ProductID == c.ReplacementID || c.Quantity < 1 {
 			return ErrInvalid
@@ -121,9 +122,9 @@ func (s *Store) OverrideOrder(id int64, sid string, allOrders bool, c OrderComma
 		}
 		var added, removed string
 		// Reserve replacement first; failure rolls the whole command back.
-		added, err = setWorkingQuantity(tx, id, c.ReplacementID, replacementQty+c.Quantity, "", c.CatalogQuote)
+		added, err = setWorkingQuantity(tx, id, c.ReplacementID, replacementQty+c.Quantity, "", c.CatalogQuote, now)
 		if err == nil {
-			removed, err = setWorkingQuantity(tx, id, c.ProductID, 0, c.Disposition, c.CatalogQuote)
+			removed, err = setWorkingQuantity(tx, id, c.ProductID, 0, c.Disposition, c.CatalogQuote, now)
 		}
 		details = "Manager substitution (instruction override): " + removed + "; " + added
 	case "finish", "cancel":
@@ -225,7 +226,7 @@ func disposeOrderStock(tx *sql.Tx, pid, quantity int64, disposition string) erro
 	return nil
 }
 
-func setWorkingQuantity(tx *sql.Tx, id, pid, quantity int64, disposition, quote string) (string, error) {
+func setWorkingQuantity(tx *sql.Tx, id, pid, quantity int64, disposition, quote string, now int64) (string, error) {
 	if pid < 1 || quantity < 0 || quantity > 99 {
 		return "", ErrInvalid
 	}
@@ -257,7 +258,7 @@ func setWorkingQuantity(tx *sql.Tx, id, pid, quantity int64, disposition, quote 
 			return "", ErrUnavailable
 		}
 		if !exists {
-			current, err := currentOrderCatalogQuote(tx)
+			current, err := currentOrderCatalogQuote(tx, now)
 			if err != nil {
 				return "", err
 			}
@@ -277,6 +278,13 @@ func setWorkingQuantity(tx *sql.Tx, id, pid, quantity int64, disposition, quote 
 			return "", ErrStock
 		}
 		if !exists {
+			state, e := loadPricing(tx, now)
+			if e != nil {
+				return "", e
+			}
+			priced := Product{ID: pid, Price: price, SaleUnit: unit}
+			state.apply(&priced)
+			price = priced.EffectivePrice()
 			_, err = tx.Exec(`INSERT INTO working_order_items(order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step) VALUES(?,?,?,?,?,?,?,?,?)`, id, pid, name, price, quantity, sku, unit, basis, step)
 			if err != nil {
 				return "", err
@@ -313,12 +321,17 @@ func orderCatalogQuote(products []Product) string {
 	h := sha256.New()
 	for _, p := range products {
 		if !p.Archived && p.SaleUnit == "each" {
-			fmt.Fprintf(h, "%d:%d:%d:%s:%s\n", p.ID, p.Price, p.PriceVersion, p.Name, p.SKU)
+			fmt.Fprintf(h, "%d:%d:%d:%s:%s\n", p.ID, p.EffectivePrice(), p.PriceVersion, p.Name, p.SKU)
+			fmt.Fprintf(h, "sale:%d:%d:%d:%d:%d\n", p.PromotionID, p.PromotionVersion, p.SaleStarts, p.SaleEnds, p.PricingBoundary)
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
-func currentOrderCatalogQuote(tx *sql.Tx) (string, error) {
+func currentOrderCatalogQuote(tx *sql.Tx, now int64) (string, error) {
+	state, err := loadPricing(tx, now)
+	if err != nil {
+		return "", err
+	}
 	rows, err := tx.Query(`SELECT ` + productSelect + productJoins + `WHERE p.archived=0 ORDER BY p.id`)
 	if err != nil {
 		return "", err
@@ -330,6 +343,7 @@ func currentOrderCatalogQuote(tx *sql.Tx) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		state.apply(&p)
 		products = append(products, p)
 	}
 	if err = rows.Err(); err != nil {

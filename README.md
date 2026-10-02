@@ -4,6 +4,7 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 
 ## Current capabilities
 
+- Scheduled fixed-price sales, featured choices and a data-driven weekly-sales storefront with safe price review
 - Searchable 70-product demo catalog with configurable department filters and clear stock states
 - Manager product creation, editing, archiving and restoration, with stable SKUs and reusable bundled illustrations
 - Catalog search across names/SKUs/codes, combined filters, sorting and 20-row pages with preserved editor context
@@ -22,7 +23,7 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Customer status refresh with a normal HTML fallback
 - Persistent SQLite storage and locally bundled frontend assets
 
-This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Promotions, product-detail pages, weighted selling, dark mode and the later phone/barcode workflow remain in the [ordered roadmap](docs/ROADMAP.md).
+This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Product-detail pages, weighted selling, dark mode and the later phone/barcode workflow remain in the [ordered roadmap](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -78,6 +79,8 @@ The shared manager password is a limited demo gate, not production identity. Nam
 Startup applies versioned migrations transactionally. Version 2 adds picking progress; version 3 adds configurable catalog metadata, stable category/type identities, local product codes and receipt measurement snapshots without replacing products, sessions, baskets, stock or receipt amounts. Historical Ready/Completed orders retain their state; new and unfinished orders require every item to be picked before Ready. Picking does not deduct stock a second time. Back up the SQLite volume before a deployment, and preserve the entire `/data` directory.
 
 Version 5 adds separate working-order lines, reasoned manager overrides and explicit partial/cancelled outcomes without rewriting placed receipts. Ready and Completed orders remain frozen. See [Manager order overrides](docs/ORDER_OVERRIDES.md).
+
+Version 7 adds fixed-cent promotions, independent featured choices and transactional merchandising audit. Normal migration/restarts create no offers. Customer and new working-item quotes require review across sale boundaries; placed and retained working rates stay unchanged. See [Promotions](docs/PROMOTIONS.md).
 
 Version 6 adds a fixed simulated shopper roster, versioned order assignments and structured task history. Existing orders remain unassigned until a manager assigns them. Cancelling a task preserves order status, working items and stock; Ready or completion ends the task in the same transaction. See [Shoppers](docs/SHOPPERS.md).
 

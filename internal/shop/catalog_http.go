@@ -184,7 +184,7 @@ func (a *App) catalogResult(w http.ResponseWriter, r *http.Request, message stri
 		http.NotFound(w, r)
 		return
 	}
-	if err != nil && !errors.Is(err, ErrInvalid) && !errors.Is(err, ErrConflict) && !errors.Is(err, ErrDuplicate) && !errors.Is(err, ErrReferenced) && !errors.Is(err, ErrUnitLocked) && !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrTaxonomyInactive) {
+	if err != nil && !errors.Is(err, ErrInvalid) && !errors.Is(err, ErrConflict) && !errors.Is(err, ErrDuplicate) && !errors.Is(err, ErrReferenced) && !errors.Is(err, ErrUnitLocked) && !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrTaxonomyInactive) && !errors.Is(err, ErrPromotionPrice) {
 		a.fail(w, err)
 		return
 	}

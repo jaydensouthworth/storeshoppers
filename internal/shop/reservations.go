@@ -89,22 +89,27 @@ func loadBasket(q querier, id string, now int64) (Basket, error) {
 	if b.HoldUntil > now {
 		b.HoldLabel = time.Unix(b.HoldUntil, 0).UTC().Format("15:04:05 UTC · 2 Jan")
 	}
+	state, err := loadPricing(q, now)
+	if err != nil {
+		return b, err
+	}
 	rows, err := q.Query(`SELECT `+productSelect+`,cart.quantity,cart.reserved`+productJoins+`JOIN cart ON cart.product_id=p.id WHERE cart.basket_id=? ORDER BY p.id`, id)
 	if err != nil {
 		return b, err
 	}
 	defer rows.Close()
 	quote := sha256.New()
-	fmt.Fprintf(quote, "basket-v4:%s;", id)
+	fmt.Fprintf(quote, "basket-v7:%s;", id)
 	for rows.Next() {
 		var l CartLine
 		fields := append(productFields(&l.Product), &l.Quantity, &l.Reserved)
 		if err = rows.Scan(fields...); err != nil {
 			return b, err
 		}
+		state.apply(&l.Product)
 		p := l.Product
 		if p.SaleUnit == "each" {
-			l.Subtotal = l.Quantity * p.Price
+			l.Subtotal = l.Quantity * p.EffectivePrice()
 			b.Total += l.Subtotal
 			b.Count += l.Quantity
 		}
@@ -116,6 +121,7 @@ func loadBasket(q querier, id string, now int64) (Basket, error) {
 			b.CanCheckout = false
 		}
 		fmt.Fprintf(quote, "%d:%d:%d:%d:%t:%s:%d:%d:%q;", p.ID, l.Quantity, p.Price, p.PriceVersion, p.Archived, p.SaleUnit, p.PriceBasis, p.QuantityStep, p.Name)
+		fmt.Fprintf(quote, "sale:%d:%d:%d:%d:%d:%d;", p.PromotionID, p.PromotionVersion, p.EffectivePrice(), p.SaleStarts, p.SaleEnds, p.PricingBoundary)
 		b.Lines = append(b.Lines, l)
 	}
 	if len(b.Lines) == 0 {

@@ -77,3 +77,8 @@ Both normal and demo startup preserve data through additive migrations. Shared d
 ## Shopper assignments
 
 Schema v6 adds a fixed simulated roster, versioned task ownership and structured assignment-audit links without assigning historical orders. Every assignment, reassignment and cancellation advances the order revision and writes its reason in the same immediate transaction. One active task per order is enforced by a partial unique index; each shopper may hold several orders. Cancelling a task preserves stock, receipt and working lines and leaves its order unassigned. Ready or Completed ends its task with the same transactional audit. Demo ownership is applied before workload aggregates, filtering, history and pagination. Scan rates remain unrecorded until real telemetry exists. See [Shoppers](SHOPPERS.md).
+
+
+## Scheduled promotions (schema v7)
+
+[Promotions](PROMOTIONS.md) add independent fixed-cent UTC-window sales and featured records without replacing catalog prices or receipt/working snapshots. Shared effective pricing and promotion-aware quotes cover storefront, baskets, checkout and first-time working-order additions. Non-overlap, optimistic versions, compatible regular-price edits and transactional audit are enforced server-side. Existing working/tombstone rates stay recorded. Ordinary startup/migration creates no examples; an explicit demo-only preview/confirmed action or the already-confirmed global reset can create a bounded current-week fixture.

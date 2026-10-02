@@ -125,7 +125,8 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 	if want != key || rev != revision {
 		return 0, ErrConflict
 	}
-	b, e := customerBasket(tx, sid, s.now().Unix())
+	now := s.now().Unix()
+	b, e := customerBasket(tx, sid, now)
 	if e != nil {
 		return 0, e
 	}
@@ -140,7 +141,7 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 	if len(quote) != 64 || quote != b.Quote {
 		return 0, ErrQuote
 	}
-	if b.NeedsReview || b.HoldUntil <= s.now().Unix() {
+	if b.NeedsReview || b.HoldUntil <= now {
 		return 0, ErrHold
 	}
 	if !b.CanCheckout {
@@ -155,7 +156,7 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 		return 0, e
 	}
 	for _, l := range b.Lines {
-		if _, e = tx.Exec(`INSERT INTO order_items(order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step,subtotal) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, l.Product.ID, l.Product.Name, l.Product.Price, l.Quantity, l.Product.SKU, l.Product.SaleUnit, l.Product.PriceBasis, l.Product.QuantityStep, l.Subtotal); e != nil {
+		if _, e = tx.Exec(`INSERT INTO order_items(order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step,subtotal) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, l.Product.ID, l.Product.Name, l.Product.EffectivePrice(), l.Quantity, l.Product.SKU, l.Product.SaleUnit, l.Product.PriceBasis, l.Product.QuantityStep, l.Subtotal); e != nil {
 			return 0, e
 		}
 	}

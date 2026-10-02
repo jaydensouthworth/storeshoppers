@@ -24,15 +24,19 @@ var ErrTaxonomyInactive = errors.New("Restore this product’s department and pr
 var ErrNotFound = errors.New("That item could not be found.")
 
 type Product struct {
-	ID                                         int64
-	Name, Description, Category, Barcode, Icon string
-	Reserved                                   int64
-	Price, Stock, Version                      int64
-	SKU, ProductType, SaleUnit                 string
-	CategoryID, TypeID                         int64
-	Archived                                   bool
-	CatalogVersion, PriceVersion               int64
-	PriceBasis, QuantityStep                   int64
+	PricingBoundary                                                int64
+	SalePrice, PromotionID, PromotionVersion, SaleStarts, SaleEnds int64
+	Featured                                                       bool
+	FeatureVersion                                                 int64
+	ID                                                             int64
+	Name, Description, Category, Barcode, Icon                     string
+	Reserved                                                       int64
+	Price, Stock, Version                                          int64
+	SKU, ProductType, SaleUnit                                     string
+	CategoryID, TypeID                                             int64
+	Archived                                                       bool
+	CatalogVersion, PriceVersion                                   int64
+	PriceBasis, QuantityStep                                       int64
 }
 type Taxonomy struct {
 	ID, Version int64
