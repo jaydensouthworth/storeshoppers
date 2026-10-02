@@ -37,6 +37,8 @@ type App struct {
 	resetPending atomic.Bool
 }
 type View struct {
+	CartQuantities                                           map[int64]string
+	CartDraftShortened                                       bool
 	CustomerQueue                                            *OrderQueue
 	OrderQueue                                               *OrderQueue
 	OrderFilters                                             OrderFilters
@@ -145,6 +147,8 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("GET /manager/orders", a.showManager)
 	a.mux.HandleFunc("GET /manager/shoppers", a.showShoppers)
 	a.mux.HandleFunc("POST /manager/shoppers/orders/{id}", a.changeShopper)
+	a.mux.HandleFunc("POST /manager/shoppers/roster", a.createShopperRoster)
+	a.mux.HandleFunc("POST /manager/shoppers/roster/{id}", a.changeShopperRoster)
 	a.mux.HandleFunc("GET /manager/stock", a.showStock)
 
 	a.mux.HandleFunc("GET /manager/promotions", a.showPromotions)
@@ -429,16 +433,23 @@ func (a *App) showCart(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, v, 200)
 }
 func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
-	s, ok := a.form(w, r)
+	s, ok := a.formWithLimit(w, r, customerCartFormLimit)
 	if !ok {
 		return
 	}
 	pid, e1 := num(r.PostForm.Get("product_id"))
-	qty, e2 := num(r.PostForm.Get("quantity"))
+	quantity := r.PostForm.Get("quantity")
+	if _, ok := r.PostForm["quantity"]; !ok && e1 == nil {
+		quantity = r.PostForm.Get("quantity-" + strconv.FormatInt(pid, 10))
+		r.PostForm.Set("quantity", quantity)
+	}
+	qty, e2 := num(quantity)
 	revision, e3 := num(r.PostForm.Get("revision"))
 	var e error
 	if e1 != nil || e2 != nil || e3 != nil {
 		e = ErrInvalid
+	} else if key := r.PostForm.Get("checkout_key"); key != "" && key != s.CheckoutKey {
+		e = ErrConflict
 	} else {
 		e = a.store.SetCartVersion(s.ID, pid, qty, r.PostForm.Get("mode") == "add", revision)
 	}
@@ -451,6 +462,9 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 		v.Section = "store"
 	}
 	v.Title = "Neighborhood Market"
+	if v.Section == "cart" {
+		v.retainCustomerCartDraft(r)
+	}
 	v.Search, v.Category, v.SalesOnly, v.FeaturedOnly = storefrontContext(r.PostForm)
 	if e != nil {
 		if !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrNotFound) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrConflict) && !errors.Is(e, ErrZeroEstimate) {
@@ -458,7 +472,9 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		v.Error = e.Error()
-		v.CartDraft = managerDraft(r, "cart")
+		if key := r.PostForm.Get("checkout_key"); key == "" || key == v.Session.CheckoutKey {
+			v.CartDraft = managerDraft(r, "cart")
+		}
 		if errors.Is(e, ErrConflict) {
 			w.Header().Set("X-Shop-Error", "stale-version")
 		}
@@ -482,7 +498,7 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Return 200 for a rendered validation state so HTMX swaps and announces it.
-	if r.Header.Get("HX-Request") != "true" && v.Error == "" {
+	if r.Header.Get("HX-Request") != "true" && v.Error == "" && !(v.Section == "cart" && r.PostForm.Has("instructions")) {
 		path := "/"
 		if v.Section == "cart" {
 			path = "/cart"
@@ -512,22 +528,32 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 	a.render(w, r, v, 200)
 }
 func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
-	s, ok := a.form(w, r)
+	s, ok := a.formWithLimit(w, r, customerCartFormLimit)
 	if !ok {
 		return
 	}
 	rev, e := num(r.PostForm.Get("revision"))
+	if e != nil {
+		e = ErrInvalid
+	}
 	var id int64
+	// A replay of a completed checkout must still resolve to its receipt.
+	// Only a new checkout needs the unsaved-quantity review guard.
+	if e == nil && r.PostForm.Get("checkout_key") == s.CheckoutKey {
+		var basket Basket
+		basket, e = a.store.Basket(s.ID)
+		if e == nil && hasCustomerQuantityDraft(r, basket) {
+			e = errCartQuantityDraft
+		}
+	}
 	if e == nil {
 		id, e = a.store.CheckoutWithInstructions(s.ID, r.PostForm.Get("checkout_key"), rev, r.PostForm.Get("quote"), r.PostForm.Get("instructions"))
-	} else {
-		e = ErrInvalid
 	}
 	if e == nil {
 		redirect(w, r, fmt.Sprintf("/orders/%d", id))
 		return
 	}
-	if !errors.Is(e, ErrConflict) && !errors.Is(e, ErrEmpty) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrQuote) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrHold) && !errors.Is(e, ErrZeroEstimate) {
+	if !errors.Is(e, ErrConflict) && !errors.Is(e, ErrEmpty) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrQuote) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrHold) && !errors.Is(e, ErrZeroEstimate) && !errors.Is(e, errCartQuantityDraft) {
 		a.fail(w, e)
 		return
 	}
@@ -535,7 +561,7 @@ func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	v.Instructions = r.PostForm.Get("instructions")
+	v.retainCustomerCartDraft(r)
 	v.Title = "Review your basket"
 	v.Section = "cart"
 	v.Error = e.Error()

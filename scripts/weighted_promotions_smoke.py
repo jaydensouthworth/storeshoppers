@@ -119,7 +119,7 @@ def main():
             assert query('SELECT quantity,price,price_basis,subtotal FROM order_items WHERE order_id=?', (oid,)) == original
             assert query('SELECT sale_unit,price_basis,cancelled FROM promotions WHERE id=?', (sale[0],)) == [('g', 1000, 1)]
             assert query('PRAGMA foreign_key_check') == []
-            assert query('SELECT max(version) FROM schema_version') == [(12,)]
+            assert query('SELECT max(version) FROM schema_version') == [(13,)]
             print('Weighted promotions process smoke passed: manager gram catalog/sale/featured forms, compact Choose grams actions, held stale-quote recovery, immutable sale rate after cancellation, exact weight replay, final receipt and restart')
         finally:
             if process is not None and process.poll() is None:

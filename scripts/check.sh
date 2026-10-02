@@ -8,6 +8,7 @@ node --check web/static/app.js
 node --check web/static/theme.js
 node --check web/static/demo_guide.js
 node --test scripts/interaction_test.cjs
+node --test scripts/cart_drafts_test.cjs
 node --test scripts/theme_test.cjs
 node --test scripts/demo_guide_test.cjs
 test -z "$(gofmt -l cmd internal web/embed.go)"
@@ -15,6 +16,7 @@ go vet ./...
 go test -race -coverprofile=coverage.out ./...
 go build -o bin/shop ./cmd/shop
 python3 scripts/smoke.py
+python3 scripts/cart_drafts_smoke.py
 python3 scripts/demo_reset_smoke.py
 python3 scripts/stock_tools_smoke.py
 python3 scripts/order_overrides_smoke.py

@@ -208,12 +208,12 @@ func assertWriterFenceCoverage(t *testing.T, db *sql.DB) {
 	tables := migrationQuerySnapshot(t, db, `SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 	for _, table := range tables {
 		for _, op := range []string{"insert", "update", "delete"} {
-			name := fmt.Sprintf("app_writer_v%d_%s_%s", weightedSchemaVersion, table[0], op)
+			name := fmt.Sprintf("app_writer_v%d_%s_%s", latestSchemaVersion, table[0], op)
 			var statement string
 			if err := db.QueryRow(`SELECT sql FROM sqlite_schema WHERE type='trigger' AND name=? AND tbl_name=?`, name, table[0]).Scan(&statement); err != nil {
 				t.Fatalf("missing %s fence on %s: %v", op, table[0], err)
 			}
-			if !strings.Contains(statement, "app_schema_version()") || !strings.Contains(statement, fmt.Sprintf("<%d", weightedSchemaVersion)) {
+			if !strings.Contains(statement, "app_schema_version()") || !strings.Contains(statement, fmt.Sprintf("<%d", latestSchemaVersion)) {
 				t.Fatalf("bad fence: %s", statement)
 			}
 		}

@@ -73,7 +73,7 @@ func TestAttentionMigrationPopulatedV10AdditiveUpgradeRollbackAndRestart(t *test
 			path, now, owner := populatedAttentionV10(t)
 			old := migrationTestStore(t, path, now)
 			before := shopperPriorTables(t, old.db)
-			roots := migrationQuerySnapshot(t, old.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' ORDER BY name`)
+			roots := migrationQuerySnapshot(t, old.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events') ORDER BY name`)
 			objects := migrationQuerySnapshot(t, old.db, `SELECT type,name,sql FROM sqlite_schema WHERE name LIKE 'retained_%' ORDER BY type,name`)
 			oldEvents := migrationQuerySnapshot(t, old.db, `SELECT order_id,action,reason,details,created FROM order_events ORDER BY id`)
 			if failure {
@@ -101,7 +101,7 @@ func TestAttentionMigrationPopulatedV10AdditiveUpgradeRollbackAndRestart(t *test
 			}
 			s := openPromotionMigrationStore(t, path, now)
 			assertShopperPriorTables(t, s.db, before)
-			if got := migrationQuerySnapshot(t, s.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' ORDER BY name`); !reflect.DeepEqual(roots, got) {
+			if got := migrationQuerySnapshot(t, s.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events') ORDER BY name`); !reflect.DeepEqual(roots, got) {
 				t.Fatal("attention migration rebuilt existing tables or added unrelated tables")
 			}
 			if got := migrationQuerySnapshot(t, s.db, `SELECT type,name,sql FROM sqlite_schema WHERE name LIKE 'retained_%' ORDER BY type,name`); !reflect.DeepEqual(objects, got) {
@@ -192,9 +192,9 @@ func TestAttentionMigrationFencesAlreadyOpenV10Writers(t *testing.T) {
 	tables := migrationQuerySnapshot(t, s.db, `SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 	for _, table := range tables {
 		for _, op := range []string{"insert", "update", "delete"} {
-			name := fmt.Sprintf("app_writer_v11_%s_%s", table[0], op)
+			name := fmt.Sprintf("app_writer_v%d_%s_%s", latestSchemaVersion, table[0], op)
 			var statement string
-			if err := s.db.QueryRow(`SELECT sql FROM sqlite_schema WHERE type='trigger' AND name=? AND tbl_name=?`, name, table[0]).Scan(&statement); err != nil || !strings.Contains(statement, "app_schema_version()") || !strings.Contains(statement, "<11") {
+			if err := s.db.QueryRow(`SELECT sql FROM sqlite_schema WHERE type='trigger' AND name=? AND tbl_name=?`, name, table[0]).Scan(&statement); err != nil || !strings.Contains(statement, "app_schema_version()") || !strings.Contains(statement, fmt.Sprintf("<%d", latestSchemaVersion)) {
 				t.Fatalf("missing schema-11 %s fence on %s: %q %v", op, table[0], statement, err)
 			}
 		}

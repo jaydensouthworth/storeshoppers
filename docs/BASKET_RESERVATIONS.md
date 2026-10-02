@@ -26,6 +26,25 @@ The practice action idempotently creates two labeled synthetic baskets for the c
 
 Checkout accepts up to 500 Unicode characters of plain text, normalizes CRLF, rejects invalid UTF-8 and control characters other than newline/tab, and HTML-escapes output. Use only fake grocery instructions; the demo is not a place for health, payment or other private information. Validation retains the entered text in the checkout form. The placed snapshot appears on the session-owned receipt and authorized manager pick ticket; it does not enter the public inventory/catalog logs.
 
+The customer basket uses one form for quantity updates, hold renewal and checkout.
+Native submit-button actions preserve the same behavior without JavaScript.
+Only the three customer form endpoints allow a bounded 32 KiB body to carry all
+quantity controls; manager limits are unchanged, and instructions remain capped
+at 500 characters. Typed
+instructions and other unsaved quantities travel with a quantity/renew request and
+are rendered back for review, rather than disappearing when the basket refreshes.
+Unsaved values are visibly distinguished from authoritative saved quantities.
+Checkout refuses to place an order while a submitted quantity differs from its
+saved value: update that item or restore its saved quantity first.
+
+Draft recovery is limited to the current page and request. It does not write notes
+to cookies, browser storage or a separate database draft. The rotated checkout key
+separates basket generations; a stale request cannot repopulate a later basket.
+HTMX also keeps edits made while a request is in flight and refuses a late response
+whose initiating basket/revision is no longer on screen. It never replays a write.
+Leaving/reloading the page can discard an unsubmitted draft; placing an order
+saves only the explicitly submitted instruction snapshot on that owned receipt.
+
 Counted-only progress displays floor(picked units × 100 / required units). Mixed orders use completed product lines, with each line’s units or grams shown separately. Ready requires counted picks and confirmed actual grams. See [Weighted products](WEIGHTED_PRODUCTS.md) and [Manager order overrides](ORDER_OVERRIDES.md); scanner execution remains deferred.
 
 ## Manager navigation

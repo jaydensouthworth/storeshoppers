@@ -9,6 +9,9 @@ import (
 )
 
 type ShopperFilters struct {
+	RosterQuery, RosterStatus    string
+	PersonID                     int64
+	NewPerson                    bool
 	Query, Status, ShopperFilter string
 	QueueContext                 string
 	ShopperID                    int64
@@ -16,7 +19,16 @@ type ShopperFilters struct {
 }
 
 func parseShopperFilters(values url.Values) ShopperFilters {
-	f := ShopperFilters{Status: "open", Page: 1}
+	f := ShopperFilters{Status: "open", Page: 1, RosterStatus: "active"}
+	f.RosterQuery, _ = boundedManagerDraft(strings.TrimSpace(values.Get("roster_q")), 100)
+	switch values.Get("roster_status") {
+	case "active", "all", "archived":
+		f.RosterStatus = values.Get("roster_status")
+	}
+	if id, err := num(values.Get("person")); err == nil && id > 0 {
+		f.PersonID = id
+	}
+	f.NewPerson = values.Get("new") == "1"
 	if raw := values.Get("queue"); len(raw) <= 2000 {
 		if context, err := url.ParseQuery(raw); err == nil {
 			f.QueueContext = parseOrderFilters(context).Values().Encode()
@@ -38,6 +50,12 @@ func parseShopperFilters(values url.Values) ShopperFilters {
 }
 func (f ShopperFilters) Values() url.Values {
 	v := url.Values{"status": {f.Status}}
+	if f.RosterQuery != "" {
+		v.Set("roster_q", f.RosterQuery)
+	}
+	if f.RosterStatus != "" && f.RosterStatus != "active" {
+		v.Set("roster_status", f.RosterStatus)
+	}
 	if f.QueueContext != "" {
 		v.Set("queue", f.QueueContext)
 	}
@@ -59,6 +77,16 @@ func (f ShopperFilters) URL(selected int64) string {
 	}
 	return "/manager/shoppers?" + v.Encode()
 }
+func (f ShopperFilters) EditorURL(selected int64) string {
+	value := f.URL(selected)
+	if f.PersonID > 0 {
+		return value + "&person=" + strconv.FormatInt(f.PersonID, 10)
+	}
+	if f.NewPerson {
+		return value + "&new=1"
+	}
+	return value
+}
 func shopperRequestFilters(r *http.Request) ShopperFilters {
 	if r.Method == http.MethodPost {
 		return parseShopperFilters(r.PostForm)
@@ -67,6 +95,12 @@ func shopperRequestFilters(r *http.Request) ShopperFilters {
 }
 func (a *App) showShoppers(w http.ResponseWriter, r *http.Request) {
 	var selected int64
+	if raw := r.URL.Query().Get("person"); raw != "" {
+		if id, err := num(raw); err != nil || id < 1 {
+			http.NotFound(w, r)
+			return
+		}
+	}
 	if raw := r.URL.Query().Get("order"); raw != "" {
 		var err error
 		selected, err = num(raw)
@@ -94,17 +128,21 @@ func (a *App) shoppersView(w http.ResponseWriter, r *http.Request, selected int6
 	}
 	if problem != nil {
 		v.Error = problem.Error()
-		d := &ShopperDraft{}
-		for _, field := range []struct {
-			key   string
-			dst   *string
-			limit int
-		}{{"action", &d.Action, 20}, {"shopper_id", &d.ShopperID, 64}, {"reason", &d.Reason, 240}} {
-			value, truncated := boundedManagerDraft(r.PostForm.Get(field.key), field.limit)
-			*field.dst = value
-			d.Truncated = d.Truncated || truncated
+		if strings.HasPrefix(r.URL.Path, "/manager/shoppers/roster") {
+			workspace.RosterDraft = shopperRosterDraft(r)
+		} else {
+			d := &ShopperDraft{}
+			for _, field := range []struct {
+				key   string
+				dst   *string
+				limit int
+			}{{"action", &d.Action, 20}, {"shopper_id", &d.ShopperID, 64}, {"reason", &d.Reason, 240}} {
+				value, truncated := boundedManagerDraft(r.PostForm.Get(field.key), field.limit)
+				*field.dst = value
+				d.Truncated = d.Truncated || truncated
+			}
+			workspace.Draft = d
 		}
-		workspace.Draft = d
 	}
 	v.Title, v.Section, v.ManagerTab = "Shoppers", "shoppers", "shoppers"
 	v.Shoppers = workspace
@@ -115,7 +153,7 @@ func (a *App) shoppersView(w http.ResponseWriter, r *http.Request, selected int6
 	v.Message = message
 	if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
 		f.Page = workspace.Page
-		w.Header().Set("HX-Push-Url", f.URL(selected))
+		w.Header().Set("HX-Push-Url", f.EditorURL(selected))
 	}
 	a.render(w, r, v, http.StatusOK)
 }
@@ -153,7 +191,7 @@ func (a *App) changeShopper(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err != nil && !orderCommandProblem(err) {
+	if err != nil && !shopperRosterProblem(err) {
 		a.fail(w, err)
 		return
 	}

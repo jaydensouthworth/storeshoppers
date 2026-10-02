@@ -14,10 +14,10 @@ Each phase is accepted only when the intended task works end to end, relevant in
 
 ## Verified live foundation
 
-As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/b43a76e95cded1c8ce0fe1c851dfb7ab6b717dd7). This checkpoint contains 127 verified published files.
+As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published header foundation](https://github.com/jaydensouthworth/storeshoppers/tree/041eff9b49dce0f08daa1cb9c55131dc6244f7ac). That checkpoint contains 178 verified published files; subsequent release evidence is recorded below.
 
 - 72 fake products; configurable categories/types; create, edit, archive and restore; dedicated editors and a manager sidebar
-- Safe bundled illustration picker, immutable SKU and separate demo-local product codes; uploads, generated scan labels and camera scanning are not implemented
+- Bundled illustration picker and bounded, previewed JPEG/PNG uploads; immutable SKU and separate demo-local product codes; generated scan labels and camera scanning remain later work
 - Session baskets, atomic simulated checkout, replay protection, ownership checks, immutable receipt/measurement snapshots and stale-price review
 - Persisted 15-minute stock holds, expiry/reacquisition, available/reserved counts, scoped practice baskets and audited manager basket overrides
 - Plaintext checkout instructions capped at 500 characters; Picking progress percentages/counts and a distinct Ready status. The default Orders view already shows these states
@@ -39,17 +39,19 @@ accessibility audit remain open.
 
 ## Ordered implementation backlog
 
-**Current priority:** refine header appearance and demo discovery with a compact
-sun/moon toggle, quiet system-reset action, and a dismissible arrow callout to
-Employees. Keep the bright corner-store identity and accessible mobile controls.
-The protected schema12 rollout is complete: weighted ordering/actual measurements,
-per-kilogram offers and manager review queues are live and verified. Pre-migration
-recovery archives and compatibility refusal protect upgrades. Existing catalog,
-offers and image storage survived deployment; the complete QA allocation was
-returned and its temporary product/offer archived or cancelled. Image uploads,
-compact weekly sales, mixed Featured rows, normal manager controls and visible
-stale-form recovery remain live. Continue in tested phases without overwriting
-visitor changes.
+**Current implementation:** simulated staff management now includes
+scoped roster editing, explicit availability, assignment capacity and recoverable
+archive/restore. Preserve the original three identities and every existing task.
+Alongside this, customer basket draft recovery now ensures changing a quantity or
+renewing a hold cannot silently erase instructions, and checkout cannot silently
+ignore an unapplied quantity edit. These are bounded workflow improvements, rather than
+employee authentication or the later phone scanner.
+
+The schema12 foundation, compact appearance toggle and dismissible Employees
+guide are live and verified. Pre-migration recovery archives and writer fences
+protect upgrades. Preserve shared catalog/offers/artwork and visitor changes.
+Local checks, migration/restart checks, CI and live desktop/mobile acceptance must
+pass before the new roster release is described as live.
 
 ### 1. Manager usability and explicit reset
 
@@ -63,13 +65,23 @@ visitor changes.
 
 **Implemented and live-verified in schema v5:** confirmed working-order additions/removals, quantity changes, whole-line counted substitutions and explicit reasoned manager overrides. Incomplete orders can finish with unavailable/cancelled remainders and deliberate stock disposition, while actual picked counts remain truthful. Whole-order cancellation and scoped order history are included. See [Manager order overrides](ORDER_OVERRIDES.md).
 
-Preserve requested receipt lines and the placed total. Use separate fulfillment/allocation records, resolution history and a final fulfillment total. Checkout instructions retain the shopper’s guidance, while explicit, reasoned manager overrides remain permitted. A structured substitution-preference field is a later refinement; this increment supports counted same-unit changes. Missing physical stock must not produce phantom returns. Validate scope, state and versions; update allocations, stock, totals and audit in one transaction. Final totals stay nullable until Ready, allow an explicitly all-unavailable final zero and freeze at Ready. Ready remains frozen except collection; historical amendments/refunds remain future work. Explicit manager holds are implemented in the local schema11 candidate; see [Order review and queue](ORDER_ATTENTION.md). See [catalog and fulfillment evolution](CATALOG_EVOLUTION.md).
+Preserve requested receipt lines and the placed total. Use separate fulfillment/allocation records, resolution history and a final fulfillment total. Checkout instructions retain the shopper’s guidance, while explicit, reasoned manager overrides remain permitted. A structured substitution-preference field is a later refinement; this increment supports counted same-unit changes. Missing physical stock must not produce phantom returns. Validate scope, state and versions; update allocations, stock, totals and audit in one transaction. Final totals stay nullable until Ready, allow an explicitly all-unavailable final zero and freeze at Ready. Ready remains frozen except collection; historical amendments/refunds remain future work. Explicit manager holds are deployed in the schema12 foundation; see [Order review and queue](ORDER_ATTENTION.md). See [catalog and fulfillment evolution](CATALOG_EVOLUTION.md).
 
 **Acceptance:** additions, removals, partial quantities, substitutions, override reasons, unavailable items and cancellation paths work end to end; failed/stale/repeated writes cannot oversell, double-deduct or double-return stock. Original receipts remain unchanged and final outcomes are understandable to both manager and customer.
 
 ### 3. Add the Shoppers workspace
 
-**Implemented and live-verified in schema v6:** Shoppers appears directly below Orders. A fixed simulated roster has working, audited assign/reassign/cancel-task controls and progress derived from actual order picking records. Cancelling a task leaves its order open and unassigned, with stock and picked counts intact. Ready or completion ends the active task in the same transaction. One active task per order is enforced; a shopper can hold several orders. Demo ownership applies before workload counts, filters, history and pagination. Selected editors preserve filter context and recover failed drafts; the order ticket links to its current assignment. Closed-order searches use structured historical assignee records. Scan rates remain explicitly unrecorded until real scanner telemetry exists. See [Shoppers](SHOPPERS.md).
+**Implemented and live-verified in schema v6:** Shoppers appears directly below Orders. The original three simulated shoppers have working, audited assign/reassign/cancel-task controls and progress derived from actual order picking records. Cancelling a task leaves its order open and unassigned, with stock and picked counts intact. Ready or completion ends the active task in the same transaction. One active task per order is enforced; a shopper can hold several orders. Demo ownership applies before workload counts, filters, history and pagination. Selected editors preserve filter context and recover failed drafts; the order ticket links to its current assignment. Closed-order searches use structured historical assignee records. Scan rates remain explicitly unrecorded until real scanner telemetry exists. See [Shoppers](SHOPPERS.md).
+
+**Schema13 roster increment implemented:** add/edit fictional shopper names and initials;
+Available, On break and Off shift states; active-order limits; guarded
+archive/restore; scoped roster search and history. Existing identities begin with
+no set limit to preserve their prior behavior; new custom shoppers start at three
+active orders. Unavailable/full/archived shoppers cannot receive new assignments.
+Changing availability or lowering capacity preserves current work; archive requires
+reassigning, cancelling or finishing active tasks first. Demo profiles and custom
+identities belong to the visitor session, including before counts and errors.
+Names saved on assignments/events preserve historical identity across profile edits.
 
 **Acceptance:** task changes preserve order/stock integrity and session scope, expose the current assignment clearly, and remain recoverable after interruption.
 

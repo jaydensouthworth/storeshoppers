@@ -16,7 +16,7 @@ This covers session creation, manager sign-in/sign-out and CSRF rotation,
 reservation expiry, basket edits/renewal/practice setup, checkout, stock/audit,
 catalog/taxonomy/details/example commands, promotions/features, picking (including
 the atomic start-and-pick working-line command), working-order overrides, order
-transitions shopper assignment, and manager hold/release/internal notes.
+transitions, shopper assignment, scoped roster profile changes, and manager hold/release/internal notes.
 Existing transaction, ownership, optimistic-version and replay rules remain.
 
 If the old command acquires the lock first, its entire compatible transaction

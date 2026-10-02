@@ -2,6 +2,61 @@
   "use strict";
   const requests = new WeakMap();
 
+  // Basket drafts remain in the current document and in-flight request only.
+  // The checkout generation scopes recovery; no storage or mutation replay.
+  function customerBasket() {
+    return document.querySelector("form[data-customer-basket]");
+  }
+
+  function basketValues(form) {
+    const quantities = {};
+    form.querySelectorAll("[data-cart-quantity]").forEach((input) => {
+      quantities[input.id] = input.value;
+    });
+    return { instructions: form.querySelector('[name="instructions"]').value, quantities };
+  }
+
+  function syncCustomerQuantities() {
+    const form = customerBasket();
+    if (!form) return;
+    form.querySelectorAll("[data-cart-quantity]").forEach((input) => {
+      const notice = document.getElementById(input.getAttribute("aria-describedby"));
+      if (notice) notice.hidden = input.value === input.dataset.savedQuantity;
+    });
+  }
+
+  function restoreBasketDraft(context) {
+    const draft = context?.customer?.latest;
+    const form = customerBasket();
+    if (!draft || !form || form.dataset.customerBasket !== context.customer.key) return;
+    if (draft.instructions !== context.customer.sent.instructions) {
+      const value = draft.instructions.replace(/\r\n/g, "\n").replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "�");
+      form.querySelector('[name="instructions"]').value = Array.from(value).slice(0, 500).join("");
+    }
+    form.querySelectorAll("[data-cart-quantity]").forEach((input) => {
+      // Unchanged submitted values use the server's current saved/draft value.
+      // Only edits made during the request override the response.
+      if (Object.prototype.hasOwnProperty.call(draft.quantities, input.id) &&
+          draft.quantities[input.id] !== context.customer.sent.quantities[input.id]) {
+        input.value = draft.quantities[input.id];
+      }
+    });
+    syncCustomerQuantities();
+  }
+
+  function restoreBasketFocus(context) {
+    const draft = context?.customer?.latest;
+    if (!draft?.focusID) return;
+    const form = customerBasket();
+    if (!form || form.dataset.customerBasket !== context.customer.key) return;
+    const input = document.getElementById(draft.focusID);
+    if (!input || !form.contains(input) || input.disabled) return;
+    input.focus({ preventScroll: true });
+    if (draft.selectionStart != null && input.setSelectionRange) {
+      input.setSelectionRange(draft.selectionStart, draft.selectionEnd);
+    }
+  }
+
   function formContext(event) {
     const detail = event.detail || {};
     const element = detail.elt;
@@ -18,7 +73,12 @@
     }
     const selected = form.querySelector('input[name="replacement_id"]:checked, input[name="product_id"]:checked');
     const selectedProduct = selected && /^\d+$/.test(selected.value) ? selected.value : "";
-    return { formID: form.id, buttonID: button?.id || "", scopes, selectedProduct };
+    const context = { formID: form.id, buttonID: button?.id || "", scopes, selectedProduct };
+    if (form.dataset?.customerBasket) {
+      context.preferredID = button?.closest?.("[data-feedback-scope]")?.id;
+      context.customer = { key: form.dataset.customerBasket, revision: form.dataset.basketRevision, sent: basketValues(form) };
+    }
+    return context;
   }
 
   function targetFor(context) {
@@ -79,6 +139,26 @@
     if (!event.detail?.xhr) return;
     const context = formContext(event);
     if (context) requests.set(event.detail.xhr, context);
+  });
+
+  document.addEventListener("htmx:beforeSwap", (event) => {
+    const context = requests.get(event.detail?.xhr);
+    if (!context?.customer || event.detail.target?.id !== "workspace") return;
+    const form = customerBasket();
+    if (!form || form.dataset.customerBasket !== context.customer.key ||
+        form.dataset.basketRevision !== context.customer.revision) {
+      // A newer response/navigation has already replaced the initiating basket.
+      event.detail.shouldSwap = false;
+      return;
+    }
+    const latest = basketValues(form);
+    const active = document.activeElement;
+    if (active && form.contains(active) && (active.matches?.("[data-cart-quantity]") || active.id === "instructions")) {
+      latest.focusID = active.id;
+      latest.selectionStart = active.selectionStart;
+      latest.selectionEnd = active.selectionEnd;
+    }
+    context.customer.latest = latest;
   });
 
   document.addEventListener("htmx:sendError", (event) => {
@@ -144,13 +224,23 @@
   });
   document.addEventListener("input", (event) => {
     if (event.target?.matches?.("[data-requested-quantity]")) syncQuantityControls();
+    if (event.target?.matches?.("[data-cart-quantity]")) syncCustomerQuantities();
   });
-  document.addEventListener("DOMContentLoaded", () => { syncPickerForms(); syncQuantityControls(); });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || !event.target?.matches?.("[data-cart-quantity]")) return;
+    // Enter updates that row only; it must never renew or place an order.
+    event.preventDefault();
+    const button = document.getElementById(event.target.id.replace("quantity-", "update-"));
+    if (button && !button.disabled) button.click();
+  });
+  document.addEventListener("DOMContentLoaded", () => { syncPickerForms(); syncQuantityControls(); syncCustomerQuantities(); });
   document.addEventListener("htmx:afterSwap", (event) => {
     syncPickerForms();
     syncQuantityControls();
     if (event.detail.target?.id !== "workspace") return;
     const context = requests.get(event.detail?.xhr);
+    restoreBasketDraft(context);
+    syncCustomerQuantities();
     const weightReview = document.querySelector(".weight-review");
     if (weightReview && context?.formID?.startsWith("measure-line-")) {
       weightReview.tabIndex = -1;
@@ -173,6 +263,7 @@
       error.focus({ preventScroll: true });
       error.scrollIntoView({ block: "nearest", behavior: "auto" });
     }
+    if (!error) restoreBasketFocus(context);
     if (!error && context?.buttonID && document.activeElement === document.body) {
       const button = document.getElementById(context.buttonID);
       if (button && !button.disabled) button.focus({ preventScroll: true });

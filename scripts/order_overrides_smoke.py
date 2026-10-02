@@ -62,14 +62,21 @@ class Page(HTMLParser):
             if tag == 'option' and self.select and 'selected' in a:
                 self.current['fields'][self.select] = a.get('value', '')
             if tag == 'button' and 'id' in a:
-                self.current['buttons'].append(a['id'])
+                self.current['buttons'].append(a)
 
     def handle_endtag(self, tag):
         if tag == 'select':
             self.select = None
         if tag == 'form' and self.current is not None:
             for button in self.current['buttons']:
-                self.forms[button] = self.current
+                # Native submitters can override a shared form's destination
+                # and contribute their own name/value (e.g. a basket Update).
+                form = copy.deepcopy(self.current)
+                form['action'] = button.get('formaction', form['action'])
+                form['method'] = button.get('formmethod', form['method'])
+                if button.get('name'):
+                    form['fields'][button['name']] = button.get('value', '')
+                self.forms[button['id']] = form
             self.current = None
 
     def handle_data(self, data):
@@ -218,11 +225,14 @@ def main():
             _,page=get('/');_,cart=submit(page,'add-1',{'quantity':'1','return':'cart'})
             stale=copy.deepcopy(cart.forms['update-1']);post('/manager/logout',{'csrf':cart.hidden['csrf']})
             _,login=get('/manager/login');post('/manager/login',{'csrf':login.hidden['csrf'],'password':'local-demo-only'})
-            fields=dict(stale['fields'],quantity='2');status,headers,_,_=raw_post(stale['action'],fields,True)
+            assert stale['action']=='/cart' and stale['fields']['product_id']=='1'
+            before_orders=query('SELECT COUNT(*) FROM orders WHERE session_id=?',(sid,))[0][0]
+            fields=dict(stale['fields'],**{'quantity-1':'2'});status,headers,_,_=raw_post(stale['action'],fields,True)
             assert status==403 and headers['X-Shop-Error']=='csrf-expired' and headers['X-Shop-CSRF']
             assert query('SELECT quantity FROM cart WHERE basket_id=? AND product_id=1',(bid,))[0][0]==1
             fields['csrf']=headers['X-Shop-CSRF'];post(stale['action'],fields,True)
             assert query('SELECT quantity FROM cart WHERE basket_id=? AND product_id=1',(bid,))[0][0]==2
+            assert query('SELECT COUNT(*) FROM orders WHERE session_id=?',(sid,))[0][0]==before_orders
             assert placed_snapshot(oid)==original
             # Closing/reopening the process preserves the working and placed histories.
             proc.terminate();proc.wait(timeout=5)

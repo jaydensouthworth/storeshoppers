@@ -132,7 +132,9 @@ main { width: min(1280px, 100%); margin: auto; padding: 0 40px 60px; }
 .cart-icon svg { width: 62px; height: 62px; }
 .cart-info h3 { font-size: 15px; }
 .cart-info > p { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
-.cart-info form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.cart-info form, .cart-quantity-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+#customer-basket [hidden] { display: none; }
+#customer-hold:has(> .action-feedback) { flex-wrap: wrap; }
 .cart-info label { margin: 0; }
 .cart-info input { width: 110px; max-width: 100%; min-height: 44px; padding: 8px; }
 .quantity-note { font-size: 10px; }
@@ -383,7 +385,7 @@ footer strong { font-size: 9px; letter-spacing: .045em; }
   .cart-icon svg { width: 44px; height: 44px; }
   .cart-info h3 { font-size: 14px; }
   .cart-info > p { font-size: 10px; }
-  .cart-info form { gap: 7px; }
+  .cart-info form, .cart-quantity-controls { gap: 7px; }
   .cart-info input { font-size: 16px; }
   .line-total { grid-column: 2; font-size: 13px; justify-self: end; }
   .quantity-note { display: block; font-size: 10px; }
@@ -590,7 +592,7 @@ textarea { font: inherit; width: 100%; min-width: 0; min-height: 96px; border: 2
 .hold-banner h2, .practice-banner h2 { font-size: 30px; margin-bottom: 10px; }
 .hold-banner .eyebrow, .practice-banner .eyebrow { margin-bottom: 9px; }
 .hold-banner p:last-child, .practice-banner p:last-child { max-width: 690px; margin: 0; font-size: 12px; line-height: 1.65; }
-.hold-banner form, .practice-banner form { flex-shrink: 0; }
+.hold-banner form, .cart-hold-actions, .practice-banner form { flex-shrink: 0; }
 .hold-review { background: #fff0ed !important; border-color: var(--red) !important; }
 .hold-state-live { background: var(--yellow); }
 .hold-state-review { border-color: var(--red); color: #8b241d; background: #fff0ed; }
@@ -659,7 +661,7 @@ textarea { font: inherit; width: 100%; min-width: 0; min-height: 96px; border: 2
   .hold-banner, .practice-banner { padding: 19px 16px; border-left-width: 6px; margin-bottom: 20px; }
   .hold-banner h2, .practice-banner h2 { font-size: 27px; }
   .hold-banner p:last-child, .practice-banner p:last-child { font-size: 11px; }
-  .hold-banner form, .practice-banner form { width: 100%; }
+  .hold-banner form, .cart-hold-actions, .practice-banner form { width: 100%; }
   .hold-banner button, .practice-banner button { width: 100%; font-size: 11px; }
   .managed-basket-row { grid-template-columns: minmax(0,1fr) 75px; gap: 15px 10px; }
   .managed-basket-name { grid-column: 1; }

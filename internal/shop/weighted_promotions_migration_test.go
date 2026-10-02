@@ -59,7 +59,7 @@ func TestWeightedPromotionMigrationV11PreservesRowsRollbackAndRestart(t *testing
 			path, now := populatedWeightedPromotionV11(t)
 			old := migrationTestStore(t, path, now)
 			before := shopperPriorTables(t, old.db)
-			roots := migrationQuerySnapshot(t, old.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' ORDER BY name`)
+			roots := migrationQuerySnapshot(t, old.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events') ORDER BY name`)
 			if fail {
 				testExec(t, old, `CREATE TRIGGER fail_promotion_unit_version BEFORE INSERT ON schema_version WHEN NEW.version=12 BEGIN SELECT RAISE(ABORT,'promotion basis failure'); END`)
 				fingerprint := fingerprintTest(t, old.db)
@@ -81,7 +81,7 @@ func TestWeightedPromotionMigrationV11PreservesRowsRollbackAndRestart(t *testing
 			old.Close()
 			s := openPromotionMigrationStore(t, path, now)
 			assertShopperPriorTables(t, s.db, before)
-			if !reflect.DeepEqual(roots, migrationQuerySnapshot(t, s.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' ORDER BY name`)) {
+			if !reflect.DeepEqual(roots, migrationQuerySnapshot(t, s.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events') ORDER BY name`)) {
 				t.Fatal("additive migration rebuilt tables")
 			}
 			var count int
@@ -122,11 +122,11 @@ func TestWeightedPromotionMigrationRejectsAlreadyOpenV11Writer(t *testing.T) {
 	defer statement.Close()
 	s := openPromotionMigrationStore(t, path, now)
 	before := fingerprintTest(t, s.db)
-	if _, err = statement.Exec(); err == nil || !strings.Contains(err.Error(), "writer 12") {
+	if _, err = statement.Exec(); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("writer %d", latestSchemaVersion)) {
 		t.Fatal("prepared old promotion write accepted", err)
 	}
 	for _, q := range []string{`UPDATE products SET price=price+1 WHERE id=1`, `DELETE FROM promotions`, `INSERT INTO promotions(product_id,sale_price,starts,ends) VALUES(1,199,9000000000,9000000060)`} {
-		if _, err = old.Exec(q); err == nil || !strings.Contains(err.Error(), "writer 12") {
+		if _, err = old.Exec(q); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("writer %d", latestSchemaVersion)) {
 			t.Fatal("old writer accepted", q, err)
 		}
 	}

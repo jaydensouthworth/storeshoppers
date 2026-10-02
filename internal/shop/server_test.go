@@ -321,15 +321,20 @@ func TestHTTPFormAndNumericValidation(t *testing.T) {
 			}
 		})
 	}
-	for _, body := range []string{"csrf=%zz", "csrf=" + strings.Repeat("x", 8193)} {
-		s := newTestStore(t)
-		a := testApp(t, s, testManagerPassword)
-		r := httptest.NewRequest(http.MethodPost, testOrigin+"/cart", strings.NewReader(body))
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		w := httptest.NewRecorder()
-		a.ServeHTTP(w, r)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("malformed or oversized form: status %d, want 400", w.Code)
+	for _, endpoint := range []struct {
+		path  string
+		limit int
+	}{{"/cart", customerCartFormLimit}, {"/manager/logout", 8192}} {
+		for _, body := range []string{"csrf=%zz", "csrf=" + strings.Repeat("x", endpoint.limit+1)} {
+			s := newTestStore(t)
+			a := testApp(t, s, testManagerPassword)
+			r := httptest.NewRequest(http.MethodPost, testOrigin+endpoint.path, strings.NewReader(body))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+			a.ServeHTTP(w, r)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("%s malformed or oversized form: status %d, want 400", endpoint.path, w.Code)
+			}
 		}
 	}
 }

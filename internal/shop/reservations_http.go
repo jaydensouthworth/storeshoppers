@@ -9,21 +9,23 @@ func basketProblem(err error) bool {
 	return errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict) || errors.Is(err, ErrStock) || errors.Is(err, ErrUnavailable) || errors.Is(err, ErrEmpty) || errors.Is(err, ErrHold) || errors.Is(err, ErrZeroEstimate)
 }
 func (a *App) renewCart(w http.ResponseWriter, r *http.Request) {
-	s, ok := a.form(w, r)
+	s, ok := a.formWithLimit(w, r, customerCartFormLimit)
 	if !ok {
 		return
 	}
 	revision, err := num(r.PostForm.Get("revision"))
 	if err != nil {
 		err = ErrInvalid
+	} else if key := r.PostForm.Get("checkout_key"); key != "" && key != s.CheckoutKey {
+		err = ErrConflict
 	} else {
 		err = a.store.RenewBasket(s.ID, revision)
 	}
-	if err == nil {
+	if err == nil && !r.PostForm.Has("instructions") {
 		redirect(w, r, "/cart")
 		return
 	}
-	if !basketProblem(err) {
+	if err != nil && !basketProblem(err) {
 		a.fail(w, err)
 		return
 	}
@@ -33,7 +35,12 @@ func (a *App) renewCart(w http.ResponseWriter, r *http.Request) {
 	}
 	v.Title = "Review your basket"
 	v.Section = "cart"
-	v.Error = err.Error()
+	v.retainCustomerCartDraft(r)
+	if err != nil {
+		v.Error = err.Error()
+	} else {
+		v.Message = "Basket reserved for 15 minutes. Review your basket before checkout."
+	}
 	a.render(w, r, v, 200)
 }
 func (a *App) showBaskets(w http.ResponseWriter, r *http.Request) { a.basketsView(w, r, "", nil) }

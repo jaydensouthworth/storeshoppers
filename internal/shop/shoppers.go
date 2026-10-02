@@ -12,17 +12,20 @@ import (
 	"unicode/utf8"
 )
 
-// Shopper is a fixed simulated roster identity, not a login or a live device.
+// Shopper is a scoped simulated roster identity, not a login or a live device.
 // Progress comes only from currently assigned orders' recorded working lines.
 type Shopper struct {
+	Version, Capacity, RemainingCapacity    int64
+	Availability                            string
+	Archived, Assignable                    bool
 	HasWeight                               bool
 	ID                                      int64
 	Name, Initials                          string
 	ActiveOrders, Picked, Required, Percent int64
 }
 type ShopperAssignment struct {
-	ID, OrderID, ShopperID, Version    int64
-	ShopperName, State, Created, Ended string
+	ID, OrderID, ShopperID, Version                     int64
+	ShopperName, ShopperInitials, State, Created, Ended string
 }
 type ShopperTask struct {
 	Order      Order
@@ -41,6 +44,12 @@ type ShopperDraft struct {
 	Truncated                 bool
 }
 type ShoppersWorkspace struct {
+	RosterSelected                                      *Shopper
+	RosterCreating                                      bool
+	VisibleRoster                                       []Shopper
+	RosterQuery, RosterStatus, RosterCommandKey         string
+	RosterDraft                                         *ShopperRosterDraft
+	RosterEvents                                        []ShopperRosterEvent
 	QueueContext                                        string
 	Query, Status, ShopperFilter, ContextQuery          string
 	Roster                                              []Shopper
@@ -58,7 +67,7 @@ type assignmentQuerier interface{ QueryRow(string, ...any) *sql.Row }
 
 func activeAssignment(q assignmentQuerier, id int64) (*ShopperAssignment, error) {
 	var a ShopperAssignment
-	err := q.QueryRow(`SELECT a.id,a.order_id,a.shopper_id,a.version,s.name,a.state,a.created,a.ended FROM shopper_assignments a JOIN shoppers s ON s.id=a.shopper_id WHERE a.order_id=? AND a.state='active'`, id).Scan(&a.ID, &a.OrderID, &a.ShopperID, &a.Version, &a.ShopperName, &a.State, &a.Created, &a.Ended)
+	err := q.QueryRow(`SELECT a.id,a.order_id,a.shopper_id,a.version,COALESCE(NULLIF(a.shopper_name,''),s.name),COALESCE(NULLIF(a.shopper_initials,''),s.initials),a.state,a.created,a.ended FROM shopper_assignments a JOIN shoppers s ON s.id=a.shopper_id WHERE a.order_id=? AND a.state='active'`, id).Scan(&a.ID, &a.OrderID, &a.ShopperID, &a.Version, &a.ShopperName, &a.ShopperInitials, &a.State, &a.Created, &a.Ended)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -126,24 +135,35 @@ func (s *Store) AssignShopper(id int64, sid string, allOrders bool, c ShopperCom
 	} else if c.Action == "assign" || c.AssignmentVersion != current.Version {
 		return ErrConflict
 	}
-	var name string
+	var name, initials string
 	if c.Action != "cancel" {
-		err = tx.QueryRow(`SELECT name FROM shoppers WHERE id=?`, c.ShopperID).Scan(&name)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrInvalid
+		roster, e := loadShopperRoster(tx, sid, allOrders)
+		if e != nil {
+			return e
 		}
-		if err != nil {
-			return err
+		profile := shopperInRoster(roster, c.ShopperID)
+		if profile == nil {
+			return ErrInvalid
 		}
 		if current != nil && current.ShopperID == c.ShopperID {
 			return ErrInvalid
 		}
+		if profile.Archived {
+			return ErrShopperArchived
+		}
+		if profile.Availability != "available" {
+			return ErrShopperUnavailable
+		}
+		if profile.Capacity > 0 && profile.ActiveOrders >= profile.Capacity {
+			return ErrShopperCapacity
+		}
+		name, initials = profile.Name, profile.Initials
 	}
 	var assignmentID, from, to int64
 	var details string
 	switch c.Action {
 	case "assign":
-		result, e := tx.Exec(`INSERT INTO shopper_assignments(order_id,shopper_id) VALUES(?,?)`, id, c.ShopperID)
+		result, e := tx.Exec(`INSERT INTO shopper_assignments(order_id,shopper_id,shopper_name,shopper_initials) VALUES(?,?,?,?)`, id, c.ShopperID, name, initials)
 		if e != nil {
 			return e
 		}
@@ -152,7 +172,7 @@ func (s *Store) AssignShopper(id int64, sid string, allOrders bool, c ShopperCom
 		details = fmt.Sprintf("Assigned task %d to %s (simulated shopper); order remains %s", assignmentID, name, status)
 	case "reassign":
 		assignmentID, from, to = current.ID, current.ShopperID, c.ShopperID
-		_, err = tx.Exec(`UPDATE shopper_assignments SET shopper_id=?,version=version+1 WHERE id=?`, to, assignmentID)
+		_, err = tx.Exec(`UPDATE shopper_assignments SET shopper_id=?,shopper_name=?,shopper_initials=?,version=version+1 WHERE id=?`, to, name, initials, assignmentID)
 		details = fmt.Sprintf("Task %d: %s → %s (simulated shoppers); recorded picking progress retained", assignmentID, current.ShopperName, name)
 	case "cancel":
 		assignmentID, from = current.ID, current.ShopperID
@@ -165,12 +185,16 @@ func (s *Store) AssignShopper(id int64, sid string, allOrders bool, c ShopperCom
 	if _, err = tx.Exec(`UPDATE orders SET order_version=order_version+1 WHERE id=?`, id); err != nil {
 		return err
 	}
-	if err = recordShopperEvent(tx, id, assignmentID, from, to, c.Key, hash, "shopper-"+c.Action, c.Reason, details); err != nil {
+	fromName := ""
+	if current != nil {
+		fromName = current.ShopperName
+	}
+	if err = recordShopperEvent(tx, id, assignmentID, from, to, fromName, name, c.Key, hash, "shopper-"+c.Action, c.Reason, details); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
-func recordShopperEvent(tx *sql.Tx, orderID, assignmentID, from, to int64, key, hash, action, reason, details string) error {
+func recordShopperEvent(tx *sql.Tx, orderID, assignmentID, from, to int64, fromName, toName, key, hash, action, reason, details string) error {
 	result, err := tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,?,?,?,?)`, orderID, key, hash, action, reason, details)
 	if err != nil {
 		return err
@@ -179,7 +203,7 @@ func recordShopperEvent(tx *sql.Tx, orderID, assignmentID, from, to int64, key, 
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT INTO shopper_event_links(event_id,assignment_id,from_shopper_id,to_shopper_id) VALUES(?,?,NULLIF(?,0),NULLIF(?,0))`, eventID, assignmentID, from, to)
+	_, err = tx.Exec(`INSERT INTO shopper_event_links(event_id,assignment_id,from_shopper_id,to_shopper_id,from_shopper_name,to_shopper_name) VALUES(?,?,NULLIF(?,0),NULLIF(?,0),?,?)`, eventID, assignmentID, from, to, fromName, toName)
 	return err
 }
 
@@ -193,13 +217,13 @@ func endShopperAssignment(tx *sql.Tx, id int64, outcome string) error {
 	if _, err = tx.Exec(`UPDATE shopper_assignments SET state='ended',version=version+1,ended=strftime('%Y-%m-%d %H:%M UTC','now') WHERE id=?`, current.ID); err != nil {
 		return err
 	}
-	return recordShopperEvent(tx, id, current.ID, current.ShopperID, 0, token(), "", "shopper-ended", "Order fulfillment ended the shopping task", fmt.Sprintf("Task %d for %s ended automatically: %s", current.ID, current.ShopperName, outcome))
+	return recordShopperEvent(tx, id, current.ID, current.ShopperID, 0, current.ShopperName, "", token(), "", "shopper-ended", "Order fulfillment ended the shopping task", fmt.Sprintf("Task %d for %s ended automatically: %s", current.ID, current.ShopperName, outcome))
 }
 
-// Every aggregate, filter and page starts with scoped_orders. The fixed roster
-// is public demo data; all workload and history is derived from authorized rows.
-const shopperOrderCTE = `WITH scoped_orders AS (
- SELECT o.* FROM orders o WHERE (? OR o.session_id=?)
+// Every aggregate, filter and page starts with scoped_orders. Roster profiles,
+// workload and history resolve exclusively from the authorized scope.
+const shopperOrderCTE = `WITH roster_scope AS (SELECT ? all_orders,? session_id), scoped_orders AS (
+ SELECT o.*,CASE WHEN scope.all_orders THEN '' ELSE scope.session_id END profile_scope FROM orders o,roster_scope scope WHERE (scope.all_orders OR o.session_id=scope.session_id)
 ), progress AS (
  SELECT o.id,
  COALESCE(SUM(CASE WHEN w.sale_unit='each' THEN w.picked_quantity ELSE 0 END),0) counted_picked,
@@ -209,25 +233,26 @@ const shopperOrderCTE = `WITH scoped_orders AS (
  COALESCE(MAX(CASE WHEN w.quantity>0 AND w.sale_unit='g' THEN 1 ELSE 0 END),0) has_weight
  FROM scoped_orders o LEFT JOIN working_order_items w ON w.order_id=o.id GROUP BY o.id
 ), historical_shoppers AS (
- SELECT DISTINCT e.order_id,s.id shopper_id,s.name
+ SELECT DISTINCT e.order_id,s.id shopper_id,CASE WHEN s.id=l.from_shopper_id THEN COALESCE(NULLIF(l.from_shopper_name,''),s.name) ELSE COALESCE(NULLIF(l.to_shopper_name,''),s.name) END name
  FROM scoped_orders o JOIN order_events e ON e.order_id=o.id
  JOIN shopper_event_links l ON l.event_id=e.id
  JOIN shoppers s ON s.id=l.from_shopper_id OR s.id=l.to_shopper_id
 ), tasks AS (
  SELECT o.*,p.counted_picked,p.counted_required,p.lines_picked,p.lines_required,p.has_weight,CASE WHEN p.has_weight=1 THEN p.lines_picked ELSE p.counted_picked END picked,CASE WHEN p.has_weight=1 THEN p.lines_required ELSE p.counted_required END required,
  COALESCE((SELECT group_concat(h.name,' ') FROM historical_shoppers h WHERE h.order_id=o.id),'') historical_names,
- a.id assignment_id,a.shopper_id,a.version assignment_version,a.state assignment_state,a.created assignment_created,a.ended assignment_ended,s.name shopper_name
+ a.id assignment_id,a.shopper_id,a.version assignment_version,a.state assignment_state,a.created assignment_created,a.ended assignment_ended,COALESCE(NULLIF(a.shopper_name,''),s.name) shopper_name,COALESCE(NULLIF(a.shopper_initials,''),s.initials) shopper_initials,COALESCE(profile.name,s.name) current_shopper_name
  FROM scoped_orders o JOIN progress p ON p.id=o.id
  LEFT JOIN shopper_assignments a ON a.order_id=o.id AND a.state='active'
  LEFT JOIN shoppers s ON s.id=a.shopper_id
+ LEFT JOIN shopper_roster_profiles profile ON profile.shopper_id=a.shopper_id AND profile.scope=o.profile_scope
 ) `
-const shopperTaskFilter = ` WHERE (?='' OR instr(lower(reference||' '||status||' '||completion_kind||' '||COALESCE(shopper_name,'')||CASE WHEN status IN ('Ready','Completed') THEN ' '||historical_names ELSE '' END),lower(?))>0)
+const shopperTaskFilter = ` WHERE (?='' OR instr(lower(reference||' '||status||' '||completion_kind||' '||COALESCE(shopper_name,'')||' '||COALESCE(current_shopper_name,'')||CASE WHEN status IN ('Ready','Completed') THEN ' '||historical_names ELSE '' END),lower(?))>0)
  AND (?='all' OR (?='open' AND status IN ('Placed','Picking')) OR (?='active' AND assignment_id IS NOT NULL) OR (?='unassigned' AND status IN ('Placed','Picking') AND assignment_id IS NULL) OR (?='closed' AND status IN ('Ready','Completed')))
  AND (?=0 OR shopper_id=? OR (status IN ('Ready','Completed') AND EXISTS(
  SELECT 1 FROM historical_shoppers h WHERE h.order_id=tasks.id AND h.shopper_id=?))) `
 
 func (s *Store) Shoppers(f ShopperFilters, sid string, allOrders bool, selected int64) (*ShoppersWorkspace, error) {
-	out := &ShoppersWorkspace{Query: f.Query, Status: f.Status, ShopperFilter: f.ShopperFilter, Page: f.Page, CommandKey: token()}
+	out := &ShoppersWorkspace{Query: f.Query, Status: f.Status, ShopperFilter: f.ShopperFilter, Page: f.Page, CommandKey: token(), RosterCommandKey: token(), RosterQuery: f.RosterQuery, RosterStatus: f.RosterStatus, RosterCreating: f.NewPerson}
 	if selected > 0 {
 		o, err := s.ManagerOrder(selected, sid, allOrders)
 		if err != nil {
@@ -245,26 +270,48 @@ func (s *Store) Shoppers(f ShopperFilters, sid string, allOrders bool, selected 
 		return nil, err
 	}
 	out.UnassignedOrders = out.OpenOrders - out.AssignedOrders
-	rows, err := tx.Query(shopperOrderCTE+`SELECT s.id,s.name,s.initials,COUNT(t.id),CASE WHEN COALESCE(MAX(t.has_weight),0)=1 THEN COALESCE(SUM(t.lines_picked),0) ELSE COALESCE(SUM(t.counted_picked),0) END,CASE WHEN COALESCE(MAX(t.has_weight),0)=1 THEN COALESCE(SUM(t.lines_required),0) ELSE COALESCE(SUM(t.counted_required),0) END,COALESCE(MAX(t.has_weight),0) FROM shoppers s LEFT JOIN tasks t ON t.shopper_id=s.id GROUP BY s.id ORDER BY s.id`, allOrders, sid)
+	out.Roster, err = loadShopperRoster(tx, sid, allOrders)
+	if err != nil {
+		return nil, err
+	}
+	if f.PersonID > 0 {
+		out.RosterSelected = shopperInRoster(out.Roster, f.PersonID)
+		if out.RosterSelected == nil {
+			return nil, ErrNotFound
+		}
+		out.RosterCreating = false
+	}
+	for _, profile := range out.Roster {
+		if (f.RosterStatus == "active" && profile.Archived) || (f.RosterStatus == "archived" && !profile.Archived) {
+			continue
+		}
+		if f.RosterQuery != "" && !strings.Contains(strings.ToLower(profile.Name+" "+profile.Initials), strings.ToLower(f.RosterQuery)) {
+			continue
+		}
+		out.VisibleRoster = append(out.VisibleRoster, profile)
+	}
+	scope, err := shopperScope(sid, allOrders)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := tx.Query(`SELECT name,action,details,created FROM shopper_roster_events WHERE scope=? ORDER BY id DESC LIMIT 20`, scope)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var sh Shopper
-		if err = rows.Scan(&sh.ID, &sh.Name, &sh.Initials, &sh.ActiveOrders, &sh.Picked, &sh.Required, &sh.HasWeight); err != nil {
+		var event ShopperRosterEvent
+		if err = rows.Scan(&event.Name, &event.Action, &event.Details, &event.Created); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		if sh.Required > 0 {
-			sh.Percent = 100 * sh.Picked / sh.Required
-		}
-		out.Roster = append(out.Roster, sh)
+		out.RosterEvents = append(out.RosterEvents, event)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
 		return nil, err
 	}
+
 	args := []any{allOrders, sid, f.Query, f.Query, f.Status, f.Status, f.Status, f.Status, f.Status, f.ShopperID, f.ShopperID, f.ShopperID}
 	if err = tx.QueryRow(shopperOrderCTE+`SELECT COUNT(*) FROM tasks`+shopperTaskFilter, args...).Scan(&out.Total); err != nil {
 		return nil, err
@@ -293,22 +340,22 @@ func (s *Store) Shoppers(f ShopperFilters, sid string, allOrders bool, selected 
 		out.Last = min(out.First+19, int(out.Total))
 	}
 	args = append(args, 20, (out.Page-1)*20)
-	rows, err = tx.Query(shopperOrderCTE+`SELECT id,reference,status,created,total,order_version,completion_kind,picked,required,has_weight,assignment_id,shopper_id,assignment_version,shopper_name,assignment_state,assignment_created,assignment_ended FROM tasks`+shopperTaskFilter+` ORDER BY id DESC LIMIT ? OFFSET ?`, args...)
+	rows, err = tx.Query(shopperOrderCTE+`SELECT id,reference,status,created,total,order_version,completion_kind,picked,required,has_weight,assignment_id,shopper_id,assignment_version,shopper_name,shopper_initials,assignment_state,assignment_created,assignment_ended FROM tasks`+shopperTaskFilter+` ORDER BY id DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var task ShopperTask
 		var aid, shopper, version sql.NullInt64
-		var name, state, created, ended sql.NullString
+		var name, initials, state, created, ended sql.NullString
 		o := &task.Order
-		if err = rows.Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Version, &o.CompletionKind, &o.PickedCount, &o.RequiredCount, &o.HasWeight, &aid, &shopper, &version, &name, &state, &created, &ended); err != nil {
+		if err = rows.Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Version, &o.CompletionKind, &o.PickedCount, &o.RequiredCount, &o.HasWeight, &aid, &shopper, &version, &name, &initials, &state, &created, &ended); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		setOrderProgress(o)
 		if aid.Valid {
-			task.Assignment = &ShopperAssignment{ID: aid.Int64, OrderID: o.ID, ShopperID: shopper.Int64, Version: version.Int64, ShopperName: name.String, State: state.String, Created: created.String, Ended: ended.String}
+			task.Assignment = &ShopperAssignment{ID: aid.Int64, OrderID: o.ID, ShopperID: shopper.Int64, Version: version.Int64, ShopperName: name.String, ShopperInitials: initials.String, State: state.String, Created: created.String, Ended: ended.String}
 			o.Assignment = task.Assignment
 		}
 		out.Tasks = append(out.Tasks, task)

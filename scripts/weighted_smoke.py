@@ -88,7 +88,15 @@ class Page(HTMLParser):
         if tag == "form" and self.current is not None:
             self.all_forms.append(self.current)
             for key in self.current["keys"]:
-                self.forms[key] = self.current
+                # Model the selected native submitter, including shared basket
+                # buttons whose formaction differs from the checkout form.
+                button = self.controls.get(key, {})
+                form = copy.deepcopy(self.current)
+                form["action"] = button.get("formaction", form["action"])
+                form["method"] = button.get("formmethod", form["method"])
+                if button.get("name"):
+                    form["fields"][button["name"]] = button.get("value", "")
+                self.forms[key] = form
             self.current = None
 
     def handle_data(self, data):

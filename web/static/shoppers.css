@@ -95,3 +95,35 @@
   .order-assignment { padding: 16px; }
   .order-assignment strong .demo-person-label { display: block; margin: 4px 0 0; }
 }
+
+/* Focused roster management shares the existing assignment workspace. */
+.shopper-section-heading > div .eyebrow { margin: 0 0 4px; }
+.roster-filters { display: grid; grid-template-columns: minmax(160px,1.5fr) minmax(150px,1fr) auto; align-items: end; gap: 12px; border-block: 1px solid var(--line); padding: 14px 0; }
+.roster-filters > div { min-width: 0; }
+.roster-filters input,.roster-filters select { width: 100%; }
+.roster-scope { max-width: 90ch; margin: 13px 0 19px; }
+.shopper-card-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-top: 15px; }
+.shopper-card-actions .text-link { font-size: 12px; }
+.shopper-card-actions .secondary { min-height: 44px; }
+.shopper-availability { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 3px; font-size: 11px; font-weight: 700; padding: 4px 7px; margin: 12px 0 0; background: var(--theme-quiet); }
+.shopper-availability.availability-available { border-color: var(--ink); background: var(--blue-wash); }
+.shopper-card-archived .shopper-availability { background: var(--theme-complete-surface); color: var(--theme-complete-text); border-color: var(--theme-complete-border); }
+.shopper-card-archived { border-top-style: dashed; }
+.shopper-capacity-note { margin: 10px 0; font-size: 12px; font-weight: 700; }
+.roster-current-person { overflow-wrap: anywhere; }
+.roster-edit-form .fine-print { margin-top: 7px; }
+.roster-editor .roster-archive-area { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 20px; }
+.roster-archive-area h3 { font-size: 18px; margin: 0 0 8px; }
+.roster-archive-area form { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.roster-empty { grid-column: 1/-1; }
+@media(max-width:650px) {
+  .roster-filters { grid-template-columns: 1fr; }
+  .roster-filters input,.roster-filters select { font-size: 16px; }
+  .roster-filters > button { justify-self: start; }
+  .shopper-section-heading { align-items: flex-start; }
+  .shopper-card-actions .secondary { font-size: 12px; }
+}
+
+.roster-history { margin-bottom: 24px; }
+.roster-history > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: list-item; padding-block: 10px; }
+.roster-history > summary .muted { margin-left: 12px; font-weight: 400; font-size: 12px; }

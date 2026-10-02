@@ -99,7 +99,7 @@ def main():
             process, owner = start(binary, 'current')
             owner.login()
             oid, _ = create_order(owner, True)
-        assert query('SELECT MAX(version) FROM schema_version') == [(12,)]
+        assert query('SELECT MAX(version) FROM schema_version') == [(13,)]
         assert query('PRAGMA foreign_key_check') == []
         context = {'q': 'Apples & <review>', 'state': 'Picking', 'held': 'held',
                    'assigned': 'unassigned', 'sort': 'oldest', 'page': '2'}

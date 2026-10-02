@@ -18,10 +18,10 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Transactional catalog change history and manager inventory adjustments with a reason and audit trail
 - Inline manager Mark picked, quantity, substitution and removal controls with compact product search
 - Partial finish and whole-order cancellation with immutable placed receipts, separate final totals and scoped audit
-- Shoppers workspace with a fixed simulated roster, actual assigned-order progress and explicitly unrecorded scan rates
+- Shoppers workspace with scoped simulated roster editing, manager-set availability, assignment capacity, archive/restore and actual recorded progress
 - Reasoned, replay-safe assign/reassign/cancel-task controls, scoped task history and automatic task closure at Ready or completion
 - Manager pick tickets with per-item quantities, current assignment links and guarded readiness
-- Visible form recovery after manager login, retained quantity drafts and no automatic mutation replay
+- Visible form recovery after manager login, retained quantity/instruction drafts and no automatic mutation replay
 - Customer status refresh with a normal HTML fallback
 - Compact light/dark toggle with saved preferences and a system appearance option
 - Dismissible demo guide pointing visitors to the Employees workspace
@@ -125,3 +125,7 @@ HTMX is bundled locally with its license. No frontend build service or runtime C
 Open a product in Products and choose **Manage product image**. Preview a JPEG or PNG, review the normalized orientation/colors, then confirm that the demo artwork may be public. The app stores resized JPEG variants and strips filenames/embedded metadata. Existing illustrations stay available. Uploads have strict input, pixel, concurrency, rate and retained-storage limits; resets preserve recovery assets and budgets. See [Product images](docs/PRODUCT_IMAGES.md) for limits and recovery behavior.
 
 Schema 12 extends sales and featured choices to weighed products. Offers record cents per kilogram separately from counted prices, gram quantities are chosen on product pages, and placed order rates remain fixed during measurement.
+
+Schema 13 adds visitor-scoped simulated shopper profiles, availability and active-order
+capacity. New assignments check eligibility transactionally, while current work and
+historical identities survive profile edits and archive/restore. See [Shoppers](docs/SHOPPERS.md).
