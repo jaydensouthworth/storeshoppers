@@ -5,7 +5,7 @@
 .detail-art > svg { width: 76%; max-width: 360px; height: 360px; transform: rotate(-7deg); }
 .detail-department { position: absolute; top: 22px; left: 23px; z-index: 1; padding: 8px 12px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .detail-art-stamp { position: absolute; bottom: 23px; right: 23px; font: 700 16px/.95 var(--display); border: 3px solid var(--ink); padding: 10px 12px; transform: rotate(6deg); }
-.detail-intro { padding: 34px; min-width: 0; }
+.detail-intro { padding: 34px; min-width: 0; overflow-wrap: anywhere; }
 .detail-intro h1 { font-size: clamp(36px,4.5vw,58px); line-height: 1; letter-spacing: -.035em; margin: 12px 0 17px; overflow-wrap: anywhere; }
 .detail-package-label { font-weight: 700; font-size: 15px; margin: 0 0 15px; }
 .detail-teaser { font-size: 14px; line-height: 1.7; color: var(--muted); }
@@ -46,7 +46,7 @@
 .detail-side-note .text-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--yellow); }
 .detail-note-mark { display: inline-block; background: var(--yellow); color: var(--ink); font: 700 25px/1 var(--display); padding: 12px; transform: rotate(-5deg); margin-bottom: 20px; }
 .product-detail-link { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 4px; }
-.product-art-link { display: block; color: inherit; }
+.product-art-link { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: inherit; }
 .product-art-link:focus-visible { outline-offset: -6px; }
 .catalog-details-fields { padding: 20px; margin: 5px 0; border: 1px solid var(--line); min-width: 0; }
 .catalog-details-fields legend { font-size: 16px; font-weight: 700; padding: 0 6px; }
