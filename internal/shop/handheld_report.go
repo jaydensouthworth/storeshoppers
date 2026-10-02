@@ -30,6 +30,13 @@ func (s *Store) ReportHandheldItem(raw, csrf string, c HandheldReport) (Handheld
 	if err != nil {
 		return HandheldReportResult{}, err
 	}
+	var practice bool
+	if err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM employee_store_orders WHERE order_id=? AND epoch=? AND practice=1)`, g.OrderID, g.Epoch).Scan(&practice); err != nil {
+		return HandheldReportResult{}, err
+	}
+	if practice {
+		return HandheldReportResult{}, ErrEmployeePractice
+	}
 	c.Note = strings.TrimSpace(c.Note)
 	if c.LineID < 1 || c.AssignmentVersion < 1 || c.Version < 1 || c.PickVersion < 1 || len(c.Key) < 16 || len(c.Key) > 100 || !validHandheldNote(c.Note) {
 		return HandheldReportResult{}, ErrInvalid

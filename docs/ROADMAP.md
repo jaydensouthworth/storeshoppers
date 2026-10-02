@@ -154,3 +154,7 @@ finish require release, and cancellation closes the hold atomically. Queue
 context survives all ticket forms and the assignment round-trip. Browser visual
 QA complements the migration, scope and command tests. No analytics, risk score,
 physical logistics, payments, refunds or customer accounts were added.
+
+### Shared employee queue, schema16
+
+Implemented: generated fictional employee identity, shared store order queue, atomic Start/Continue shopping, pick/unpick corrections, release with saved progress, and all-picked/no-hold Ready. New public-demo checkouts enroll explicitly; historical private orders and manager permissions are unchanged. One deliberate shared practice setup never regenerates or replaces active work. Structured substitution proposals/customer approvals remain the next phase; ordinary chat does not authorize them.

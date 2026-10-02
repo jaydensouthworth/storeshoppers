@@ -25,7 +25,9 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Customer status refresh with a normal HTML fallback
 - Compact light/dark toggle with saved preferences and a system appearance option
 - Dismissible demo guide pointing visitors to the Employees workspace
-- Separate phone-first in-store demo with one-time assignment pairing and independent customer/phone sessions
+- Phone-first employee dashboard with generated fictional identities, a shared store queue and atomic Start shopping claims
+- Shared practice orders created once, guarded pick/unpick, release/reclaim and Ready transitions without manager access
+- Optional one-time assignment pairing with independent customer/phone sessions
 - Real Code 128 product labels, user-triggered camera/photo decoding and manual fallback
 - Explicit replay-safe counted-pick and measured-weight confirmation with shared manager progress and revocable task access
 - Phone actual-gram amount/stock review and private item reports routed to the manager’s review queue
@@ -138,3 +140,5 @@ historical identities survive profile edits and archive/restore. See [Shoppers](
 Schema 14 adds one-time, short-lived phone pairing and revocable assignment-scoped grants. The separate `/handheld/` workspace shares authorized counted picking with the manager, preserves stock and placed receipts, and supports local camera/photo decoding without uploads. Product pages expose real demo scan labels. Phone weight review and bounded item reports reuse the existing measurement and manager-hold rules. Structured substitution approvals and staging remain staged follow-ups; schema15 messaging is described below. See [Handheld demo](docs/HANDHELD.md).
 
 Schema 15 adds an append-only, per-order customer/shopper message stream. Customer ownership and phone assignment grants stay separate; messages do not change picking versions, stock, receipts or manager-only notes. The dedicated chat pages have bounded history, polling, ordinary HTML sends and explicit uncertain-send checks. See [Order messages](docs/ORDER_MESSAGES.md).
+
+Schema 16 adds the public-demo employee dashboard at `/handheld/employee`. New demo checkout orders join one shared store queue; historical/private orders are not backfilled. Independent fictional employees claim work atomically, reuse saved progress, return work to the queue and mark fully picked, unheld orders Ready. Expired shifts release ownership without resetting items or stock. Practice creation is a deliberate one-time shared transaction. See [Employee shopping](docs/EMPLOYEES.md).

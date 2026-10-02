@@ -96,6 +96,12 @@ func (s *Store) Checkout(sid, key string, revision int64, quote string) (int64, 
 	return s.CheckoutWithInstructions(sid, key, revision, quote, "")
 }
 func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote, instructions string) (int64, error) {
+	return s.checkoutWithInstructions(sid, key, revision, quote, instructions, false)
+}
+
+// Only the explicitly public demo HTTP checkout enrolls new orders in the
+// employee store. Historical/private orders are never backfilled.
+func (s *Store) checkoutWithInstructions(sid, key string, revision int64, quote, instructions string, sharedDemo bool) (int64, error) {
 	if err := s.ExpireHolds(); err != nil {
 		return 0, err
 	}
@@ -156,6 +162,11 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 	id, e := result.LastInsertId()
 	if e != nil {
 		return 0, e
+	}
+	if sharedDemo {
+		if _, e = tx.Exec(`INSERT INTO employee_store_orders(order_id,epoch) SELECT ?,epoch FROM handheld_state WHERE id=1`, id); e != nil {
+			return 0, e
+		}
 	}
 	for _, l := range b.Lines {
 		if _, e = tx.Exec(`INSERT INTO order_items(order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step,subtotal) VALUES(?,?,?,?,?,?,?,?,?,?)`, id, l.Product.ID, l.Product.Name, l.Product.EffectivePrice(), l.Quantity, l.Product.SKU, l.Product.SaleUnit, l.Product.PriceBasis, l.Product.QuantityStep, l.Subtotal); e != nil {

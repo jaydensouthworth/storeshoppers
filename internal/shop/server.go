@@ -130,6 +130,7 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("GET /products/{id}", a.showProduct)
 	a.mux.HandleFunc("GET /products/{id}/barcode.png", a.showProductBarcode)
 	a.registerHandheldRoutes()
+	a.registerEmployeeRoutes()
 	a.registerMessageRoutes()
 	a.mux.HandleFunc("GET /cart", a.showCart)
 	a.mux.HandleFunc("POST /cart", a.changeCart)
@@ -556,7 +557,7 @@ func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if e == nil {
-		id, e = a.store.CheckoutWithInstructions(s.ID, r.PostForm.Get("checkout_key"), rev, r.PostForm.Get("quote"), r.PostForm.Get("instructions"))
+		id, e = a.store.checkoutWithInstructions(s.ID, r.PostForm.Get("checkout_key"), rev, r.PostForm.Get("quote"), r.PostForm.Get("instructions"), a.config.DemoMode)
 	}
 	if e == nil {
 		redirect(w, r, fmt.Sprintf("/orders/%d", id))

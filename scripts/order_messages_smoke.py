@@ -184,7 +184,7 @@ def main():
 
         try:
             process = start()
-            assert query("SELECT max(version) FROM schema_version") == [(15,)], "Unexpected message schema"
+            assert query("SELECT max(version) FROM schema_version") == [(16,)], "Unexpected message schema"
             desktop.login()
             _, create = desktop.get("/manager/catalog?tab=new")
             product_form = create.forms["create-product"]

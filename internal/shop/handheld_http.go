@@ -14,6 +14,7 @@ const handheldCookie = "shop_handheld"
 const handheldPairCookie = "shop_handheld_pair"
 
 type HandheldView struct {
+	DemoMode                                                      bool
 	RecoveringPick, RecoveringWeight                              bool
 	CSRF, CommandKey, Message, Error                              string
 	ConnectCode, CodeDraft, PickedDraft, FormatDraft, SourceDraft string
@@ -87,15 +88,20 @@ func (a *App) renderHandheldTemplate(w http.ResponseWriter, name string, value a
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	// Native same-origin form POSTs must retain their Origin. no-referrer
+	// makes browsers send Origin: null; the strict origin guard must reject it.
+	// same-origin still suppresses referrers to every other origin, and URL
+	// fragments (including one-use pairing links) are never sent as referrers.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body.Bytes())
 }
 func handheldProblem(err error) bool {
-	return errors.Is(err, ErrHandheldAccess) || errors.Is(err, ErrHandheldPairing) || errors.Is(err, ErrHandheldCSRF) || errors.Is(err, ErrHandheldAttempts) || errors.Is(err, ErrHandheldIssued) || errors.Is(err, ErrHandheldWeight) || errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict) || errors.Is(err, ErrTerminal) || errors.Is(err, ErrShopperArchived)
+	return errors.Is(err, ErrEmployeePractice) || errors.Is(err, ErrHandheldAccess) || errors.Is(err, ErrHandheldPairing) || errors.Is(err, ErrHandheldCSRF) || errors.Is(err, ErrHandheldAttempts) || errors.Is(err, ErrHandheldIssued) || errors.Is(err, ErrHandheldWeight) || errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict) || errors.Is(err, ErrTerminal) || errors.Is(err, ErrShopperArchived)
 }
 func (a *App) handheldPage(w http.ResponseWriter, r *http.Request, v HandheldView, lineID int64) {
+	v.DemoMode = a.config.DemoMode
 	if v.CommandKey == "" {
 		v.CommandKey = token()
 	}

@@ -128,7 +128,7 @@ def main():
         try:
             with closing(sqlite3.connect(db_path)) as db:
                 assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 72
-                assert db.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 15
+                assert db.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 16
             _, deodorant = request("/products/71")
             assert "Everyday deodorant" in deodorant and 'id="nutrition-title"' not in deodorant
             _, razors = request("/products/72")

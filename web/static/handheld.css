@@ -130,3 +130,25 @@
   .handheld-review-values > div { grid-template-columns:minmax(0,1fr); gap:4px; }
   .handheld-review-values dd { text-align:left; }
 }
+
+/* Store-scoped employee dashboard. No manager controls or customer authority. */
+.employee-welcome { padding:8px 0 24px; }
+.employee-welcome > p { color:var(--muted); font-size:14px; line-height:1.6; }
+.employee-welcome .handheld-person { color:var(--ink); }
+.employee-stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:2px solid var(--ink); margin-top:22px; background:var(--yellow); color:var(--brand-ink); }
+.employee-stats > div { padding:16px; }
+.employee-stats > div + div { border-left:1px solid var(--brand-ink); }
+.employee-stats strong { display:block; font:700 36px/1 var(--display); }
+.employee-stats span { display:block; font-size:12px; margin-top:6px; }
+.employee-queue { display:grid; gap:16px; }
+.employee-order { border:1px solid var(--ink); border-top:4px solid var(--ink); padding:18px; background:var(--theme-surface); }
+.employee-order.is-mine { border-top-color:var(--brand-red); }
+.employee-order h3 { font:700 27px/1.2 var(--display); margin:8px 0; overflow-wrap:anywhere; }
+.employee-order > p { color:var(--muted); font-size:13px; }
+.employee-order progress { width:100%; height:8px; margin:0 0 15px; accent-color:var(--brand-red); }
+.employee-order form { margin:0; }
+.employee-order-actions { display:grid; gap:12px; margin-top:12px; }
+.employee-order-actions summary { cursor:pointer; min-height:44px; display:flex; align-items:center; font-size:12px; text-decoration:underline; }
+.employee-order-actions details p { font-size:12px; color:var(--muted); }
+.employee-practice { margin-top:26px; }
+.employee-assigned-note { margin-bottom:0; }

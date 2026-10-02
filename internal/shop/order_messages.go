@@ -92,6 +92,13 @@ func handheldMessageIdentityTx(tx *sql.Tx, raw, csrf string, write bool, now int
 	if err != nil {
 		return messageIdentity{}, err
 	}
+	var practice bool
+	if err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM employee_store_orders WHERE order_id=? AND epoch=? AND practice=1)`, g.OrderID, g.Epoch).Scan(&practice); err != nil {
+		return messageIdentity{}, err
+	}
+	if practice {
+		return messageIdentity{}, ErrEmployeePractice
+	}
 	v := &MessageConversation{OrderID: g.OrderID, Status: g.Status, ContextVersion: g.Version, CSRF: g.CSRF, Expires: g.Expires, ConversationKey: messageConversationKey(g.Epoch, g.OrderID, g.Owner)}
 	if err = tx.QueryRow(`SELECT reference FROM orders WHERE id=?`, g.OrderID).Scan(&v.Reference); err != nil {
 		return messageIdentity{}, err

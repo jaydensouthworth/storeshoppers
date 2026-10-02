@@ -41,7 +41,7 @@ type HandheldLine struct {
 type HandheldTask struct {
 	ID, Version, Expires, PickedLines, RequiredLines                      int64
 	Reference, Status, Instructions, LastRecorded, LastSync, ExpiresLabel string
-	Held                                                                  bool
+	Held, Practice, Employee                                              bool
 	Assignment                                                            ShopperAssignment
 	Lines                                                                 []HandheldLine
 }
@@ -124,12 +124,16 @@ func handheldGrantTx(tx *sql.Tx, raw, csrf string, requireCSRF bool, now int64) 
 	}
 	err := tx.QueryRow(`SELECT g.id,a.order_id,g.assignment_id,g.assignment_version,g.shopper_id,g.expires,g.csrf,g.owner_session_id,g.scope,g.epoch,a.shopper_name,o.status,o.order_version,g.last_recorded
  FROM handheld_grants g JOIN handheld_state h ON h.id=1 AND h.epoch=g.epoch
- JOIN sessions owner ON owner.id=g.owner_session_id AND owner.expires>?
+ JOIN sessions owner ON owner.id=g.owner_session_id
  JOIN shopper_assignments a ON a.id=g.assignment_id AND a.version=g.assignment_version AND a.shopper_id=g.shopper_id AND a.state='active'
  JOIN orders o ON o.id=a.order_id AND o.session_id=g.owner_session_id AND o.status IN ('Placed','Picking')
  JOIN shoppers s ON s.id=g.shopper_id
  LEFT JOIN shopper_roster_profiles p ON p.shopper_id=s.id AND p.scope=g.scope
- WHERE g.token_hash=? AND g.revoked=0 AND g.expires>? AND COALESCE(p.archived,0)=0 AND (s.baseline=1 OR s.scope=g.scope)`, now, handheldHash(raw), now).Scan(&g.ID, &g.OrderID, &g.AssignmentID, &g.AssignmentVersion, &g.ShopperID, &g.Expires, &g.CSRF, &g.Owner, &g.Scope, &g.Epoch, &g.ShopperName, &g.Status, &g.Version, &g.LastRecorded)
+ WHERE g.token_hash=? AND g.revoked=0 AND g.expires>? AND COALESCE(p.archived,0)=0 AND (s.baseline=1 OR s.scope=g.scope)
+ AND ((g.scope<>? AND owner.expires>?) OR (g.scope=? AND EXISTS(
+ SELECT 1 FROM employee_grant_links l JOIN employee_sessions e ON e.token_hash=l.employee_hash
+ JOIN employee_store_orders so ON so.order_id=o.id AND so.epoch=e.epoch
+ WHERE l.grant_id=g.id AND e.epoch=g.epoch AND e.shopper_id=g.shopper_id AND e.expires>? AND e.revoked=0)))`, handheldHash(raw), now, employeeStoreScope, now, employeeStoreScope, now).Scan(&g.ID, &g.OrderID, &g.AssignmentID, &g.AssignmentVersion, &g.ShopperID, &g.Expires, &g.CSRF, &g.Owner, &g.Scope, &g.Epoch, &g.ShopperName, &g.Status, &g.Version, &g.LastRecorded)
 	if errors.Is(err, sql.ErrNoRows) {
 		return g, ErrHandheldAccess
 	}
@@ -142,8 +146,8 @@ func handheldGrantTx(tx *sql.Tx, raw, csrf string, requireCSRF bool, now int64) 
 	return g, nil
 }
 func handheldTaskTx(tx *sql.Tx, g handheldGrant, now int64) (*HandheldTask, error) {
-	out := &HandheldTask{ID: g.OrderID, Version: g.Version, Expires: g.Expires, Status: g.Status, LastRecorded: handheldTime(g.LastRecorded), LastSync: handheldTime(now), ExpiresLabel: handheldTime(g.Expires)}
-	err := tx.QueryRow(`SELECT reference,instructions,attention_reason<>'' FROM orders WHERE id=?`, g.OrderID).Scan(&out.Reference, &out.Instructions, &out.Held)
+	out := &HandheldTask{Employee: g.Scope == employeeStoreScope, ID: g.OrderID, Version: g.Version, Expires: g.Expires, Status: g.Status, LastRecorded: handheldTime(g.LastRecorded), LastSync: handheldTime(now), ExpiresLabel: handheldTime(g.Expires)}
+	err := tx.QueryRow(`SELECT reference,instructions,attention_reason<>'',EXISTS(SELECT 1 FROM employee_store_orders so WHERE so.order_id=orders.id AND so.epoch=? AND so.practice=1) FROM orders WHERE id=?`, g.Epoch, g.OrderID).Scan(&out.Reference, &out.Instructions, &out.Held, &out.Practice)
 	if err != nil {
 		return nil, err
 	}

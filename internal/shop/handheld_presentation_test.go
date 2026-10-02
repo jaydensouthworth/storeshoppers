@@ -70,7 +70,7 @@ func TestHandheldCSPAndPublicNavigationBoundaries(t *testing.T) {
 	if strings.Contains(home.Header().Get("Content-Security-Policy"), "blob:") {
 		t.Fatal("phone-only media permission widened storefront policy")
 	}
-	if !strings.Contains(home.Body.String(), `href="/handheld/"`) || !strings.Contains(home.Body.String(), "In-store shopping demo") {
+	if !strings.Contains(home.Body.String(), `href="/handheld/employee"`) || !strings.Contains(home.Body.String(), "Test employee shopping app") {
 		t.Fatal("storefront lacks clearly marked phone entry")
 	}
 	if !strings.Contains(phone.Body.String(), `action="/handheld/connect"`) || strings.Contains(phone.Body.String(), `class="manager-shell"`) {

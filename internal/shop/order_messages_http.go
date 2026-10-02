@@ -73,6 +73,12 @@ func (a *App) messageConversation(r *http.Request, phone bool, q MessageQuery) (
 	return a.store.CustomerMessages(id, messageCustomerCookie(r), q)
 }
 func (a *App) messageAccessError(w http.ResponseWriter, err error) bool {
+	if errors.Is(err, ErrEmployeePractice) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Messages-Access", "ended")
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return true
+	}
 	if errors.Is(err, ErrHandheldAccess) || errors.Is(err, ErrNotFound) || errors.Is(err, ErrMessageCSRF) || errors.Is(err, ErrHandheldCSRF) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -126,7 +132,9 @@ func (a *App) renderMessages(w http.ResponseWriter, r *http.Request, v OrderMess
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	// Preserve Origin for the plain-HTML form fallback while suppressing
+	// referrers to other origins. Keep the global Origin/CSRF guards strict.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Add("Vary", "HX-Request")
 	w.Header().Set("X-Messages-State", messageState(v))
 	w.Header().Set("X-Messages-Context", fmt.Sprintf("%s/%d/%d", v.ConversationKey, v.AssignmentID, v.AssignmentVersion))

@@ -1,6 +1,10 @@
 # Phone-first in-store demo
 
-## Two-screen journey
+## Employee dashboard (recommended)
+
+Use the storefront **Test employee shopping app** link. A generic fictional employee is created once for this browser shift and assigned to the shared Neighborhood Market. Claim an available store order with **Start shopping**; no manager login or pairing code is needed. See [Employee shopping](EMPLOYEES.md) for the shared queue, practice setup, expiry and concurrency rules.
+
+## Optional two-screen pairing journey
 
 1. On the desktop storefront, make a fake basket and place an order. Open **Employees**, assign a simulated shopper and choose **Connect shopper phone**.
 2. Create a pairing code. Scan the one-time QR link with the phone's ordinary camera or enter the displayed code at `/handheld/`. The phone must explicitly tap **Connect this phone**. Issuing another code revokes the earlier connection.
@@ -8,11 +12,11 @@
 4. Tap **Start camera** on the phone, choose a local barcode photo, or enter the code manually. Recognition fills a draft only. Tap **Review code**, check the product and saved quantity, then explicitly **Save picked quantity**. The input is the absolute total picked, not an increment.
 5. Manager and customer views read the same saved progress. The manager reviews the completed order and marks it Ready. Ready, reassignment, task cancellation, owner expiry and explicit revocation end this phone's authority.
 
-The storefront has a clearly marked **In-store shopping demo** entry. The phone has its own shell, large touch controls, list/item views, appearance preference, plain-HTML form fallback and a way back to the storefront. It does not inherit the customer's basket or manager session.
+The storefront has a prominent **Test employee shopping app** entry. Optional pairing remains available from `/handheld/`. The phone has its own shell, large touch controls, list/item views, appearance preference, plain-HTML form fallback and a way back to the storefront. It does not inherit the customer's basket or manager session.
 
 ## Authorization and scope
 
-Schema 14 adds short-lived, hash-only pairing invitations and assignment-scoped grants. A code has 128 bits of entropy and expires after ten minutes. Redemption is single use. A grant lasts at most eight hours and never longer than the owning visitor session. The bootstrap cookie lasts thirty minutes. Redemption has bounded per-bootstrap and global attempt windows and a cap on active bootstraps.
+Schema 14 adds short-lived, hash-only pairing invitations and assignment-scoped grants. A code has 128 bits of entropy and expires after ten minutes. Redemption is single use. A legacy paired grant lasts at most eight hours and never longer than the owning visitor session. Schema16 employee grants instead depend on their live employee shift and explicit shared-store membership, so the customer closing or expiring their session does not silently abandon work. The bootstrap cookie lasts thirty minutes. Redemption has bounded per-bootstrap and global attempt windows and a cap on active bootstraps.
 
 The pairing QR uses a URL fragment, so its secret is not sent in request paths, referrers or access logs. The phone clears the fragment before doing work and never redeems it automatically. A new pairing link opened while connected does not silently switch jobs: it clears the fragment, pauses scanning and asks the user to disconnect and reopen the link. Pairing pages and phone responses are private/no-store. Pairing is a fake-data task capability, not an employee account or production credential model.
 
@@ -78,3 +82,7 @@ The [project plan](https://chatgpt.com/space/page_6abd4f41ae448191a351b73099da86
 The [schema14 phone foundation commit 3098829](https://github.com/jaydensouthworth/storeshoppers/commit/3098829b82ab9c27450b66a4aa7304383e56696d) is deployed. Its [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37049056947) passed all test/container/persistence steps. It passed 398 top-level Go tests, 98 JavaScript checks and 13 real-process suites. The five new deployed assets matched bytes; all 77 storefront records (72 products, four offers, five featured entries) were retained after QA cleanup.
 
 Live desktop and 389 CSS-pixel checks passed for the clear entry, independent welcome shell, light/dark layouts and product scan label/full-size PNG. Connected live picking could not be completed: Chromium returned ERR_BLOCKED_BY_CLIENT for the pairing POST. Its cause was not established and the blocked action was not retried through another route. The synthetic order was cancelled normally, its stock restored, and browser appearance/bounds restored. Actual S23 Ultra optics remain unverified. The measured-weight/report extension is being validated as the next increment; these earlier live checks do not establish its connected-phone acceptance.
+
+## Native form origin policy
+
+Handheld, pairing and message HTML use `Referrer-Policy: same-origin`. This suppresses referrers to other origins while preserving the real Origin on same-origin native form POSTs. `no-referrer` causes navigate-mode POSTs to send `Origin: null`, which is correctly rejected by the application. The fix does not allow null/foreign origins, change CSRF validation, trust forwarded-host headers, or move pairing values into a query string. See [MDN on the policy’s Origin behavior](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy#effect_on_the_origin_header).
