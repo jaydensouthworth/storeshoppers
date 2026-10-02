@@ -57,6 +57,17 @@ func assertRedirect(t *testing.T, w *httptest.ResponseRecorder, path string, htm
 	}
 }
 
+func assertManagerMutationDenied(t *testing.T, w *httptest.ResponseRecorder, htmx bool) {
+	t.Helper()
+	if !htmx {
+		assertRedirect(t, w, "/manager/login", false)
+		return
+	}
+	if w.Code != http.StatusForbidden || w.Header().Get("X-Shop-Error") != "manager-expired" || w.Header().Get("HX-Redirect") != "" {
+		t.Errorf("manager mutation must retain draft with403 recovery: %d %v", w.Code, w.Header())
+	}
+}
+
 func TestHTTPRejectsCSRFOnEveryMutation(t *testing.T) {
 	for _, path := range []string{"/cart", "/cart/renew", "/manager/baskets/practice", "/manager/baskets/missing/items", "/manager/baskets/missing/renew", "/checkout", "/manager/login", "/manager/logout", "/manager/inventory", "/manager/orders/1/advance", "/manager/orders/1/items/1", "/manager/catalog/products", "/manager/catalog/products/1", "/manager/catalog/products/1/archive", "/manager/catalog/products/1/restore", "/manager/catalog/categories", "/manager/catalog/categories/1", "/manager/catalog/categories/1/archive", "/manager/catalog/categories/1/restore", "/manager/catalog/types", "/manager/catalog/types/1", "/manager/catalog/types/1/archive", "/manager/catalog/types/1/restore"} {
 		for _, tokenKind := range []string{"missing", "incorrect", "another session", "query string only"} {
@@ -154,7 +165,7 @@ func TestHTTPUnauthorizedManagerMutations(t *testing.T) {
 				}
 				for _, path := range []string{"/manager/inventory", fmt.Sprintf("/manager/orders/%d/advance", id), fmt.Sprintf("/manager/orders/%d/items/1", id), "/manager/catalog/products", "/manager/catalog/products/1", "/manager/catalog/products/1/archive", "/manager/catalog/products/1/restore", "/manager/catalog/categories", "/manager/catalog/categories/1", "/manager/catalog/categories/1/archive", "/manager/catalog/categories/1/restore", "/manager/catalog/types", "/manager/catalog/types/1", "/manager/catalog/types/1/archive", "/manager/catalog/types/1/restore"} {
 					w := testRequest(t, a, http.MethodPost, path, unauthorized, url.Values{"csrf": {unauthorized.CSRF}, "product_id": {"1"}, "version": {"2"}, "delta": {"1"}, "reason": {"Restock"}, "status": {"Placed"}}, headers)
-					assertRedirect(t, w, "/manager/login", htmx)
+					assertManagerMutationDenied(t, w, htmx)
 				}
 				if p := testProduct(t, s, 1); p.Stock != 23 || p.Version != 2 {
 					t.Error("unauthorized manager request changed stock")

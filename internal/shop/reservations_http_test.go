@@ -79,7 +79,12 @@ func TestReservationHTTPManagerGateOnAllBasketRoutes(t *testing.T) {
 				if route.method == http.MethodPost {
 					values = reservationManagerValues(visitor, b, "2")
 				}
-				assertRedirect(t, testRequest(t, a, route.method, route.path, visitor, values, headers), "/manager/login", htmx)
+				response := testRequest(t, a, route.method, route.path, visitor, values, headers)
+				if route.method == http.MethodPost {
+					assertManagerMutationDenied(t, response, htmx)
+				} else {
+					assertRedirect(t, response, "/manager/login", htmx)
+				}
 			}
 			assertReservationUnchanged(t, s, before)
 		})

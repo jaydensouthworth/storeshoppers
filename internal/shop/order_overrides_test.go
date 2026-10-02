@@ -143,8 +143,8 @@ func TestOrderOverridesAtomicFailureAndCapacity(t *testing.T) {
 		want   error
 	}{
 		{"stale", func(c *OrderCommand) { c.Version++ }, ErrConflict},
-		{"reason", func(c *OrderCommand) { c.Reason = "" }, ErrInvalid},
-		{"no disposition", func(c *OrderCommand) { c.Quantity = 0; c.Disposition = "" }, ErrInvalid},
+		{"reason", func(c *OrderCommand) { c.Reason = "bad\nreason" }, ErrInvalid},
+		{"invalid disposition", func(c *OrderCommand) { c.Quantity = 0; c.Disposition = "unknown" }, ErrInvalid},
 		{"out of stock substitute", func(c *OrderCommand) { c.Action = "substitute"; c.ReplacementID = 3; c.Quantity = 99 }, ErrStock},
 		{"same substitute", func(c *OrderCommand) { c.Action = "substitute"; c.ReplacementID = 1 }, ErrInvalid},
 		{"unknown substitute", func(c *OrderCommand) { c.Action = "substitute"; c.ReplacementID = 999 }, ErrNotFound},

@@ -50,7 +50,7 @@ func basketFormDraft(r *http.Request, b Basket) *ManagerDraft {
 	action := "add"
 	if strings.HasSuffix(r.URL.Path, "/renew") {
 		action = "renew"
-	} else if r.PostForm.Get("draft_action") != "add" {
+	} else {
 		pid, _ := num(r.PostForm.Get("product_id"))
 		for _, l := range b.Lines {
 			if l.Product.ID == pid {

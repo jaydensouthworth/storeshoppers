@@ -432,7 +432,7 @@ func TestHTTPPickingFormValidationAndGuards(t *testing.T) {
 	owner = testSession(t, s, owner.ID)
 	for _, htmx := range []bool{false, true} {
 		w = testRequest(t, a, http.MethodPost, path, owner, url.Values{"csrf": {owner.CSRF}, "picked": {"1"}, "version": {"1"}}, pickingHeaders(htmx))
-		assertRedirect(t, w, "/manager/login", htmx)
+		assertManagerMutationDenied(t, w, htmx)
 	}
 	if after := testOrder(t, s, id, owner.ID); !reflect.DeepEqual(before, after) {
 		t.Error("customer session without manager grant changed picking progress")

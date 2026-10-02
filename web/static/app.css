@@ -937,3 +937,7 @@ main.manager-layout { width: min(1480px,100%); }
   .picking-layout > .ticket-actions h2 { font-size: 25px; }
   .picking-layout > .ticket-actions .order-totals { margin-top: 12px; }
 }
+
+/* Mutation feedback belongs next to the control that was used. */
+.action-feedback { grid-column: 1 / -1; flex: 0 0 100%; width: 100%; margin: 12px 0 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.cart-line form:has(.action-feedback), .pick-line form:has(.action-feedback) { flex-wrap: wrap; }

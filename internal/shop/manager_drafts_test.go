@@ -80,7 +80,9 @@ func TestManagerBasketDraftRetainsValidationInputHTMLAndHTMX(t *testing.T) {
 					if kind == "add" {
 						values.Set("product_id", "2")
 					}
-					quantityID, reasonID = "basket-new-quantity", "basket-add-reason"
+					if kind == "add" {
+						quantityID, reasonID = "basket-new-quantity", "basket-add-reason"
+					}
 				case "renew":
 					values.Set("revision", "not-a-revision")
 					reasonID = "basket-renew-reason"
@@ -110,8 +112,8 @@ func TestManagerBasketDraftRetainsValidationInputHTMLAndHTMX(t *testing.T) {
 						t.Error("invalid number is lost to a number input without a visible draft summary")
 					}
 				}
-				if kind == "add" || kind == "add existing" {
-					selected := regexp.MustCompile(`<option\b[^>]*value="` + values.Get("product_id") + `"[^>]*\bselected\b`)
+				if kind == "add" {
+					selected := regexp.MustCompile(`<input\b[^>]*type="radio"[^>]*value="` + values.Get("product_id") + `"[^>]*\bchecked\b`)
 					if !selected.MatchString(body) {
 						t.Error("add form lost its submitted product selection")
 					}
@@ -253,7 +255,7 @@ func TestManagerDraftNeverReflectsUnauthorizedOrForeignBasketInput(t *testing.T)
 							t.Errorf("foreign validation draft returned %d, want 404", w.Code)
 						}
 					case "visitor":
-						assertRedirect(t, w, "/manager/login", htmx)
+						assertManagerMutationDenied(t, w, htmx)
 					case "csrf":
 						if w.Code != http.StatusForbidden {
 							t.Errorf("CSRF draft returned %d, want 403", w.Code)
@@ -428,7 +430,7 @@ func TestManagerBasketDraftRemovedLineRecoversInAddForm(t *testing.T) {
 			if got := managerDraftInput(t, body, "basket-add-reason"); got != values.Get("reason") {
 				t.Errorf("removed-line reason lost: %q", got)
 			}
-			if !regexp.MustCompile(`<option\b[^>]*value="1"[^>]*\bselected\b`).MatchString(body) {
+			if !regexp.MustCompile(`<input\b[^>]*type="radio"[^>]*value="1"[^>]*\bchecked\b`).MatchString(body) {
 				t.Error("removed-line product not selected in recovery form")
 			}
 			form := managerDraftForm(t, body, "basket-new-quantity")

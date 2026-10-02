@@ -37,6 +37,8 @@ type App struct {
 	resetPending atomic.Bool
 }
 type View struct {
+	CartDraft                                                *ManagerDraft
+	ProductPicker                                            *ProductPicker
 	ProductPage                                              *ProductDetailPage
 	ProductExamples                                          *ProductExamplesWorkspace
 	CatalogDetails                                           ProductDetails
@@ -102,7 +104,7 @@ func New(store *Store, cfg Config) (*App, error) {
 	if !cfg.DemoMode && cfg.ManagerPassword != "" && len(cfg.ManagerPassword) < 12 {
 		return nil, errors.New("MANAGER_PASSWORD must contain at least 12 characters")
 	}
-	tmpl, e := template.New("").Funcs(template.FuncMap{"catalogForm": catalogForm, "catalogTaxonomyPanel": catalogTaxonomyPanel, "newCatalogProduct": newCatalogProduct, "illustrations": catalogIllustrations, "money": Money, "nextStatus": func(s string) string {
+	tmpl, e := template.New("").Funcs(template.FuncMap{"lineWorkflow": lineWorkflow, "catalogForm": catalogForm, "catalogTaxonomyPanel": catalogTaxonomyPanel, "newCatalogProduct": newCatalogProduct, "illustrations": catalogIllustrations, "money": Money, "nextStatus": func(s string) string {
 		return map[string]string{"Placed": "Picking", "Picking": "Ready", "Ready": "Completed"}[s]
 	}, "eqInt": func(a, b int64) bool { return a == b }}).ParseFS(web.Files, "templates/*.html")
 	if e != nil {
@@ -161,6 +163,8 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}/restore", a.restoreCatalogTaxonomy)
 	a.mux.HandleFunc("POST /manager/orders/{id}/override", a.overrideOrder)
 	a.mux.HandleFunc("POST /manager/orders/{id}/lines/{line_id}/pick", a.recordWorkingLinePicked)
+	a.mux.HandleFunc("GET /manager/orders/{id}/products", a.searchOrderProducts)
+	a.mux.HandleFunc("GET /manager/baskets/{id}/products", a.searchBasketProducts)
 	a.mux.HandleFunc("GET /manager/orders/{id}", a.showPicking)
 	a.mux.HandleFunc("POST /manager/orders/{id}/items/{product_id}", a.recordPicked)
 	a.mux.HandleFunc("POST /manager/inventory", a.inventory)
@@ -263,24 +267,45 @@ func (a *App) form(w http.ResponseWriter, r *http.Request) (Session, bool) {
 	return a.formWithLimit(w, r, 8192)
 }
 func (a *App) formWithLimit(w http.ResponseWriter, r *http.Request, limit int64) (Session, bool) {
-	s, e := a.session(w, r)
+	var s Session
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	if e := r.ParseForm(); e != nil {
+		http.Error(w, "Invalid or oversized form", 400)
+		return s, false
+	}
+	cookie, cookieErr := r.Cookie("shop_session")
+	if cookieErr != nil {
+		w.Header().Set("X-Shop-Error", "csrf-expired")
+		http.Error(w, "This session changed or expired. Refresh the page before submitting again.", http.StatusForbidden)
+		return s, false
+	}
+	s, e := a.store.existingFormSession(cookie.Value)
+	if errors.Is(e, ErrNotFound) {
+		w.Header().Set("X-Shop-Error", "csrf-expired")
+		http.Error(w, "This session changed or expired. Refresh the page before submitting again.", http.StatusForbidden)
+		return s, false
+	}
 	if e != nil {
 		a.fail(w, e)
 		return s, false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, limit)
-	if e = r.ParseForm(); e != nil {
-		http.Error(w, "Invalid or oversized form", 400)
-		return s, false
-	}
 	if subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf")), []byte(s.CSRF)) != 1 {
-		http.Error(w, "Your form expired. Refresh and try again.", 403)
+		w.Header().Set("X-Shop-Error", "csrf-expired")
+		if cookie, err := r.Cookie("shop_session"); err == nil && cookie.Value == s.ID {
+			w.Header().Set("X-Shop-CSRF", s.CSRF)
+		}
+		http.Error(w, "Your form expired. Your change was not saved. Review your values and submit again, or refresh if this session changed.", 403)
 		return s, false
 	}
 	return s, true
 }
 func (a *App) guard(w http.ResponseWriter, r *http.Request, s Session) bool {
 	if a.config.ManagerPassword == "" || s.ManagerUntil <= time.Now().Unix() {
+		if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("X-Shop-Error", "manager-expired")
+			http.Error(w, "Manager access expired. This change was not saved. Sign in again, then review and submit your form.", http.StatusForbidden)
+			return false
+		}
 		redirect(w, r, "/manager/login")
 		return false
 	}
@@ -395,6 +420,10 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		v.Error = e.Error()
+		v.CartDraft = managerDraft(r, "cart")
+		if errors.Is(e, ErrConflict) {
+			w.Header().Set("X-Shop-Error", "stale-version")
+		}
 	} else {
 		v.Message = "Basket updated."
 	}
@@ -723,7 +752,7 @@ func (a *App) pickingView(w http.ResponseWriter, r *http.Request, id int64, mess
 	v.OrderCommandKey = token()
 	if problem != nil && r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/override") {
 		v.OrderOverrideDraft = make(map[string]string)
-		for _, field := range []string{"form_id", "product_id", "replacement_id", "quantity", "reason", "disposition", "remainder"} {
+		for _, field := range []string{"form_id", "product_id", "replacement_id", "quantity", "reason", "disposition", "remainder", "product_q", "picker_context", "picker_line_id"} {
 			value := r.PostForm.Get(field)
 			if len(value) > 1024 {
 				value = value[:1024]
@@ -738,6 +767,15 @@ func (a *App) pickingView(w http.ResponseWriter, r *http.Request, id int64, mess
 	v.Message = message
 	if problem != nil {
 		v.Error = problem.Error()
+		if errors.Is(problem, ErrConflict) {
+			w.Header().Set("X-Shop-Error", "stale-version")
+		}
+	}
+	if a.handleProductPickerError(w, r, a.populateProductPicker(r, &v, false)) {
+		return
+	}
+	if a.renderProductPicker(w, r, v) {
+		return
 	}
 	a.render(w, r, v, 200)
 }

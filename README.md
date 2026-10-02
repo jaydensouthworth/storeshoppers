@@ -16,11 +16,12 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Bounded plaintext checkout instructions and explicit shopping percentages
 - Task-focused manager sections with searchable lists and dedicated product editors
 - Transactional catalog change history and manager inventory adjustments with a reason and audit trail
-- Manager working-order add/remove/quantity/substitution controls with reasoned stock disposition
+- Inline manager Mark picked, quantity, substitution and removal controls with compact product search
 - Partial finish and whole-order cancellation with immutable placed receipts, separate final totals and scoped audit
 - Shoppers workspace with a fixed simulated roster, actual assigned-order progress and explicitly unrecorded scan rates
 - Reasoned, replay-safe assign/reassign/cancel-task controls, scoped task history and automatic task closure at Ready or completion
 - Manager pick tickets with per-item quantities, current assignment links and guarded readiness
+- Visible form recovery after manager login, retained quantity drafts and no automatic mutation replay
 - Customer status refresh with a normal HTML fallback
 - Persistent SQLite storage and locally bundled frontend assets
 
@@ -38,11 +39,11 @@ One Go server renders HTML with `html/template`; HTMX enhances the forms without
 - Order items preserve product names and prices as immutable snapshots
 - CSRF tokens, session ownership and server-side manager checks protect writes
 
-See [Architecture](docs/ARCHITECTURE.md) for the design and its limits.
+See [Architecture](docs/ARCHITECTURE.md) for the design and its limits, and [Manager workflows](docs/MANAGER_WORKFLOWS.md) for item controls and interrupted-form recovery.
 
 ## Development
 
-Requirements: Go 1.24+, a C compiler for SQLite, and Python 3 for the HTTP smoke test.
+Requirements: Go 1.24+, a C compiler for SQLite, Python 3 for HTTP smoke tests, and Node.js 18+ for the dependency-free interaction checks. Node.js is test tooling only; the deployed app remains one Go server.
 
 ```sh
 ./scripts/dev.sh

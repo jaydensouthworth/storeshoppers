@@ -468,7 +468,7 @@ func TestReservationsManagerScopeReasonsAndPrivateAudit(t *testing.T) {
 		t.Errorf("foreign renewal=%v", err)
 	}
 	assertReservationUnchanged(t, s, before)
-	for _, reason := range []string{"", "  ", "xx", strings.Repeat("x", 121)} {
+	for _, reason := range []string{"bad\nreason", strings.Repeat("x", 121)} {
 		if err := s.ManagerSetBasket(foreign.ID, owner.ID, true, 1, 1, foreign.Revision, reason); !errors.Is(err, ErrInvalid) {
 			t.Errorf("invalid reason %q accepted: %v", reason, err)
 		}

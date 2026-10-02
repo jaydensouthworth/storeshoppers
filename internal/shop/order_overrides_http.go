@@ -7,7 +7,7 @@ import (
 )
 
 func orderCommandProblem(err error) bool {
-	return basketProblem(err) || errors.Is(err, ErrTerminal) || errors.Is(err, ErrStockCapacity) || errors.Is(err, ErrOrderQuote) || errors.Is(err, ErrUseReady)
+	return basketProblem(err) || errors.Is(err, ErrTerminal) || errors.Is(err, ErrStockCapacity) || errors.Is(err, ErrOrderQuote) || errors.Is(err, ErrUseReady) || errors.Is(err, ErrPickedDisposition)
 }
 func (a *App) overrideOrder(w http.ResponseWriter, r *http.Request) {
 	session, ok := a.form(w, r)
@@ -92,12 +92,20 @@ func (a *App) recordWorkingLinePicked(w http.ResponseWriter, r *http.Request) {
 			pid = line.ProductID
 		}
 	}
-	if e2 != nil || pid == 0 {
+	newEnvelope := r.PostForm.Get("command_key") != "" || r.PostForm.Get("order_version") != ""
+	if e2 != nil || (pid == 0 && !newEnvelope) {
 		http.NotFound(w, r)
 		return
 	}
 	if e3 != nil || e4 != nil {
 		err = ErrInvalid
+	} else if newEnvelope {
+		orderVersion, parseErr := num(r.PostForm.Get("order_version"))
+		if parseErr != nil {
+			err = ErrInvalid
+		} else {
+			err = a.store.MarkWorkingLinePicked(id, lineID, picked, version, orderVersion, r.PostForm.Get("command_key"), session.ID, !a.config.DemoMode)
+		}
 	} else {
 		err = a.store.RecordPicked(id, pid, picked, version, session.ID, !a.config.DemoMode)
 	}

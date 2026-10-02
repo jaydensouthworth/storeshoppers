@@ -43,7 +43,7 @@ func workingOrderItems(q orderQuerier, id int64) ([]WorkingOrderItem, error) {
 // never the placed receipt. Ownership, replay, version, inventory and audit all
 // share the immediate SQLite transaction. HTTP is responsible for manager+CSRF.
 func (s *Store) OverrideOrder(id int64, sid string, allOrders bool, c OrderCommand) error {
-	c.Reason = strings.TrimSpace(c.Reason)
+	c.Reason = routineOrderReason(c.Action, c.Quantity, c.Reason)
 	if c.Version < 1 || len(c.Key) < 16 || len(c.Key) > 150 || utf8.RuneCountInString(c.Reason) < 3 || utf8.RuneCountInString(c.Reason) > 240 || !utf8.ValidString(c.Reason) || strings.IndexFunc(c.Reason, unicode.IsControl) >= 0 {
 		return ErrInvalid
 	}
@@ -293,6 +293,12 @@ func setWorkingQuantity(tx *sql.Tx, id, pid, quantity int64, disposition, quote 
 	}
 	returned, lost := int64(0), int64(0)
 	if quantity < old {
+		if disposition == "" {
+			if quantity < picked {
+				return "", ErrPickedDisposition
+			}
+			disposition = "restock"
+		}
 		if err = disposeOrderStock(tx, pid, old-quantity, disposition); err != nil {
 			return "", err
 		}

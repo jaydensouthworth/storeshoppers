@@ -14,9 +14,9 @@ Each phase is accepted only when the intended task works end to end, relevant in
 
 ## Verified live foundation
 
-As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/c4ca7160d3ddba4c1456994ad8031f126ace1b50). This checkpoint contains 100 verified published files.
+As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/148f40b586a8cb8fbf27fc2b558617b9a935ba31). This checkpoint contains 113 verified published files.
 
-- 70 fake products; configurable categories/types; create, edit, archive and restore; dedicated editors and a manager sidebar
+- 72 fake products; configurable categories/types; create, edit, archive and restore; dedicated editors and a manager sidebar
 - Safe bundled illustration picker, immutable SKU and separate demo-local product codes; uploads, generated scan labels and camera scanning are not implemented
 - Session baskets, atomic simulated checkout, replay protection, ownership checks, immutable receipt/measurement snapshots and stale-price review
 - Persisted 15-minute stock holds, expiry/reacquisition, available/reserved counts, scoped practice baskets and audited manager basket overrides
@@ -28,9 +28,11 @@ As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdad
 - Versioned populated-data migrations and restart persistence; server-side validation, CSRF and non-negative transactional inventory
 - The public known-password hint appears only when the configured password matches the demo value; this remains intentionally limited demo access
 
-Verification for this release: 203 top-level tests, 83.0% core coverage, race checks, vet, build, HTTP/restart checks and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36949475661). Authenticated-manager QA passed on desktop and at 400 CSS pixels. Physical-phone testing and a fuller accessibility audit remain open.
+Verification for this release: 232 top-level tests, 83.7% core coverage, race checks, vet, build, HTTP/restart checks and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36952443007). Authenticated-manager QA passed on desktop and at 400 CSS pixels. Physical-phone testing and a fuller accessibility audit remain open.
 
 ## Ordered implementation backlog
+
+**Current priority:** correct mobile manager workflows before another feature release. The local corrective work puts normal item actions on each working-list row, replaces catalog dropdowns with bounded search, removes needless note/stock requirements, and adds visible stale-form recovery. See [Manager workflows](MANAGER_WORKFLOWS.md). Dark mode and compatibility changes are retained separately; weighted execution and uploads remain paused until this corrective release is verified.
 
 ### 1. Manager usability and explicit reset
 

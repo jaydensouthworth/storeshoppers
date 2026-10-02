@@ -51,6 +51,9 @@ func (a *App) basketsView(w http.ResponseWriter, r *http.Request, message string
 	v.Message = message
 	if problem != nil {
 		v.Error = problem.Error()
+		if errors.Is(problem, ErrConflict) {
+			w.Header().Set("X-Shop-Error", "stale-version")
+		}
 	}
 	if id != "" {
 		v.Section = "basket"
@@ -80,6 +83,14 @@ func (a *App) basketsView(w http.ResponseWriter, r *http.Request, message string
 	if v.BasketEvents, err = a.store.BasketEvents(id, v.Session.ID, !a.config.DemoMode); err != nil {
 		a.fail(w, err)
 		return
+	}
+	if id != "" {
+		if a.handleProductPickerError(w, r, a.populateProductPicker(r, &v, true)) {
+			return
+		}
+		if a.renderProductPicker(w, r, v) {
+			return
+		}
 	}
 	a.render(w, r, v, 200)
 }

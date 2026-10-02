@@ -46,7 +46,7 @@ func TestHTTPOrderOverridesScopedFormsReplayAndCSRF(t *testing.T) {
 				t.Fatal("invalid foreign request leaked data")
 			}
 			w = testRequest(t, a, http.MethodGet, strings.TrimSuffix(path, "/override"), owner, nil, pickingHeaders(htmx))
-			for _, required := range []string{"MANAGER OVERRIDES", "Add a product", "Substitute this product", "Finish with picked items", "Cancel the entire order", "ORIGINAL PLACED RECEIPT", "command_key", "order_version"} {
+			for _, required := range []string{"WORKING PICK LIST", "Mark picked", "Add an item", "Substitute item", "Finish with picked items", "Cancel the entire order", "ORIGINAL PLACED RECEIPT", "command_key", "order_version"} {
 				if !strings.Contains(w.Body.String(), required) {
 					t.Fatalf("working control missing %q", required)
 				}

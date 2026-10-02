@@ -384,6 +384,14 @@ func (s *Store) ManagerSetBasket(id, sid string, all bool, pid, qty, revision in
 	if pid < 1 || qty < 0 || qty > 99 {
 		return ErrInvalid
 	}
+	if strings.TrimSpace(reason) == "" {
+		reason = "Manager changed basket quantity"
+		if qty == 0 {
+			reason = "Manager removed basket item"
+		}
+	} else if utf8.RuneCountInString(strings.TrimSpace(reason)) < 3 {
+		reason = "Manager note: " + strings.TrimSpace(reason)
+	}
 	return s.managerBasketCommand(id, sid, all, revision, reason, "set quantity", func(tx *sql.Tx, b Basket) error { return s.changeBasket(tx, b, pid, qty, false) }, func(before, after Basket) string {
 		oldQty, oldHeld, newHeld := int64(0), int64(0), int64(0)
 		for _, l := range before.Lines {
@@ -400,6 +408,11 @@ func (s *Store) ManagerSetBasket(id, sid string, all bool, pid, qty, revision in
 	})
 }
 func (s *Store) ManagerRenewBasket(id, sid string, all bool, revision int64, reason string) error {
+	if strings.TrimSpace(reason) == "" {
+		reason = "Manager reviewed and renewed basket reservation"
+	} else if utf8.RuneCountInString(strings.TrimSpace(reason)) < 3 {
+		reason = "Manager note: " + strings.TrimSpace(reason)
+	}
 	return s.managerBasketCommand(id, sid, all, revision, reason, "review and reserve", func(tx *sql.Tx, b Basket) error {
 		if len(b.Lines) == 0 {
 			return ErrEmpty

@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+var ErrPickedDisposition = errors.New("Choose what happened to the picked units being removed: returned and available to sell, or unavailable/damaged.")
 var ErrOrderQuote = errors.New("Catalog choices or prices changed. Review the refreshed choices and recorded prices, then submit this manager change again.")
 var ErrUseReady = errors.New("All working units are already picked. Use Mark ready and Confirm collected to finish the normal collection flow.")
 var ErrTerminal = errors.New("This order is ready or closed. Its final receipt and stock disposition cannot be changed or reopened; a separate amendment/refund workflow is not supported in this demo.")
