@@ -1,9 +1,15 @@
 # Appearance preferences
 
-The storefront and manager share the **Theme** selector in the header. Choose
-**System**, **Light** or **Dark**. The default follows the operating system, and a
-saved explicit choice takes priority until the visitor changes it. System mode
-responds to operating-system changes while the page is open.
+The storefront and manager share a compact sun/moon button in the header. It
+switches the current light/dark appearance without opening a menu. Its stable
+accessible name is **Dark mode**, with a pressed state and a tooltip describing
+the next action. The transparent 44-pixel button keeps a usable touch target
+without competing with navigation.
+
+The default follows the operating system. A saved explicit choice takes priority;
+**Use system appearance** in the footer restores the default. The footer names
+the current preference, and System mode responds to operating-system changes
+while the page is open.
 
 The choice is saved in this origin's browser local storage as
 `neighborhood-market-theme`. It survives full navigation, reloads, manager
@@ -16,20 +22,18 @@ page and HTMX updates; a brief message explains that it could not be saved.
 
 - `web/static/theme.js` is a small, local, head-loaded script that applies the
   preference before the document paints. It uses delegated events and restores
-  the selector after HTMX workspace swaps and browser history navigation
+  the button state after HTMX workspace swaps and browser history navigation
 - `web/static/theme.css` separates page, surface, form, feedback and branding
   colors. Navy signs keep white text; yellow labels keep navy text; red price
   stickers keep white text. Illustrations retain their original vector colors
 - Both the ordinary layout and standalone reset pages use the same assets and
-  selector. No server setting, database migration, account or external dependency
+  header button and footer action. No server setting, database migration, account or external dependency
   is needed. The existing Content Security Policy permits the local assets
-- Without JavaScript, CSS follows the system theme and the inactive selector is
+- Without JavaScript, CSS follows the system theme and the inactive appearance controls are
   hidden. Regular forms and navigation continue to work
-- A native labelled select provides keyboard control. Its label sits beside the
-  44-pixel control so it fits the normal header height; navigation uses the existing
-  850-pixel wrapping breakpoint. At very narrow widths the label stays available
-  to assistive technology without consuming space. Reduced-motion settings remove
-  product hover movement as well as existing transitions
+- Native buttons provide Enter/Space keyboard activation. Delegated clicks also
+  work on the nested SVG icons and controls replaced by HTMX. Reduced-motion
+  settings remove product hover movement and existing transitions
 - Compact weekly offer cards and the basket bar use theme surfaces; the weekly
   stamp remains plain copy. Theme rules do not alter circular or featured-shelf
   grid dimensions, text sizing or spacing
@@ -61,8 +65,8 @@ The script harness is not a browser or a substitute for visual verification.
 Before a release, inspect the running version in a supported browser at desktop
 width and 400 CSS pixels (the scripted checks do not verify layout):
 
-1. Switch among all three modes with the keyboard; check labels, focus, header
-   fit and persistence after refresh and full-page navigation
+1. Toggle light/dark and return to System using the keyboard; check names, pressed
+   state, focus, header fit and persistence after refresh and full-page navigation
 2. In System mode, change the operating-system appearance; then verify that an
    explicit Light or Dark choice ignores the system setting
 3. Filter the storefront and add products using HTMX, then visit product details,
@@ -79,3 +83,18 @@ width and 400 CSS pixels (the scripted checks do not verify layout):
    and success pages using disposable fake data
 7. Test reduced motion, storage unavailable and JavaScript disabled. Verify that
    the core HTML shopping and manager workflows remain usable
+
+## Demo management guide
+
+Demo storefront and product discovery pages include a small nonmodal callout
+pointing to **Employees**, with “Click here to try store management” and an
+accessible close button. It is omitted from baskets, orders, manager and normal
+(non-demo) pages. Its position follows the visible link, stays inside the
+viewport, and avoids the fixed mobile basket bar. No animation or initial focus
+change is required.
+
+Dismissal is remembered locally, with session storage as a fallback. If neither
+store can remember a choice, the guide starts hidden. **Show demo guide** in the
+footer reopens it deliberately. Clicking Employees also completes the guide.
+Keyboard dismissal, clear screen-reader instructions and theme contrast accompany
+the visual arrow; normal navigation and checkout remain available.

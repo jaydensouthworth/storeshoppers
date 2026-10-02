@@ -229,21 +229,53 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .product-choice:focus-within { outline-color: var(--theme-focus); }
 .product-choice:has(input:checked):focus-within { outline-color: var(--brand-red); }
 
-/* An inline label and 44px control fit the existing header height. The same
-   850px breakpoint as the base header places navigation below brand + theme. */
+/* A small sun/moon glyph has a generous, quiet touch target. System appearance
+   stays discoverable in the footer without competing with header navigation. */
 .site-header { gap: 20px; }
 .site-header nav { margin-left: auto; }
-.theme-control {
-  flex: 0 0 auto;
+.theme-control { flex: 0 0 44px; }
+[data-theme-control][hidden] { display: none; }
+.theme-toggle {
   display: grid;
-  grid-template-columns: auto 92px;
-  align-items: center;
-  gap: 0 7px;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--theme-muted);
 }
-.theme-control[hidden] { display: none; }
-.theme-control label { margin: 0; font-size: 10px; }
-.theme-control select { width: 92px; min-height: 44px; padding: 8px; font-size: 12px; }
-.theme-status { grid-column: 1 / -1; max-width: 136px; font-size: 10px; line-height: 1.4; color: var(--theme-muted); }
+.theme-toggle:hover { background: var(--theme-quiet); color: var(--theme-text); }
+.theme-toggle svg { width: 20px; height: 20px; }
+.theme-icon-sun, .theme-toggle[aria-pressed="true"] .theme-icon-moon { display: none; }
+.theme-toggle[aria-pressed="true"] .theme-icon-sun { display: block; }
+footer { flex-wrap: wrap; align-items: center; }
+.theme-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  margin-left: auto;
+  color: var(--theme-muted);
+  font-size: 11px;
+}
+.theme-system {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.theme-system:hover:not([aria-disabled="true"]) { color: var(--theme-text); }
+.theme-system[aria-disabled="true"] { text-decoration: none; cursor: default; }
+.theme-status { flex-basis: 100%; font-size: 11px; line-height: 1.4; }
 .theme-status:empty { display: none; }
 @media (min-width: 851px) and (max-width: 1000px) {
   .site-header { gap: 16px; }
@@ -256,12 +288,9 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 }
 @media (max-width: 600px) {
   .site-header { gap: 18px 10px; }
-  .theme-control select { font-size: 16px; }
   .site-header nav { flex-wrap: wrap; }
-}
-@media (max-width: 360px) {
-  .theme-control { grid-template-columns: 92px; }
-  .theme-control label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  footer { align-items: flex-start; }
+  .theme-footer { margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .product:hover .product-art svg { transform: none; }

@@ -210,7 +210,9 @@ func TestStockHTTPGateBadIdentityArchiveAndImmutableReceipt(t *testing.T) {
 func TestStockActivityMerchandisingFiltersSurviveRenderedFormSubmission(t *testing.T) {
 	for _, hx := range []bool{false, true} {
 		t.Run(fmt.Sprint(hx), func(t *testing.T) {
-			s, clock, _ := promotionTestStore(t)
+			// HTTP manager grants use wall time; a historical promotion fixture
+			// must not make this unrelated form regression expire by calendar date.
+			s, clock, _ := newReservationStore(t)
 			a := reservationHTTPApp(t, s, true)
 			manager := testManager(t, s)
 			saveTestPromotion(t, s, 1, 249, clock.now().Unix()-60, clock.now().Unix()+3600)

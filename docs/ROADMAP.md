@@ -28,11 +28,28 @@ As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdad
 - Versioned populated-data migrations and restart persistence; server-side validation, CSRF and non-negative transactional inventory
 - The public known-password hint appears only when the configured password matches the demo value; this remains intentionally limited demo access
 
-Verification for this release: 246 top-level Go tests, 21 JavaScript interaction/theme tests, 83.8% core coverage, race checks, vet, build, seven HTTP/restart smoke suites and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36963942277). Live desktop and 402 CSS-pixel actions covered basket edits, visible expired-form feedback, direct Mark picked/start, partial picking, searched substitutions, working-item additions/removals and own-order cancellation with stock audit. Physical-phone testing and a fuller accessibility audit remain open.
+The schema12 foundation passed 349 top-level Go tests, 23 JavaScript checks,
+race/vet/build and eleven HTTP/restart suites, plus [CI and Docker persistence
+checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37005228199).
+Live desktop and 391 CSS-pixel checks covered gram catalog/sales, mixed baskets,
+quantity edits, reviewed actual weight, immutable receipts, private review holds,
+queue filters, inline picking and owned-order cancellation/restocking. The
+quantity-field follow-up is verified live. Physical-phone testing and a fuller
+accessibility audit remain open.
 
 ## Ordered implementation backlog
 
-**Current priority:** finish the protected schema12 rollout and verify retained records plus ordinary/weighted manager and customer workflows. The integrated release includes images9, weighted10, manager holds11 and gram promotions12; automatic pre-migration recovery snapshots and compatibility refusal protect the update. The preparatory schema-8 compatibility safeguard is published with passing CI. Mixed regular/sale Featured rows and persistent System/Light/Dark appearance are live and checked on desktop and narrow screens. The compact circular is live: 306 CSS pixels at 1366×768 and 1440×901, with catalog controls/products above the fold. Routine manager controls and visible stale-form recovery are verified; see [Manager workflows](MANAGER_WORKFLOWS.md). The missing hosting volume was added and exact sale/audit records survived a deployment. Safe image uploads are live and checked. Continue compatibility safeguards, weighted execution and remaining manager workflows in tested phases without overwriting visitor changes.
+**Current priority:** refine header appearance and demo discovery with a compact
+sun/moon toggle, quiet system-reset action, and a dismissible arrow callout to
+Employees. Keep the bright corner-store identity and accessible mobile controls.
+The protected schema12 rollout is complete: weighted ordering/actual measurements,
+per-kilogram offers and manager review queues are live and verified. Pre-migration
+recovery archives and compatibility refusal protect upgrades. Existing catalog,
+offers and image storage survived deployment; the complete QA allocation was
+returned and its temporary product/offer archived or cancelled. Image uploads,
+compact weekly sales, mixed Featured rows, normal manager controls and visible
+stale-form recovery remain live. Continue in tested phases without overwriting
+visitor changes.
 
 ### 1. Manager usability and explicit reset
 

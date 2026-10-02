@@ -156,7 +156,9 @@ func TestPromotionHistoricalSellingUnitNeverReinterpreted(t *testing.T) {
 func TestWeightedPromotionHTTPFormsFeaturedLinksAndGramBasket(t *testing.T) {
 	for _, hx := range []bool{false, true} {
 		t.Run(fmt.Sprint(hx), func(t *testing.T) {
-			s, clock, _ := promotionTestStore(t)
+			// Keep the HTTP manager grant current; this test needs relative sale
+			// windows, not the fixed date used by calendar-boundary domain tests.
+			s, clock, _ := newReservationStore(t)
 			a := reservationHTTPApp(t, s, true)
 			manager := testManager(t, s)
 			p := weightedProduct(t, s, 3000, 499, 50)

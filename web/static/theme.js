@@ -29,15 +29,30 @@
 
   preference = readPreference() || "system";
 
+  function isDark() {
+    return preference === "dark" ||
+      (preference === "system" && !!systemTheme?.matches);
+  }
+
   function applyTheme() {
-    const dark = preference === "dark" ||
-      (preference === "system" && systemTheme?.matches);
-    root.setAttribute("data-theme", dark ? "dark" : "light");
+    root.setAttribute("data-theme", isDark() ? "dark" : "light");
   }
 
   function syncControls() {
-    document.querySelectorAll("[data-theme-select]").forEach((select) => {
-      select.value = preference;
+    const dark = isDark();
+    document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+      // Keep the accessible name stable; pressed describes the current theme.
+      button.setAttribute("aria-pressed", String(dark));
+      button.title = dark ? "Switch to light mode" : "Switch to dark mode";
+    });
+    document.querySelectorAll("[data-theme-system]").forEach((button) => {
+      // aria-disabled keeps keyboard focus in place when this action is used.
+      button.setAttribute("aria-disabled", String(preference === "system" && !unsaved));
+    });
+    document.querySelectorAll("[data-theme-preference]").forEach((status) => {
+      const appearance = dark ? "Dark" : "Light";
+      status.textContent = preference === "system" ?
+        `Appearance: System (${appearance.toLowerCase()})` : `Appearance: ${appearance}`;
     });
     document.querySelectorAll("[data-theme-control]").forEach((control) => {
       control.hidden = false;
@@ -50,10 +65,8 @@
   // This small local script runs in the head, before styles and first paint.
   applyTheme();
 
-  document.addEventListener("change", (event) => {
-    const select = event.target;
-    if (!select?.matches?.("[data-theme-select]") || !valid(select.value)) return;
-    preference = select.value;
+  function choose(value) {
+    preference = value;
     applyTheme();
     try {
       window.localStorage.setItem(storageKey, preference);
@@ -63,10 +76,23 @@
       unsaved = true;
     }
     syncControls();
+  }
+
+  // Native buttons provide Enter/Space activation. Delegation also catches
+  // clicks on the SVG paths and buttons introduced by an HTMX replacement.
+  document.addEventListener("click", (event) => {
+    if (event.target?.closest?.("[data-theme-toggle]")) {
+      choose(isDark() ? "light" : "dark");
+    } else if (event.target?.closest?.("[data-theme-system]")) {
+      if (preference !== "system" || unsaved) choose("system");
+    }
   });
 
   function followSystem() {
-    if (preference === "system") applyTheme();
+    if (preference === "system") {
+      applyTheme();
+      syncControls();
+    }
   }
   if (systemTheme?.addEventListener) {
     systemTheme.addEventListener("change", followSystem);

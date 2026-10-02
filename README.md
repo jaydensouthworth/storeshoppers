@@ -23,7 +23,8 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Manager pick tickets with per-item quantities, current assignment links and guarded readiness
 - Visible form recovery after manager login, retained quantity drafts and no automatic mutation replay
 - Customer status refresh with a normal HTML fallback
-- Persistent System/Light/Dark appearance across storefront and manager pages
+- Compact light/dark toggle with saved preferences and a system appearance option
+- Dismissible demo guide pointing visitors to the Employees workspace
 - Persistent SQLite storage and locally bundled frontend assets
 
 This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Weighted selling uses reviewed actual grams and immutable requested receipts; its quantity and recovery rules are recorded in [Weighted products](docs/WEIGHTED_PRODUCTS.md). The later phone/barcode workflow remains in the [ordered roadmap](docs/ROADMAP.md).

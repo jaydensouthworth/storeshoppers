@@ -1,5 +1,5 @@
-// Dependency-free behavior checks for the early appearance script. This fake
-// DOM exercises preference/lifecycle behavior; it is not a browser layout test.
+// Dependency-free interaction checks for the early appearance script. Native
+// button keyboard activation and visual layout are also checked in browser QA.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -8,6 +8,7 @@ const vm = require("node:vm");
 
 const rootPath = path.join(__dirname, "..");
 const source = fs.readFileSync(path.join(rootPath, "web/static/theme.js"), "utf8");
+const appTemplate = fs.readFileSync(path.join(rootPath, "web/templates/app.html"), "utf8");
 const key = "neighborhood-market-theme";
 
 function run({ dark = false, saved = null, blockedRead = false, blockedWrite = false,
@@ -18,15 +19,18 @@ function run({ dark = false, saved = null, blockedRead = false, blockedWrite = f
   const attrs = new Map();
   let mediaListener;
   let controls;
+  let writeBlocked = blockedWrite;
+  let writes = 0;
   const media = { matches: dark };
   media[legacyMedia ? "addListener" : "addEventListener"] = (...args) => {
     mediaListener = args.at(-1);
   };
   const document = {
     readyState: ready,
+    activeElement: { value: "Unsaved product draft" },
     documentElement: { setAttribute: (name, value) => attrs.set(name, value) },
     addEventListener: (name, listener) => documentEvents.set(name, listener),
-    querySelectorAll: (selector) => controls ? [controls[selector]] : [],
+    querySelectorAll: (selector) => controls?.[selector] || [],
   };
   const window = {
     get localStorage() {
@@ -34,7 +38,8 @@ function run({ dark = false, saved = null, blockedRead = false, blockedWrite = f
       return {
         getItem: (name) => storage.get(name) ?? null,
         setItem: (name, value) => {
-          if (blockedWrite) throw Error("quota exhausted");
+          writes++;
+          if (writeBlocked) throw Error("quota exhausted");
           storage.set(name, value);
         },
       };
@@ -42,140 +47,219 @@ function run({ dark = false, saved = null, blockedRead = false, blockedWrite = f
     addEventListener: (name, listener) => windowEvents.set(name, listener),
     matchMedia: noMedia ? undefined : () => media,
   };
+  function button(attribute) {
+    const markup = appTemplate.match(new RegExp(`<button[^>]* ${attribute}[^>]*>`))[0];
+    const attrs = new Map([...markup.matchAll(/([\w-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
+    return {
+      attrs,
+      title: attrs.get("title") || "",
+      setAttribute: (name, value) => attrs.set(name, value),
+      closest: (selector) => selector === `[${attribute}]` ? controls[selector][0] : null,
+    };
+  }
   function replaceControls() {
     controls = {
-      "[data-theme-select]": { value: "system", matches: (selector) => selector === "[data-theme-select]" },
-      "[data-theme-control]": { hidden: true },
-      "[data-theme-status]": { textContent: "" },
+      "[data-theme-toggle]": [button("data-theme-toggle")],
+      "[data-theme-system]": [button("data-theme-system")],
+      "[data-theme-preference]": [{ textContent: "Appearance: System" }],
+      "[data-theme-control]": [{ hidden: true }, { hidden: true }],
+      "[data-theme-status]": [{ textContent: "" }],
     };
   }
   if (ready !== "loading") replaceControls();
   vm.runInNewContext(source, { document, window });
+  function activate(selector, nested = false, detail = 1) {
+    const control = controls[selector][0];
+    document.activeElement = control;
+    const target = nested ? { closest: (name) => control.closest(name) } : control;
+    documentEvents.get("click")({ target, detail });
+    assert.equal(document.activeElement, control, "theme changes must not move keyboard focus");
+  }
   return {
-    attrs, storage,
-    get control() { return controls["[data-theme-control]"]; },
-    get choice() { return controls["[data-theme-select]"].value; },
-    get status() { return controls["[data-theme-status]"].textContent; },
+    attrs, storage, documentEvents,
+    get toggle() { return controls["[data-theme-toggle]"][0]; },
+    get system() { return controls["[data-theme-system]"][0]; },
+    get controls() { return controls["[data-theme-control]"]; },
+    get preference() { return controls["[data-theme-preference]"][0].textContent; },
+    get status() { return controls["[data-theme-status]"][0].textContent; },
+    get writes() { return writes; },
+    get activeElement() { return document.activeElement; },
     ready() { replaceControls(); documentEvents.get("DOMContentLoaded")?.(); },
-    choose(value) {
-      controls["[data-theme-select]"].value = value;
-      documentEvents.get("change")({ target: controls["[data-theme-select]"] });
-    },
+    toggleTheme({ nested = false, keyboard = false } = {}) { activate("[data-theme-toggle]", nested, keyboard ? 0 : 1); },
+    useSystem() { activate("[data-theme-system]"); },
     setSystem(value) { media.matches = value; mediaListener?.(); },
+    allowWrites() { writeBlocked = false; },
     swap() { replaceControls(); documentEvents.get("htmx:afterSwap")(); },
     historyRestore() { replaceControls(); documentEvents.get("htmx:historyRestore")(); },
     pageshow() { windowEvents.get("pageshow")(); },
     storageEvent(event) { windowEvents.get("storage")(event); },
-    unrelatedChange() { documentEvents.get("change")({ target: { value: "dark" } }); },
+    unrelatedClick(target = {}) { documentEvents.get("click")({ target }); },
   };
 }
 
-test("system default is resolved before DOM content and tracks live OS changes", () => {
+function assertAppearance(page, dark, system) {
+  assert.equal(page.attrs.get("data-theme"), dark ? "dark" : "light");
+  assert.equal(page.toggle.attrs.get("aria-pressed"), String(dark));
+  assert.equal(page.toggle.attrs.get("aria-label"), "Dark mode", "toggle name must stay stable");
+  assert.equal(page.toggle.title, dark ? "Switch to light mode" : "Switch to dark mode");
+  assert.equal(page.preference, system ? `Appearance: System (${dark ? "dark" : "light"})` : `Appearance: ${dark ? "Dark" : "Light"}`);
+  for (const control of page.controls) assert.equal(control.hidden, false);
+}
+
+test("system default resolves before paint and synchronizes toggle state on OS changes", () => {
   const page = run({ dark: true });
   assert.equal(page.attrs.get("data-theme"), "dark");
   page.ready();
-  assert.equal(page.choice, "system");
-  assert.equal(page.control.hidden, false);
+  assertAppearance(page, true, true);
+  assert.equal(page.system.attrs.get("aria-disabled"), "true");
   page.setSystem(false);
-  assert.equal(page.attrs.get("data-theme"), "light");
+  assertAppearance(page, false, true);
+  assert.equal(page.writes, 0, "following system must not save an explicit preference");
 });
 
-test("explicit light and dark persist reloads and ignore system changes", () => {
-  for (const choice of ["light", "dark"]) {
-    const page = run({ dark: choice === "light" });
+test("a toggle click chooses the opposite resolved theme and persists across reloads", () => {
+  for (const dark of [false, true]) {
+    const page = run({ dark });
     page.ready();
-    page.choose(choice);
-    assert.equal(page.storage.get(key), choice);
-    page.setSystem(choice === "light");
-    assert.equal(page.attrs.get("data-theme"), choice);
-    const reloaded = run({ storage: page.storage, dark: choice === "light" });
-    assert.equal(reloaded.attrs.get("data-theme"), choice);
+    page.toggleTheme();
+    assertAppearance(page, !dark, false);
+    assert.equal(page.storage.get(key), dark ? "light" : "dark");
+    assert.equal(page.system.attrs.get("aria-disabled"), "false");
+    page.setSystem(dark);
+    assertAppearance(page, !dark, false);
+    const reloaded = run({ storage: page.storage, dark });
     reloaded.ready();
-    assert.equal(reloaded.choice, choice);
+    assertAppearance(reloaded, !dark, false);
   }
 });
 
-test("returning to System persists and follows the operating system again", () => {
-  const page = run({ dark: true, saved: "light" });
-  page.ready();
-  page.choose("system");
-  assert.equal(page.attrs.get("data-theme"), "dark");
-  assert.equal(page.storage.get(key), "system");
-  page.setSystem(false);
-  assert.equal(page.attrs.get("data-theme"), "light");
-});
-
-test("workspace replacement and history restore synchronize newly rendered controls", () => {
+test("SVG descendants and native keyboard-generated clicks activate exactly once", () => {
   const page = run();
   page.ready();
-  page.choose("dark");
-  page.swap();
-  assert.equal(page.choice, "dark");
-  assert.equal(page.control.hidden, false);
-  page.choose("light");
-  page.historyRestore();
-  assert.equal(page.choice, "light");
-  assert.equal(page.attrs.get("data-theme"), "light");
+  page.toggleTheme({ nested: true });
+  assertAppearance(page, true, false);
+  page.toggleTheme({ keyboard: true });
+  assertAppearance(page, false, false);
+  assert.equal(page.writes, 2);
+  assert.equal(page.documentEvents.has("keydown"), false, "native buttons must not be double-activated by custom keyboard handlers");
+  assert.equal(page.toggle.attrs.get("type"), "button", "theme activation must never submit a nearby form");
 });
 
-test("blocked reads and exhausted writes retain usable choices through swaps", () => {
+test("footer system action restores live OS behavior and is idempotent without losing focus", () => {
+  const page = run({ dark: true, saved: "light" });
+  page.ready();
+  page.useSystem();
+  assertAppearance(page, true, true);
+  assert.equal(page.storage.get(key), "system");
+  assert.equal(page.system.attrs.get("aria-disabled"), "true");
+  assert.equal(page.system.attrs.has("disabled"), false, "system action stays focusable after use");
+  page.useSystem();
+  assert.equal(page.writes, 1);
+  page.setSystem(false);
+  assertAppearance(page, false, true);
+  const reloaded = run({ storage: page.storage, dark: true });
+  reloaded.ready();
+  assertAppearance(reloaded, true, true);
+});
+
+test("repeated workspace and history replacements rebind fresh controls without duplicate actions", () => {
+  const page = run();
+  page.ready();
+  page.toggleTheme();
+  const original = page.toggle;
+  for (let i = 0; i < 3; i++) {
+    page.swap();
+    assert.notEqual(page.toggle, original);
+    assertAppearance(page, true, false);
+    page.historyRestore();
+    assertAppearance(page, true, false);
+  }
+  page.toggleTheme({ nested: true });
+  assertAppearance(page, false, false);
+  assert.equal(page.writes, 2);
+  page.useSystem();
+  page.swap();
+  assertAppearance(page, false, true);
+});
+
+test("storage read/write failure retains a usable theme and disclosure through swaps", () => {
   for (const failure of [{ blockedRead: true }, { blockedWrite: true }]) {
     const page = run({ ...failure, dark: true });
     page.ready();
-    assert.equal(page.attrs.get("data-theme"), "dark");
-    page.choose("light");
-    assert.equal(page.attrs.get("data-theme"), "light");
+    page.toggleTheme();
+    assertAppearance(page, false, false);
     assert.match(page.status, /this page only/);
     page.swap();
     page.pageshow();
-    assert.equal(page.choice, "light");
-    assert.equal(page.attrs.get("data-theme"), "light");
+    assertAppearance(page, false, false);
     assert.match(page.status, /this page only/);
+    page.useSystem();
+    assertAppearance(page, true, true);
+    assert.equal(page.system.attrs.get("aria-disabled"), "false", "unsaved system preference can be retried");
+    page.setSystem(false);
+    assertAppearance(page, false, true);
   }
 });
 
-test("invalid stored preferences and unrelated controls are harmless", () => {
+test("retrying system appearance after storage recovers persists it and clears the warning", () => {
+  const page = run({ saved: "light", dark: true, blockedWrite: true });
+  page.ready();
+  page.useSystem();
+  assert.match(page.status, /this page only/);
+  page.allowWrites();
+  page.useSystem();
+  assertAppearance(page, true, true);
+  assert.equal(page.storage.get(key), "system");
+  assert.equal(page.status, "");
+  assert.equal(page.system.attrs.get("aria-disabled"), "true");
+});
+
+test("unrelated input clicks and malformed saved values do not mutate form context", () => {
   const page = run({ saved: "invalid", dark: true });
   page.ready();
-  assert.equal(page.choice, "system");
-  page.unrelatedChange();
-  assert.equal(page.attrs.get("data-theme"), "dark");
-  page.choose("unsupported");
-  assert.equal(page.storage.get(key), "invalid");
-  page.setSystem(false);
-  assert.equal(page.attrs.get("data-theme"), "light");
+  const draft = page.activeElement;
+  page.unrelatedClick(draft);
+  page.unrelatedClick(null);
+  assert.equal(page.activeElement, draft);
+  assert.equal(draft.value, "Unsaved product draft");
+  assertAppearance(page, true, true);
+  assert.equal(page.writes, 0);
 });
 
-test("other-tab preference changes and storage clearing synchronize without reload", () => {
-  const page = run({ dark: false });
+test("other-tab preferences and storage clearing synchronize controls without reloading", () => {
+  const page = run();
   page.ready();
   page.storageEvent({ key: "unrelated", newValue: "dark" });
-  assert.equal(page.choice, "system");
+  assertAppearance(page, false, true);
   page.storageEvent({ key, newValue: "dark" });
-  assert.equal(page.attrs.get("data-theme"), "dark");
-  assert.equal(page.choice, "dark");
+  assertAppearance(page, true, false);
   page.storageEvent({ key: null, newValue: null });
-  assert.equal(page.attrs.get("data-theme"), "light");
-  assert.equal(page.choice, "system");
+  assertAppearance(page, false, true);
 });
 
-test("back-forward page restoration refreshes the saved preference", () => {
-  const page = run({ saved: "light" });
-  page.ready();
-  page.storage.set(key, "dark");
-  page.pageshow();
-  assert.equal(page.attrs.get("data-theme"), "dark");
-  assert.equal(page.choice, "dark");
+test("back-forward page restoration refreshes stored, cleared, or corrupt preferences", () => {
+  for (const stored of [null, "unsupported", "dark"]) {
+    const page = run({ dark: true, saved: "light" });
+    page.ready();
+    if (stored === null) page.storage.delete(key);
+    else page.storage.set(key, stored);
+    page.pageshow();
+    assertAppearance(page, true, stored !== "dark");
+    page.setSystem(false);
+    assertAppearance(page, stored === "dark", stored !== "dark");
+  }
 });
 
-test("legacy media listeners and missing matchMedia retain a usable control", () => {
+test("legacy and absent matchMedia retain functional explicit and system controls", () => {
   const legacy = run({ legacyMedia: true, ready: "complete" });
   legacy.setSystem(true);
-  assert.equal(legacy.attrs.get("data-theme"), "dark");
+  assertAppearance(legacy, true, true);
   const fallback = run({ noMedia: true, ready: "complete" });
-  assert.equal(fallback.attrs.get("data-theme"), "light");
-  fallback.choose("dark");
-  assert.equal(fallback.attrs.get("data-theme"), "dark");
+  assertAppearance(fallback, false, true);
+  fallback.toggleTheme();
+  assertAppearance(fallback, true, false);
+  fallback.useSystem();
+  assertAppearance(fallback, false, true);
 });
 
 test("text color roles meet 4.5:1 contrast in both palettes and the no-JS fallback", () => {
@@ -224,41 +308,31 @@ test("text color roles meet 4.5:1 contrast in both palettes and the no-JS fallba
 });
 
 
-test("ordinary and reset layouts initialize appearance before styles and reuse one labelled control", () => {
-  const app = fs.readFileSync(path.join(rootPath, "web/templates/app.html"), "utf8");
+test("ordinary and reset layouts initialize appearance before styles with one compact header control", () => {
   const reset = fs.readFileSync(path.join(rootPath, "web/templates/reset.html"), "utf8");
-  for (const markup of [app, reset]) {
+  for (const markup of [appTemplate, reset]) {
     const head = markup.slice(markup.indexOf("<head>"), markup.indexOf("</head>"));
     const scripts = [...head.matchAll(/<script\b([^>]*)src="([^"]+)"([^>]*)>/g)];
     const theme = scripts.find((match) => match[2] === "/static/theme.js");
     assert.ok(theme, "head loads the theme script");
-    assert.doesNotMatch(theme[1] + theme[3], /\b(?:defer|async)\b/,
-      "theme preference must apply before first paint");
+    assert.doesNotMatch(theme[1] + theme[3], /\b(?:defer|async)\b/);
     assert.ok(head.indexOf('/static/theme.js') < head.indexOf('rel="stylesheet"'));
     const styles = [...head.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)];
-    assert.equal(styles.at(-1)[1], "/static/theme.css", "theme overrides every feature stylesheet");
+    assert.equal(styles.at(-1)[1], "/static/theme.css");
     const header = markup.slice(markup.indexOf('<header class="site-header">'), markup.indexOf("</header>"));
     assert.equal([...header.matchAll(/{{template "theme-control" \.}}/g)].length, 1);
-    assert.doesNotMatch(header, /<form/);
+    assert.doesNotMatch(header, /<form|<select|theme-footer/);
     assert.match(header, /Employees/);
+    for (const footer of markup.matchAll(/<footer>(.*?)<\/footer>/g)) {
+      assert.match(footer[1], /{{template "theme-footer" \.}}/);
+    }
   }
-  assert.match(app, /<label for="theme-choice">Theme<\/label>/);
-  assert.match(app, /<select id="theme-choice" data-theme-select aria-describedby="theme-status">/);
-  assert.match(app, /data-theme-status role="status" aria-live="polite"/);
-  assert.equal([...app.matchAll(/data-theme-control hidden/g)].length, 1);
-  assert.match(app, /href="\/static\/manager_workflows.css"/);
-});
-
-test("restoring a page after clearing or corrupting storage resumes the system preference", () => {
-  for (const stored of [null, "unsupported"]) {
-    const page = run({ dark: true, saved: "light" });
-    page.ready();
-    if (stored === null) page.storage.delete(key);
-    else page.storage.set(key, stored);
-    page.pageshow();
-    assert.equal(page.choice, "system");
-    assert.equal(page.attrs.get("data-theme"), "dark");
-    page.setSystem(false);
-    assert.equal(page.attrs.get("data-theme"), "light");
-  }
+  const headerControl = appTemplate.match(/{{define "theme-control"}}(.*?){{end}}/)[1];
+  assert.equal([...headerControl.matchAll(/<button/g)].length, 1);
+  assert.doesNotMatch(headerControl, /<select|<label/);
+  assert.match(headerControl, /data-theme-toggle aria-label="Dark mode" aria-pressed="false"/);
+  assert.equal([...headerControl.matchAll(/aria-hidden="true" focusable="false"/g)].length, 2);
+  assert.match(appTemplate, /data-theme-status role="status" aria-live="polite"/);
+  assert.match(appTemplate, /data-theme-system[^>]*>Use system appearance<\/button>/);
+  assert.equal([...appTemplate.matchAll(/data-theme-control hidden/g)].length, 2);
 });

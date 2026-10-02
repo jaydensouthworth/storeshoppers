@@ -6,8 +6,10 @@ export GOCACHE="${GOCACHE:-/tmp/instore-gocache}"
 export GOPATH="${GOPATH:-/tmp/instore-gopath}"
 node --check web/static/app.js
 node --check web/static/theme.js
+node --check web/static/demo_guide.js
 node --test scripts/interaction_test.cjs
 node --test scripts/theme_test.cjs
+node --test scripts/demo_guide_test.cjs
 test -z "$(gofmt -l cmd internal web/embed.go)"
 go vet ./...
 go test -race -coverprofile=coverage.out ./...
