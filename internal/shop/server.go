@@ -341,9 +341,6 @@ func (a *App) populateStore(v *View) error {
 		}
 		if p.Featured && !p.Archived && p.SaleUnit == "each" {
 			v.FeaturedCount++
-			if len(v.FeaturedProducts) < 4 {
-				v.FeaturedProducts = append(v.FeaturedProducts, p)
-			}
 		}
 		if v.FeaturedOnly && (!p.Featured || p.SaleUnit != "each") {
 			continue
@@ -358,6 +355,20 @@ func (a *App) populateStore(v *View) error {
 			continue
 		}
 		v.Products = append(v.Products, p)
+	}
+	// The circular already presents these products. Keep featured discovery and
+	// filters intact, but use the separate shelf for additional featured picks.
+	circularIDs := make(map[int64]bool, len(v.WeeklySales))
+	for _, p := range v.WeeklySales {
+		circularIDs[p.ID] = true
+	}
+	for _, p := range all {
+		if p.Featured && !p.Archived && p.SaleUnit == "each" && !circularIDs[p.ID] {
+			v.FeaturedProducts = append(v.FeaturedProducts, p)
+			if len(v.FeaturedProducts) == 4 {
+				break
+			}
+		}
 	}
 	return nil
 }

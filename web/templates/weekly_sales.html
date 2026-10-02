@@ -6,16 +6,16 @@
     <div class="weekly-spread weekly-spread-{{len .WeeklySales}}">
       <div class="weekly-headline">
         <p class="weekly-stamp">THE WEEKLY SALES SHEET</p>
-        <h1 id="store-title">Small shop.<br><span>Great deals.</span></h1>
-        <p class="weekly-intro">Your everyday favorites.<br>A little less at the till.</p>
-        <a class="weekly-shop-link" href="/?sales=1#catalog-title">Shop all sales <span aria-hidden="true">↗</span></a>
-        <p class="weekly-selection">{{if gt .SaleCount 3}}3 picks from {{.SaleCount}} live offers{{else}}{{.SaleCount}} good {{if eq .SaleCount 1}}reason{{else}}reasons{{end}} to fill your basket{{end}}</p>
+        <h1 id="store-title">Weekly<br><span>deals.</span></h1>
+        <p class="weekly-intro">Everyday favorites. A little less.</p>
+        <a class="weekly-shop-link" href="/?sales=1#catalog-title">Shop all sales <span aria-hidden="true">→</span></a>
+        {{if gt .SaleCount 3}}<p class="weekly-selection">3 picks from {{.SaleCount}} live offers</p>{{end}}
       </div>
       {{range $index, $product := .WeeklySales}}
       <article class="weekly-offer{{if eq $index 0}} weekly-offer-lead{{else}} weekly-offer-support{{end}}" aria-labelledby="weekly-title-{{.ID}}">
         <div class="weekly-offer-art" aria-hidden="true"><svg focusable="false"><use href="#{{.Icon}}"/></svg><span>SALE</span></div>
         <div class="weekly-offer-copy">
-          <p class="eyebrow">{{if eq $index 0}}THE CIRCULAR PICK / {{end}}{{.Category}}</p>
+          <p class="eyebrow">{{.Category}}</p>
           <h2 id="weekly-title-{{.ID}}"><a class="product-detail-link" href="{{$.ProductURL .ID}}">{{.Name}}</a></h2>
           <p class="weekly-price"><strong><span class="sr-only">Sale price </span>{{money .EffectivePrice}}</strong><small>each</small></p>
           <p class="weekly-regular">Regularly <del>{{money .Price}}</del></p>
@@ -24,7 +24,7 @@
         <form id="weekly-form-{{.ID}}" method="post" action="/cart" hx-post="/cart" hx-target="#workspace" hx-swap="outerHTML" hx-disabled-elt="find button" hx-indicator="#pending">
           {{template "csrf" $}}<input type="hidden" name="revision" value="{{$.Basket.Revision}}"><input type="hidden" name="product_id" value="{{.ID}}"><input type="hidden" name="quantity" value="1"><input type="hidden" name="mode" value="add"><input type="hidden" name="return" value="store"><input type="hidden" name="q" value="{{$.Search}}"><input type="hidden" name="category" value="{{$.Category}}">{{if $.SalesOnly}}<input type="hidden" name="sales" value="1">{{end}}{{if $.FeaturedOnly}}<input type="hidden" name="featured" value="1">{{end}}
           <span id="weekly-stock-{{.ID}}">{{if .Stock}}{{.Stock}} available{{else}}Sold out{{end}}</span>
-          <button id="weekly-add-{{.ID}}" class="add-button" type="submit" aria-label="Add {{.Name}} from weekly sales to basket" aria-describedby="weekly-stock-{{.ID}} weekly-end-{{.ID}}" {{if eq .Stock 0}}disabled{{end}}>{{if .Stock}}Add to basket <span aria-hidden="true">+</span>{{else}}Sold out{{end}}</button>
+          <button id="weekly-add-{{.ID}}" class="add-button" type="submit" aria-label="Add {{.Name}} from weekly sales to basket" aria-describedby="weekly-stock-{{.ID}} weekly-end-{{.ID}}" {{if eq .Stock 0}}disabled{{end}}>{{if .Stock}}Add <span aria-hidden="true">+</span>{{else}}Sold out{{end}}</button>
         </form>
       </article>
       {{end}}
@@ -32,9 +32,8 @@
     {{else}}
     <div class="weekly-empty"><div><p class="weekly-stamp">THIS WEEK AT THE MARKET</p><h1 id="store-title">Good things.<br><span>Every day.</span></h1><p class="weekly-intro">No active sales right now. The full shop is open at everyday prices.</p><a class="weekly-shop-link" href="#catalog-title">Browse the shelves <span aria-hidden="true">↓</span></a></div><div class="weekly-empty-art" aria-hidden="true"><span>FRESH<br>FINDS</span><svg focusable="false"><use href="#apple"/></svg></div></div>
     {{end}}
-    <div class="circular-bottom"><span>YOUR LOCAL SHELVES / DEMO PRICES IN USD</span><span>{{if .SaleCount}}OFFER TIMES SHOWN IN UTC{{else}}{{.ProductCount}} DEMO PRODUCTS. ONE SMALL SHOP.{{end}}</span></div>
   </div>
-  <aside class="basket-docket" aria-labelledby="docket-title"><div class="docket-heading"><span>YOUR BASKET</span><span>N/M</span></div><h2 id="docket-title">{{.Basket.Count}} item{{if ne .Basket.Count 1}}s{{end}} on the list</h2>{{if .Basket.Lines}}<p>{{if .Basket.NeedsReview}}Your hold needs review. Open your basket to reserve these items again.{{else}}Reserved until {{.Basket.HoldLabel}}.{{end}}</p>{{else}}<p>Start with something good.<br>Add an item from the shelves.</p>{{end}}<div class="docket-total"><span>SUBTOTAL</span><strong>{{money .Basket.Total}}</strong></div><a href="/cart" class="button full">Check the basket <span aria-hidden="true">→</span></a><small>NO PAYMENT. JUST TRY IT OUT.</small></aside>
+  <aside class="weekly-basket-bar" aria-label="Store shortcuts"><p class="weekly-basket-summary"><strong>{{.Basket.Count}} item{{if ne .Basket.Count 1}}s{{end}} on the list</strong><span>Subtotal <b>{{money .Basket.Total}}</b> USD</span></p><p class="weekly-basket-note">{{if .Basket.Lines}}{{if .Basket.NeedsReview}}Your hold needs review.{{else}}Reserved until {{.Basket.HoldLabel}}.{{end}}{{else}}DEMO SHOPPING. NO PAYMENT.{{end}}</p>{{if .FeaturedCount}}<a href="/?featured=1#catalog-title" class="weekly-featured-link">See all {{.FeaturedCount}} featured {{if eq .FeaturedCount 1}}pick{{else}}picks{{end}}</a>{{end}}<a href="/cart" class="weekly-basket-link">Check the basket <span aria-hidden="true">→</span></a></aside>
 </section>
 {{end}}
 
