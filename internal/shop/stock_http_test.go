@@ -206,3 +206,57 @@ func TestStockHTTPGateBadIdentityArchiveAndImmutableReceipt(t *testing.T) {
 		t.Error("adjustment changed immutable receipt")
 	}
 }
+
+func TestStockActivityMerchandisingFiltersSurviveRenderedFormSubmission(t *testing.T) {
+	for _, hx := range []bool{false, true} {
+		t.Run(fmt.Sprint(hx), func(t *testing.T) {
+			s, clock, _ := promotionTestStore(t)
+			a := reservationHTTPApp(t, s, true)
+			manager := testManager(t, s)
+			saveTestPromotion(t, s, 1, 249, clock.now().Unix()-60, clock.now().Unix()+3600)
+			if err := s.SetFeatured(2, 0, true); err != nil {
+				t.Fatal(err)
+			}
+			for action, label := range map[string]string{"promotion": "Promotion changed", "featured": "Featured choice changed"} {
+				path := "/manager/stock?view=activity&action=" + action + "&q=retained-inventory-context"
+				for round := 0; round < 2; round++ {
+					w := testRequest(t, a, http.MethodGet, path, manager, nil, managerDraftHeaders(hx))
+					body := w.Body.String()
+					if w.Code != http.StatusOK {
+						t.Fatal("activity unavailable", w.Code)
+					}
+					form := adminForm(body, "/manager/stock")
+					selection := regexp.MustCompile(`(?s)<select\b[^>]*id="activity-action"[^>]*>(.*?)</select>`).FindStringSubmatch(form)
+					if len(selection) != 2 {
+						t.Fatal("action control missing")
+					}
+					values := url.Values{}
+					for _, input := range adminInputRE.FindAllStringSubmatch(form, -1) {
+						values.Set(adminAttr(input[1], "name"), adminAttr(input[1], "value"))
+					}
+					selected := 0
+					for _, option := range regexp.MustCompile(`(?s)<option\b([^>]*)>(.*?)</option>`).FindAllStringSubmatch(selection[1], -1) {
+						if strings.Contains(option[1], "selected") {
+							selected++
+							values.Set("action", adminAttr(option[1], "value"))
+							if adminVisibleText(option[2]) != label {
+								t.Fatal("wrong action label", option[2])
+							}
+						}
+					}
+					if selected != 1 || values.Get("action") != action || values.Get("q") != "retained-inventory-context" {
+						t.Fatal("linked action lost on form reapply", values, selected)
+					}
+					events := regexp.MustCompile(`(?s)<article class="stock-event">.*?</article>`).FindAllString(body, -1)
+					if len(events) != 1 || !strings.Contains(events[0], label) {
+						t.Fatal("filter broadened event results", events)
+					}
+					if !strings.Contains(adminVisibleText(body), "1 matching event") || strings.Contains(adminVisibleText(body), "1 matching events") {
+						t.Fatal("wrong singular activity count")
+					}
+					path = "/manager/stock?" + values.Encode()
+				}
+			}
+		})
+	}
+}
