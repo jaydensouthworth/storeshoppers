@@ -7,7 +7,7 @@ Build a distinctive, believable corner-store demo that shows the storefront, man
 - **Storefront:** an authored grocery-circular look using bright yellow, deep navy, red and crisp white, with strong typography, product illustrations and clear price hierarchy. Avoid generic cream/sage cards. It should feel like a specific shop, with useful shopping paths on mobile and desktop. Keep the desktop weekly circular compact enough that shoppers can see catalog controls/products without scrolling through a full-screen hero; review desktop and phone proportions separately.
 - **Manager:** a task-based dashboard with purposeful navigation, focused editors, useful search/filter controls and clear feedback. Each control must do real work; printed lists and decorative metrics are not the goal.
 - **Fulfillment:** broad manager control over working orders, with explicit reasons, audit history and transactional stock changes. Preserve the original receipt and show the final fulfillment total separately. Missing items must never silently become picked.
-- **Portfolio boundary:** approximate a real shop while remaining an explicit fake-data demo, with no customer accounts, real personal information or payments. The catalog/inventory are shared; visitor baskets and orders are session-scoped. The manager password is only a demo gate.
+- **Portfolio boundary:** approximate a real shop while remaining an explicit fake-data demo, with no customer accounts, real personal information or payments. The catalog/inventory and new demo employee order queue are shared; customer baskets/receipts and manager permissions remain session-scoped. The manager password is only a demo gate.
 - **Technical shape:** one repository and Go application, server-rendered HTML with HTMX progressive enhancement, SQLite, integer money and accessible responsive layouts. Keep ordinary HTML fallbacks and release small, tested phases.
 
 Each phase is accepted only when the intended task works end to end, relevant invalid/stale/concurrent actions are tested, stock and receipt invariants hold, and desktop/mobile layouts remain usable. Check plain HTML behavior, keyboard access, labels, focus, contrast and empty/error states. A local implementation or passing unit test alone is not a live release.
@@ -58,7 +58,11 @@ The foundation passed [CI](https://github.com/jaydensouthworth/storeshoppers/act
 
 **Deployed phone weights/reports:** [ce0737e](https://github.com/jaydensouthworth/storeshoppers/commit/ce0737ea8e802d589c0db0a5a46c4dbd2c683d2a) passed 419 Go tests, 107 JavaScript checks, 14 process suites, independent review and [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37052613149). Changed assets match live and all 77 storefront records remain unchanged. The connected-browser/physical-phone acceptance limitation still applies.
 
-**Current candidate:** schema15 independent customer/shopper message threads, strict owner/assignment scope, separate revisions and immutable attribution, bounded plain text/history/rates/storage, and explicit uncertain-send recovery. Message traffic must never invalidate pick/weight reviews, reconcile baskets, copy manager-only notes or imply substitution consent. See [Order messages](ORDER_MESSAGES.md). Aggregate checks, independent review, migration/process tests and release verification remain required before calling this candidate deployed.
+**Deployed schema15 messaging:** independent customer/shopper threads retain owner/assignment scope, separate revisions and immutable attribution, bounded plain text/history/rates/storage, and explicit uncertain-send recovery. Message traffic never authorizes substitution. The token-rotation refinement [09e3912](https://github.com/jaydensouthworth/storeshoppers/commit/09e3912df2299462d67c914ef5007199aabb4826) passed [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37062030246). See [Order messages](ORDER_MESSAGES.md).
+
+**Latest verified employee release:** [71157cb](https://github.com/jaydensouthworth/storeshoppers/commit/71157cb4cc1704626242d685ecf9c1a5e5189c3c), schema16, is deployed and passed [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37068108750), 461 Go tests, 163 JavaScript checks and 16 process suites. Live desktop/391 CSS-pixel QA verified generic identity, shared queue, native claim, pick/unpick correction and release/reclaim. Only the owned QA order was cancelled/restocked; all 77 storefront records were retained. Physical camera checks remain open.
+
+**Current source candidate:** schema17 [counted replacement proposals and explicit customer decisions](SUBSTITUTIONS.md). Preserve separate chat/approval authority and require aggregate, migration, concurrency, process, CI and live acceptance before declaring it deployed.
 
 ### 1. Manager usability and explicit reset
 
@@ -125,7 +129,7 @@ photo decoding, manual fallback and shared counted-pick transactions. Scan recog
 never implies a pick. Private manager notes and unrelated visitor orders remain
 inaccessible. See [Handheld architecture and acceptance](HANDHELD.md).
 
-The current increment adds phone measured-weight review and explicit item reports. The staged follow-ups are in-app customer/shopper messaging, structured substitution preferences and approvals,
+Phone measured-weight review, explicit item reports, customer/shopper messaging and shared employee claiming are deployed. Schema17 adds counted proposal approvals in the current source candidate. The staged follow-ups are broader substitution preferences and weighed replacements,
 unavailable handling, staging/pickup handoff, then batch operations. Chat has its own
 revision and does not itself authorize a substitution. Ready closes the picking task,
 so staging requires an explicit new authority boundary. Real notifications, customer
@@ -157,4 +161,8 @@ physical logistics, payments, refunds or customer accounts were added.
 
 ### Shared employee queue, schema16
 
-Implemented: generated fictional employee identity, shared store order queue, atomic Start/Continue shopping, pick/unpick corrections, release with saved progress, and all-picked/no-hold Ready. New public-demo checkouts enroll explicitly; historical private orders and manager permissions are unchanged. One deliberate shared practice setup never regenerates or replaces active work. Structured substitution proposals/customer approvals remain the next phase; ordinary chat does not authorize them.
+Implemented: generated fictional employee identity, shared store order queue, atomic Start/Continue shopping, pick/unpick corrections, release with saved progress, and all-picked/no-hold Ready. New public-demo checkouts enroll explicitly; historical private orders and manager permissions are unchanged. One deliberate shared practice setup never regenerates or replaces active work. Structured counted replacements now follow a separate schema17 preview/request/customer-decision flow; ordinary chat does not authorize them.
+
+### Explicit counted replacement approval, schema17
+
+Implemented: exact shopper preview and customer approval/rejection; normal plain-HTML fallback; scoped retained proposal history; shared allocation/stock transaction; immutable placed receipt; continued unrelated picking and employee task reopening; stale economic/price/lifetime review; bounded quotas and migration safeguards. See [Substitutions](SUBSTITUTIONS.md). Weighted replacements remain a separate future workflow.

@@ -37,6 +37,7 @@ type App struct {
 	resetPending atomic.Bool
 }
 type View struct {
+	SubstitutionRequests                                     int64
 	CartQuantities                                           map[int64]string
 	CartDraftShortened                                       bool
 	CustomerQueue                                            *OrderQueue
@@ -132,6 +133,7 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.registerHandheldRoutes()
 	a.registerEmployeeRoutes()
 	a.registerMessageRoutes()
+	a.registerSubstitutionRoutes()
 	a.mux.HandleFunc("GET /cart", a.showCart)
 	a.mux.HandleFunc("POST /cart", a.changeCart)
 	a.mux.HandleFunc("POST /cart/renew", a.renewCart)
@@ -615,6 +617,10 @@ func (a *App) showOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if e != nil {
+		a.fail(w, e)
+		return
+	}
+	if e = a.store.db.QueryRow(`SELECT COUNT(*) FROM substitution_proposals p JOIN orders o ON o.id=p.order_id JOIN sessions s ON s.id=o.session_id AND s.expires>? WHERE p.order_id=? AND o.session_id=? AND p.status='pending' AND o.status IN ('Placed','Picking') AND EXISTS(SELECT 1 FROM shopper_assignments a WHERE a.id=p.assignment_id AND a.version=p.assignment_version AND a.state='active')`, a.store.now().Unix(), id, v.Session.ID).Scan(&v.SubstitutionRequests); e != nil {
 		a.fail(w, e)
 		return
 	}

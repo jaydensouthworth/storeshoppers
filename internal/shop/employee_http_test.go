@@ -42,6 +42,10 @@ func employeeHTTPStart(t *testing.T, s *Store, a *App) (*http.Cookie, EmployeeWo
 func TestEmployeeHTTPSharedDashboardAndNativePicking(t *testing.T) {
 	s := newTestStore(t)
 	a := handheldHTTPApp(t, s)
+	home := handheldHTTPRequest(t, a, "GET", "/", nil, nil, nil)
+	if !strings.Contains(home.Body.String(), "New fake orders enter the shared employee queue") || strings.Contains(home.Body.String(), "Your orders stay in this browser session") {
+		t.Fatal("public demo boundary copy does not describe shared employee work")
+	}
 	owner, privateID := pickingFixture(t, s)
 	private := testOrder(t, s, privateID, owner.ID)
 	c, q := employeeHTTPStart(t, s, a)

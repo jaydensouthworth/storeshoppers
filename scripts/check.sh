@@ -41,3 +41,5 @@ python3 scripts/handheld_weight_smoke.py
 python3 scripts/order_messages_smoke.py
 
 python3 scripts/employee_smoke.py
+
+python3 scripts/substitutions_smoke.py

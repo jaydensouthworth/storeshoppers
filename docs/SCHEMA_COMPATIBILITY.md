@@ -134,3 +134,5 @@ not a production migration.
 Schema12 adds promotion price-basis snapshots and v12 writer fences while retaining v10/v11 generations. Already-open schema11 connections cannot mutate the upgraded catalog or offers. This source supports schema12. Older guarded binaries return503 instead of attempting to serve a migrated database.
 
 The combined schema12 executable passed fresh process-overlap probes against unguarded8, guarded8, image9 and weighted10. Prior table fields and sequence marks survived, current writer fences covered all29 application tables, and every rejected mutation preserved the complete database fingerprint. Guarded requests/readiness returned503; ancient unguarded health still returned200. Local tests establish data safety during the tested overlap, not deployment routing or the absence of an old replica.
+
+Schema17 adds retained structured substitution proposals and installs v17 fences on every application table. The existing migration backup, writer-lock, response-buffer, and reset epoch guarantees also cover preview/request/decision workflows; previews are read-only and all proposal decisions use beginWrite.

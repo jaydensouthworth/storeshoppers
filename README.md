@@ -137,8 +137,12 @@ Schema 13 adds visitor-scoped simulated shopper profiles, availability and activ
 capacity. New assignments check eligibility transactionally, while current work and
 historical identities survive profile edits and archive/restore. See [Shoppers](docs/SHOPPERS.md).
 
-Schema 14 adds one-time, short-lived phone pairing and revocable assignment-scoped grants. The separate `/handheld/` workspace shares authorized counted picking with the manager, preserves stock and placed receipts, and supports local camera/photo decoding without uploads. Product pages expose real demo scan labels. Phone weight review and bounded item reports reuse the existing measurement and manager-hold rules. Structured substitution approvals and staging remain staged follow-ups; schema15 messaging is described below. See [Handheld demo](docs/HANDHELD.md).
+Schema 14 adds one-time, short-lived phone pairing and revocable assignment-scoped grants. The separate `/handheld/` workspace shares authorized counted picking with the manager, preserves stock and placed receipts, and supports local camera/photo decoding without uploads. Product pages expose real demo scan labels. Phone weight review and bounded item reports reuse the existing measurement and manager-hold rules. Structured counted customer approvals and schema15 messaging are described below; weighted replacements and staging remain staged follow-ups. See [Handheld demo](docs/HANDHELD.md).
 
 Schema 15 adds an append-only, per-order customer/shopper message stream. Customer ownership and phone assignment grants stay separate; messages do not change picking versions, stock, receipts or manager-only notes. The dedicated chat pages have bounded history, polling, ordinary HTML sends and explicit uncertain-send checks. See [Order messages](docs/ORDER_MESSAGES.md).
 
 Schema 16 adds the public-demo employee dashboard at `/handheld/employee`. New demo checkout orders join one shared store queue; historical/private orders are not backfilled. Independent fictional employees claim work atomically, reuse saved progress, return work to the queue and mark fully picked, unheld orders Ready. Expired shifts release ownership without resetting items or stock. Practice creation is a deliberate one-time shared transaction. See [Employee shopping](docs/EMPLOYEES.md).
+
+### Customer-approved replacements
+
+Assigned demo employees can preview and request counted replacements from the real storefront customer. Explicit customer approval atomically exchanges stock and working allocations while preserving the placed receipt; chat is never approval. See [Substitution workflow and safety](docs/SUBSTITUTIONS.md).

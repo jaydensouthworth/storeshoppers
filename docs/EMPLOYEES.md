@@ -28,4 +28,4 @@ Employee cookies are HttpOnly, Secure on HTTPS, SameSite Strict and scoped to `/
 
 Schema16 is additive and uses the existing verified pre-migration backup, transaction rollback, old-writer fences, runtime compatibility check and reset epoch. Existing products, stock, orders, shoppers and phone grants remain untouched at migration time. Automated coverage includes concurrent creation/claiming, two Store connections, stale/duplicate/reconnected commands, zero/unavailable seeds, scope/CSRF/origin, expiry/revocation, release/reclaim, Ready holds/weighted completeness, requested receipt retention, migration failure/backup/restart, independent cookie jars and real-process restart.
 
-Physical camera optics and a real phone’s permission UX require physical-device acceptance. Structured substitution proposals/customer approvals remain a separate next phase; sending chat text is never approval to substitute.
+Physical camera optics and a real phone’s permission UX require physical-device acceptance. [Structured counted replacements](SUBSTITUTIONS.md) now have a separate preview/request/customer approve-or-reject flow. Sending chat text is never approval to substitute.

@@ -170,7 +170,7 @@ test('item report has bounded choices and optional note with no scan prerequisit
  assert.match(report,/Ask manager to review this item/);assert.match(report,/name="command_key" value="{{\.ReportKey}}"/);
  for(const kind of ['unavailable','damaged','weight_stock'])assert.ok(report.includes(`value="${kind}"`));
  assert.match(report,/name="note" maxlength="240"/);assert.doesNotMatch(report,/name="(?:code|format|source)"/);assert.match(report,/does not change this item’s picked quantity or stock/);
- assert.match(template,/{{end}}{{end}}\s*{{if not \.Task\.Practice}}{{template "handheld-report-form" \.}}{{end}}/);
+ assert.match(template,/{{end}}{{end}}\s*{{if not \.Task\.Practice}}{{if eq \$item\.SaleUnit "each"}}[^\n]+{{end}}{{template "handheld-report-form" \.}}{{end}}/);
 });
 
 

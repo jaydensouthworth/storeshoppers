@@ -122,6 +122,10 @@ func handheldGrantTx(tx *sql.Tx, raw, csrf string, requireCSRF bool, now int64) 
 	if !validHandheldToken(raw) {
 		return g, ErrHandheldAccess
 	}
+	return handheldGrantHashTx(tx, handheldHash(raw), csrf, requireCSRF, now)
+}
+func handheldGrantHashTx(tx *sql.Tx, hash, csrf string, requireCSRF bool, now int64) (handheldGrant, error) {
+	var g handheldGrant
 	err := tx.QueryRow(`SELECT g.id,a.order_id,g.assignment_id,g.assignment_version,g.shopper_id,g.expires,g.csrf,g.owner_session_id,g.scope,g.epoch,a.shopper_name,o.status,o.order_version,g.last_recorded
  FROM handheld_grants g JOIN handheld_state h ON h.id=1 AND h.epoch=g.epoch
  JOIN sessions owner ON owner.id=g.owner_session_id
@@ -133,7 +137,7 @@ func handheldGrantTx(tx *sql.Tx, raw, csrf string, requireCSRF bool, now int64) 
  AND ((g.scope<>? AND owner.expires>?) OR (g.scope=? AND EXISTS(
  SELECT 1 FROM employee_grant_links l JOIN employee_sessions e ON e.token_hash=l.employee_hash
  JOIN employee_store_orders so ON so.order_id=o.id AND so.epoch=e.epoch
- WHERE l.grant_id=g.id AND e.epoch=g.epoch AND e.shopper_id=g.shopper_id AND e.expires>? AND e.revoked=0)))`, handheldHash(raw), now, employeeStoreScope, now, employeeStoreScope, now).Scan(&g.ID, &g.OrderID, &g.AssignmentID, &g.AssignmentVersion, &g.ShopperID, &g.Expires, &g.CSRF, &g.Owner, &g.Scope, &g.Epoch, &g.ShopperName, &g.Status, &g.Version, &g.LastRecorded)
+ WHERE l.grant_id=g.id AND e.epoch=g.epoch AND e.shopper_id=g.shopper_id AND e.expires>? AND e.revoked=0)))`, hash, now, employeeStoreScope, now, employeeStoreScope, now).Scan(&g.ID, &g.OrderID, &g.AssignmentID, &g.AssignmentVersion, &g.ShopperID, &g.Expires, &g.CSRF, &g.Owner, &g.Scope, &g.Epoch, &g.ShopperName, &g.Status, &g.Version, &g.LastRecorded)
 	if errors.Is(err, sql.ErrNoRows) {
 		return g, ErrHandheldAccess
 	}

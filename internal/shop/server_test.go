@@ -463,7 +463,7 @@ func TestWeakPasswordRequiresExplicitDemoMode(t *testing.T) {
 			r.AddCookie(&http.Cookie{Name: "shop_session", Value: session.ID})
 			w := httptest.NewRecorder()
 			a.ServeHTTP(w, r)
-			if tc.demo && !strings.Contains(w.Body.String(), "Fake catalog and inventory are shared by all visitors.") {
+			if tc.demo && !strings.Contains(w.Body.String(), "New fake orders enter the shared employee queue; catalog and stock are shared.") {
 				t.Error("shared demo warning missing")
 			}
 			if strings.HasPrefix(tc.origin, "https:") && !a.config.SecureCookies {

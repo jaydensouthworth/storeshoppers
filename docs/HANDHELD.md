@@ -71,13 +71,17 @@ These are not evidence of physical camera optics. Live desktop/narrow-screen QA 
 The [project plan](https://chatgpt.com/space/page_6abd4f41ae448191a351b73099da8658) includes sourced workflow research and the detailed acceptance matrix. Next releases should preserve the same authorization/transaction boundaries:
 
 1. Complete live connected-device acceptance for measured-weight review and item reporting
-2. Schema15 customer/shopper message threads with separate revisions are implemented in the next source increment; complete their live connected acceptance. See [Order messages](ORDER_MESSAGES.md)
-3. Structured substitution preferences and proposal/approve/reject transitions; chat alone is never consent
+2. Preserve deployed schema15 message boundaries and the schema16 employee dashboard/claim lifecycle. See [Order messages](ORDER_MESSAGES.md) and [Employee shopping](EMPLOYEES.md)
+3. Validate the schema17 [counted replacement proposal/customer-decision flow](SUBSTITUTIONS.md) in the next release. Chat alone is never consent; broader substitution preferences and weighed replacements remain later work
 4. Unavailable outcomes and explicit manager overrides with stock/audit invariants
 5. Staging and pickup handoff with separate authority after Ready, because Ready currently closes the picking assignment
 6. Batching only after each individual-order lifecycle is complete; no decorative productivity analytics
 
 ## Release evidence, 2 October 2026
+
+The [schema16 employee release 71157cb](https://github.com/jaydensouthworth/storeshoppers/commit/71157cb4cc1704626242d685ecf9c1a5e5189c3c) is live. Its [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37068108750) passed test, container isolation, health and persistence checks. The tested source contains 461 Go tests, 163 JavaScript checks and 16 isolated process suites. All 250 remote files match the tested tree. Live desktop and 391 CSS-pixel light/dark checks covered generic employee creation, a new owned order entering the shared queue, native Start shopping, manual product-code review, pick 1 → correct 0, release and reclaim. Native forms succeeded without cross-origin rejection. Only the labelled QA order was cancelled/restocked; its original receipt/history remained, and all 77 storefront records matched before release after cleanup. Physical-camera acceptance is still separate.
+
+Earlier foundation evidence:
 
 The [schema14 phone foundation commit 3098829](https://github.com/jaydensouthworth/storeshoppers/commit/3098829b82ab9c27450b66a4aa7304383e56696d) is deployed. Its [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37049056947) passed all test/container/persistence steps. It passed 398 top-level Go tests, 98 JavaScript checks and 13 real-process suites. The five new deployed assets matched bytes; all 77 storefront records (72 products, four offers, five featured entries) were retained after QA cleanup.
 

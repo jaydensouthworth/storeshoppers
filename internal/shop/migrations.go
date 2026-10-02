@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-const latestSchemaVersion = 16
+const latestSchemaVersion = 17
 const weightedSchemaVersion = 10
 
 //go:embed migrations/002_picking.sql
@@ -56,6 +56,9 @@ var orderMessagesMigration string
 
 //go:embed migrations/016_employee_store.sql
 var employeeStoreMigration string
+
+//go:embed migrations/017_substitution_proposals.sql
+var substitutionProposalsMigration string
 
 // migrate pins the connection so foreign_keys is disabled BEFORE BEGIN
 // IMMEDIATE. Rebuilds, data copies, writer fences and version markers commit
@@ -275,6 +278,17 @@ func (s *Store) migrateWithBackup(preserve func(*sql.Tx) (string, error)) (err e
 			return err
 		}
 		if _, err = tx.Exec(`INSERT INTO schema_version VALUES(16)`); err != nil {
+			return err
+		}
+	}
+	if version < 17 {
+		if err = applyMigration(tx, substitutionProposalsMigration); err != nil {
+			return fmt.Errorf("migration 17: %w", err)
+		}
+		if err = installWriterFences(tx, 17); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(`INSERT INTO schema_version VALUES(17)`); err != nil {
 			return err
 		}
 	}
