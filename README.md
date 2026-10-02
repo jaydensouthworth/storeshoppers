@@ -1,11 +1,12 @@
 # Store Shoppers
 
-A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse a 70-product demo catalog, put together a basket, place a simulated order, and manage the catalog, shelves and fulfillment from one workspace.
+A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse a 72-product demo catalog, put together a basket, place a simulated order, and manage the catalog, shelves and fulfillment from one workspace.
 
 ## Current capabilities
 
 - Scheduled fixed-price sales, featured choices and a data-driven weekly-sales storefront with safe price review
-- Searchable 70-product demo catalog with configurable department filters and clear stock states
+- Individual product pages with descriptions, package details, optional illustrative nutrition and nonfood examples
+- Searchable 72-product demo catalog with configurable department filters and clear stock states
 - Manager product creation, editing, archiving and restoration, with stable SKUs and reusable bundled illustrations
 - Catalog search across names/SKUs/codes, combined filters, sorting and 20-row pages with preserved editor context
 - Inventory filters, 12-row pages and a single selected adjustment form; scoped, filterable activity links
@@ -23,7 +24,7 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Customer status refresh with a normal HTML fallback
 - Persistent SQLite storage and locally bundled frontend assets
 
-This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Product-detail pages, weighted selling, dark mode and the later phone/barcode workflow remain in the [ordered roadmap](docs/ROADMAP.md).
+This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Weighted selling, dark mode and the later phone/barcode workflow remain in the [ordered roadmap](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -80,6 +81,8 @@ Startup applies versioned migrations transactionally. Version 2 adds picking pro
 
 Version 5 adds separate working-order lines, reasoned manager overrides and explicit partial/cancelled outcomes without rewriting placed receipts. Ready and Completed orders remain frozen. See [Manager order overrides](docs/ORDER_OVERRIDES.md).
 
+Version 8 adds optional product-detail metadata, complete public product pages and a guarded nonfood-example action. Metadata edits share catalog concurrency and audit while keeping price/inventory versions and receipt snapshots unchanged. Established migrations add no product rows, stock or invented nutrition.
+
 Version 7 adds fixed-cent promotions, independent featured choices and transactional merchandising audit. Normal migration/restarts create no offers. Customer and new working-item quotes require review across sale boundaries; placed and retained working rates stay unchanged. See [Promotions](docs/PROMOTIONS.md).
 
 Version 6 adds a fixed simulated shopper roster, versioned order assignments and structured task history. Existing orders remain unassigned until a manager assigns them. Cancelling a task preserves order status, working items and stock; Ready or completion ends the task in the same transaction. See [Shoppers](docs/SHOPPERS.md).
@@ -88,7 +91,7 @@ Version 4 adds persisted basket allocations, scoped basket management and instru
 
 Catalog management is implemented in version 3 at `/manager/catalog`. New manager-created products start with zero stock; restock them through the audited inventory form. Category/type names and SKUs remain reserved after archive, and historical receipts and picking tickets survive catalog edits. Archived category/type labels can be restored with their original identity; this does not restore any archived products. Product restoration is a separate, version-guarded action requiring active category/type labels. It preserves stock, SKU and local code IDs, and requires a fresh checkout quote.
 
-Fresh stores get 70 fake products. A one-time v3 migration expands only an exact original eight-product catalog, identified by its eight original IDs and placeholder codes, while retaining existing names, prices and stock. A catalog with those eight plus any custom product is not expanded. In normal mode, customized/partial legacy catalogs and established empty stores are not seeded; reopening never restores removed products. An explicitly confirmed demo reset instead restores the full seed after safely preserving the prior database.
+Fresh stores get 72 fake products, including deodorant and razors. The schema-v8 detail seed runs only for fresh databases and explicitly confirmed resets; existing catalogs are never silently enriched. A demo-only reviewed action can add the two nonfood examples without overwriting existing products. See [Product details](docs/PRODUCT_DETAILS.md). A one-time v3 migration expands only an exact original eight-product catalog, identified by its eight original IDs and placeholder codes, while retaining existing names, prices and stock. A catalog with those eight plus any custom product is not expanded. In normal mode, customized/partial legacy catalogs and established empty stores are not seeded; reopening never restores removed products. An explicitly confirmed demo reset instead restores the full seed after safely preserving the prior database.
 
 Weighed products can be configured with grams, cents per kilogram and a quantity step, but are clearly unavailable to add to a basket or checkout. Existing numeric barcode values are legacy placeholders; the stored local `SHOPDEMO-` identifiers are not retail GTINs. Label generation, camera scanning, weighted checkout and actual-weight reconciliation remain later work. Baskets reserve counted inventory for 15 minutes; checkout consumes that allocation atomically. Manager inventory shows available and reserved separately. See the [catalog evolution plan](docs/CATALOG_EVOLUTION.md) for completed boundaries and deferred work.
 

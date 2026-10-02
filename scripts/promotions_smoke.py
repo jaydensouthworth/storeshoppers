@@ -107,7 +107,7 @@ def main():
                 assert db.execute("SELECT cancelled FROM promotions WHERE id=1").fetchone()[0] == 1
                 assert db.execute("SELECT featured FROM product_features WHERE product_id=1").fetchone()[0] == 0
                 assert db.execute("SELECT price FROM order_items ORDER BY order_id").fetchall() == [(249,), (349,)]
-                assert db.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 7
+                assert db.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 8
             assert not list(Path(db_path + ".demo-backups").glob("*.sqlite3"))
             print("Promotion form smoke passed: empty state, confirmed/replay-safe examples, active/regular rates, featured filter, stock-only holds, stale quote review, immutable receipts, cancel/unfeature and restart persistence")
         finally:

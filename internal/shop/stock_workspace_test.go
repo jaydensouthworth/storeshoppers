@@ -23,7 +23,7 @@ func TestStockInventoryFiltersSortPagesAndExpiry(t *testing.T) {
 		assert  func(StockPage)
 	}{
 		{"pagination", StockFilters{Page: 1}, func(got StockPage) {
-			if got.Total != 69 || len(got.Products) != 12 || got.Pages != 6 {
+			if got.Total != 71 || len(got.Products) != 12 || got.Pages != 6 {
 				t.Errorf("pagination=%+v", got)
 			}
 			for i := 1; i < len(got.Products); i++ {
@@ -33,7 +33,7 @@ func TestStockInventoryFiltersSortPagesAndExpiry(t *testing.T) {
 			}
 		}},
 		{"large page clamped", StockFilters{Page: 1000000}, func(got StockPage) {
-			if got.Page != 6 || got.First != 61 || got.Last != 69 || len(got.Products) != 9 {
+			if got.Page != 6 || got.First != 61 || got.Last != 71 || len(got.Products) != 11 {
 				t.Errorf("clamp=%+v", got)
 			}
 		}},
@@ -53,7 +53,7 @@ func TestStockInventoryFiltersSortPagesAndExpiry(t *testing.T) {
 			}
 		}},
 		{"all", StockFilters{Lifecycle: "all"}, func(got StockPage) {
-			if got.Total != 70 {
+			if got.Total != 72 {
 				t.Errorf("all count=%d", got.Total)
 			}
 		}},

@@ -29,8 +29,8 @@ func savedBackups(t *testing.T, path string) []string {
 }
 func assertDemoSeed(t *testing.T, s *Store) {
 	t.Helper()
-	if n := testCount(t, s, "products"); n != 70 {
-		t.Fatalf("products = %d, want 70", n)
+	if n := testCount(t, s, "products"); n != 72 {
+		t.Fatalf("products = %d, want 72", n)
 	}
 	p := testProduct(t, s, 1)
 	if p.Name != "Honeycrisp apples" || p.Price != 349 || p.Stock != 24 {

@@ -491,8 +491,8 @@ func migrationCatalogData(t *testing.T, db *sql.DB) map[string][][]any {
 func TestMigrationSeedsFreshDatabaseOnlyOnceWithoutResurrection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "fresh.db")
 	s := openTestStore(t, path)
-	if count := testCount(t, s, "products"); count != 70 {
-		t.Fatalf("fresh catalog count = %d, want 70", count)
+	if count := testCount(t, s, "products"); count != 72 {
+		t.Fatalf("fresh catalog count = %d, want 72", count)
 	}
 	if count := testCount(t, s, "schema_version"); count != latestSchemaVersion {
 		t.Errorf("fresh schema_version count = %d, want latest schema", count)
@@ -501,6 +501,8 @@ func TestMigrationSeedsFreshDatabaseOnlyOnceWithoutResurrection(t *testing.T) {
 	// database must never recreate a demo row or overwrite manager changes.
 	testExec(t, s, `UPDATE products SET name='Manager changed apples',price=875,stock=3,version=19,catalog_version=11,price_version=5 WHERE id=1`)
 	testExec(t, s, `UPDATE products SET archived=1,catalog_version=catalog_version+1 WHERE id=2`)
+	testExec(t, s, `DELETE FROM product_details WHERE product_id=70`)
+	testExec(t, s, `DELETE FROM product_example_products WHERE product_id=70`)
 	testExec(t, s, `DELETE FROM product_codes WHERE product_id=70`)
 	testExec(t, s, `DELETE FROM products WHERE id=70`)
 	before := migrationCatalogData(t, s.db)
@@ -511,11 +513,13 @@ func TestMigrationSeedsFreshDatabaseOnlyOnceWithoutResurrection(t *testing.T) {
 	if after := migrationCatalogData(t, reopened.db); !reflect.DeepEqual(before, after) {
 		t.Error("reopening seeded database reset edits, unarchived products, or resurrected removed rows")
 	}
-	if count := testCount(t, reopened, "products"); count != 69 {
-		t.Errorf("reopening resurrected removed demo product: count = %d, want 69", count)
+	if count := testCount(t, reopened, "products"); count != 71 {
+		t.Errorf("reopening resurrected removed demo product: count = %d, want 71", count)
 	}
 	// A fully cleared current-version catalog is still established, not a new
 	// database. Taxonomy and identity sequence must remain stable as well.
+	testExec(t, reopened, `DELETE FROM product_details`)
+	testExec(t, reopened, `DELETE FROM product_example_products`)
 	testExec(t, reopened, `DELETE FROM product_codes`)
 	testExec(t, reopened, `DELETE FROM products`)
 	empty := migrationCatalogData(t, reopened.db)

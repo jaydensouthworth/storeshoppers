@@ -12,6 +12,8 @@ import (
 // product and the manager's current CSRF token. Posted drafts are never HTML.
 type CatalogProductForm struct {
 	Product           Product
+	Details           ProductDetails
+	DetailDraft       map[string]string
 	Categories, Types []Taxonomy
 	Session           Session
 	FieldID           string
@@ -35,7 +37,7 @@ func newCatalogProduct() Product {
 }
 
 func catalogIllustrations() []string {
-	return []string{"apple", "leaf", "bread", "milk", "egg", "pasta", "oil", "jam"}
+	return []string{"apple", "leaf", "bread", "milk", "egg", "pasta", "oil", "jam", "deodorant", "razor"}
 }
 
 func catalogForm(p Product, v View) CatalogProductForm {
@@ -50,14 +52,14 @@ func catalogForm(p Product, v View) CatalogProductForm {
 	if p.ID != 0 {
 		id = strconv.FormatInt(p.ID, 10)
 	}
-	return CatalogProductForm{Product: p, Categories: v.Categories, Types: v.Types, Session: v.Session, FieldID: id}
+	return CatalogProductForm{Product: p, Categories: v.Categories, Types: v.Types, Session: v.Session, FieldID: id, Details: v.CatalogDetails, DetailDraft: v.CatalogDetailsDraft}
 }
 
 func (a *App) showCatalog(w http.ResponseWriter, r *http.Request) {
 	a.catalogView(w, r, "", nil, nil)
 }
 
-func (a *App) catalogView(w http.ResponseWriter, r *http.Request, message string, problem error, draft *Product) {
+func (a *App) catalogView(w http.ResponseWriter, r *http.Request, message string, problem error, draft *Product, detailsDraft ...map[string]string) {
 	v, ok := a.view(w, r)
 	if !ok || !a.guard(w, r, v.Session) {
 		return
@@ -133,6 +135,10 @@ func (a *App) catalogView(w http.ResponseWriter, r *http.Request, message string
 			current = draft
 		}
 		draft = current
+		if v.CatalogDetails, err = a.store.ProductDetails(id); err != nil {
+			a.fail(w, err)
+			return
+		}
 		v.ManagerTab = "edit"
 	}
 	if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
@@ -173,13 +179,16 @@ func (a *App) catalogView(w http.ResponseWriter, r *http.Request, message string
 		v.Title = "Edit product"
 	}
 	v.Message, v.CatalogDraft = message, draft
+	if len(detailsDraft) > 0 {
+		v.CatalogDetailsDraft = detailsDraft[0]
+	}
 	if problem != nil {
 		v.Error = problem.Error()
 	}
 	a.render(w, r, v, http.StatusOK)
 }
 
-func (a *App) catalogResult(w http.ResponseWriter, r *http.Request, message string, err error, draft *Product) {
+func (a *App) catalogResult(w http.ResponseWriter, r *http.Request, message string, err error, draft *Product, detailsDraft ...map[string]string) {
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -194,15 +203,17 @@ func (a *App) catalogResult(w http.ResponseWriter, r *http.Request, message stri
 			return
 		}
 		draft = nil
+		detailsDraft = nil
 	} else {
 		message = ""
 		// Never turn a stale version into a fresh edit. Discard that draft and
 		// display current data so the manager can review before submitting again.
 		if errors.Is(err, ErrConflict) || errors.Is(err, ErrUnavailable) {
 			draft = nil
+			detailsDraft = nil
 		}
 	}
-	a.catalogView(w, r, message, err, draft)
+	a.catalogView(w, r, message, err, draft, detailsDraft...)
 }
 
 func catalogPathID(r *http.Request) (int64, error) {
@@ -217,7 +228,7 @@ func catalogPathID(r *http.Request) (int64, error) {
 }
 
 func (a *App) saveCatalogProduct(w http.ResponseWriter, r *http.Request) {
-	s, ok := a.form(w, r)
+	s, ok := a.formWithLimit(w, r, 32768)
 	if !ok || !a.guard(w, r, s) {
 		return
 	}
@@ -227,7 +238,8 @@ func (a *App) saveCatalogProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := Product{ID: id, SKU: strings.TrimSpace(r.PostForm.Get("sku")), Name: strings.TrimSpace(r.PostForm.Get("name")), Description: strings.TrimSpace(r.PostForm.Get("description")), Icon: r.PostForm.Get("icon"), SaleUnit: r.PostForm.Get("sale_unit")}
-	invalid := false
+	details, detailDraft, detailPosted, detailErr := parseProductDetails(r.PostForm)
+	invalid := detailErr != nil
 	for key, dest := range map[string]*int64{"category_id": &p.CategoryID, "price": &p.Price, "quantity_step": &p.QuantityStep} {
 		value, e := num(r.PostForm.Get(key))
 		if e != nil {
@@ -252,12 +264,16 @@ func (a *App) saveCatalogProduct(w http.ResponseWriter, r *http.Request) {
 		err = ErrInvalid
 	} else {
 		var saved int64
-		saved, err = a.store.SaveProduct(p)
+		if detailPosted {
+			saved, err = a.store.SaveProductWithDetails(p, details)
+		} else {
+			saved, err = a.store.SaveProduct(p)
+		}
 		if err == nil {
 			r.SetPathValue("id", strconv.FormatInt(saved, 10))
 		}
 	}
-	a.catalogResult(w, r, "Product saved. Use inventory adjustments to change its stock.", err, &p)
+	a.catalogResult(w, r, "Product saved. Use inventory adjustments to change its stock.", err, &p, detailDraft)
 }
 
 func (a *App) archiveCatalogProduct(w http.ResponseWriter, r *http.Request) {

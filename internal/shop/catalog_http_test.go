@@ -38,7 +38,7 @@ func TestHTTPCatalogManagerGuardAndRoundTrip(t *testing.T) {
 	createValues := catalogProductForm(manager, p)
 	createValues.Set("stock", "9000") // Catalog forms may never invent stock without audit.
 	w := testRequest(t, a, http.MethodPost, "/manager/catalog/products", manager, createValues, nil)
-	assertRedirect(t, w, "/manager/catalog?edit=71", false)
+	assertRedirect(t, w, "/manager/catalog?edit=73", false)
 	all, err := s.CatalogProducts()
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestHTTPCatalogManagerGuardAndRoundTrip(t *testing.T) {
 		t.Error("stale HTTP form changed product")
 	}
 	w = testRequest(t, a, http.MethodPost, fmt.Sprintf("/manager/catalog/products/%d/archive", p.ID), manager, url.Values{"csrf": {manager.CSRF}, "catalog_version": {fmt.Sprint(saved.CatalogVersion)}}, nil)
-	assertRedirect(t, w, "/manager/catalog?edit=71", false)
+	assertRedirect(t, w, "/manager/catalog?edit=73", false)
 	if !testCatalogProduct(t, s, p.ID).Archived {
 		t.Error("HTTP archive not persisted")
 	}
@@ -206,7 +206,7 @@ func TestHTTPWeightedProductMetadataCannotBecomeCountedSale(t *testing.T) {
 	p := Product{Name: "HTTP future weighed nuts", CategoryID: testProduct(t, s, 1).CategoryID, Icon: "leaf", Price: 1599, SaleUnit: "g", QuantityStep: 100}
 	values := catalogProductForm(manager, p)
 	values.Set("price_basis", "1")
-	assertRedirect(t, testRequest(t, a, http.MethodPost, "/manager/catalog/products", manager, values, nil), "/manager/catalog?edit=71", false)
+	assertRedirect(t, testRequest(t, a, http.MethodPost, "/manager/catalog/products", manager, values, nil), "/manager/catalog?edit=73", false)
 	all, err := s.CatalogProducts()
 	if err != nil {
 		t.Fatal(err)

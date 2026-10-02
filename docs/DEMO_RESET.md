@@ -4,7 +4,7 @@ Ordinary restarts and deployments preserve data in **both normal and demo mode**
 
 With `DEMO_MODE=true`, open **`/manager/demo/reset`** after signing into the manager workspace, or use its **Reset shared demo** link. GET only displays the confirmation page. The POST requires the current manager session, its CSRF token and the explicit confirmation checkbox. Both routes return 404 in normal mode.
 
-The action restores the current seeded demo: 70 products and their starting prices/stock, standard labels, three current-UTC-week sample sales and matching featured choices, and empty sessions, baskets, orders, picking, stock adjustments and visitor edits. All visitors lose their old sessions and managers must sign in again. The page warns that the shared demo password is intentionally public and this reset affects **every visitor's fake data**. There is no unauthenticated reset action and no reset on a simple link visit.
+The action restores the current seeded demo: 72 products (including deodorant and razors), illustrative package/nutrition metadata and their starting prices/stock, standard labels, three current-UTC-week sample sales and matching featured choices, and empty sessions, baskets, orders, picking, stock adjustments and visitor edits. All visitors lose their old sessions and managers must sign in again. The page warns that the shared demo password is intentionally public and this reset affects **every visitor's fake data**. There is no unauthenticated reset action and no reset on a simple link visit.
 
 ## Concurrency and durable reset
 

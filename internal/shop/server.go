@@ -37,6 +37,10 @@ type App struct {
 	resetPending atomic.Bool
 }
 type View struct {
+	ProductPage                                              *ProductDetailPage
+	ProductExamples                                          *ProductExamplesWorkspace
+	CatalogDetails                                           ProductDetails
+	CatalogDetailsDraft                                      map[string]string
 	FeaturedCount                                            int
 	FeaturedOnly                                             bool
 	Promotions                                               *PromotionWorkspace
@@ -112,6 +116,7 @@ func New(store *Store, cfg Config) (*App, error) {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	a.mux.HandleFunc("GET /{$}", a.showStore)
+	a.mux.HandleFunc("GET /products/{id}", a.showProduct)
 	a.mux.HandleFunc("GET /cart", a.showCart)
 	a.mux.HandleFunc("POST /cart", a.changeCart)
 	a.mux.HandleFunc("POST /cart/renew", a.renewCart)
@@ -144,6 +149,8 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("GET /manager/featured", a.showPromotions)
 	a.mux.HandleFunc("POST /manager/featured/{id}", a.setFeatured)
 	a.mux.HandleFunc("GET /manager/catalog", a.showCatalog)
+	a.mux.HandleFunc("GET /manager/catalog/examples", a.showProductExamples)
+	a.mux.HandleFunc("POST /manager/catalog/examples", a.createProductExamples)
 	a.mux.HandleFunc("POST /manager/catalog/products", a.saveCatalogProduct)
 	a.mux.HandleFunc("POST /manager/catalog/products/{id}", a.saveCatalogProduct)
 	a.mux.HandleFunc("POST /manager/catalog/products/{id}/archive", a.archiveCatalogProduct)
@@ -253,12 +260,15 @@ func (a *App) fail(w http.ResponseWriter, e error) {
 	http.Error(w, "Something went wrong. Please try again.", 500)
 }
 func (a *App) form(w http.ResponseWriter, r *http.Request) (Session, bool) {
+	return a.formWithLimit(w, r, 8192)
+}
+func (a *App) formWithLimit(w http.ResponseWriter, r *http.Request, limit int64) (Session, bool) {
 	s, e := a.session(w, r)
 	if e != nil {
 		a.fail(w, e)
 		return s, false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 8192)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if e = r.ParseForm(); e != nil {
 		http.Error(w, "Invalid or oversized form", 400)
 		return s, false
@@ -374,14 +384,11 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v.Section = r.PostForm.Get("return")
-	if v.Section != "cart" {
+	if v.Section != "cart" && v.Section != "product" {
 		v.Section = "store"
 	}
 	v.Title = "Neighborhood Market"
-	v.Search = r.PostForm.Get("q")
-	v.Category = r.PostForm.Get("category")
-	v.SalesOnly = r.PostForm.Get("sales") == "1"
-	v.FeaturedOnly = r.PostForm.Get("featured") == "1"
+	v.Search, v.Category, v.SalesOnly, v.FeaturedOnly = storefrontContext(r.PostForm)
 	if e != nil {
 		if !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrNotFound) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrConflict) {
 			a.fail(w, e)
@@ -397,11 +404,23 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if v.Section == "product" {
+		if err := a.populateProductPage(&v, pid); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				a.productUnavailable(w, r, v)
+			} else {
+				a.fail(w, err)
+			}
+			return
+		}
+	}
 	// Return 200 for a rendered validation state so HTMX swaps and announces it.
 	if r.Header.Get("HX-Request") != "true" && v.Error == "" {
 		path := "/"
 		if v.Section == "cart" {
 			path = "/cart"
+		} else if v.Section == "product" {
+			path = productPageURL(pid, v.Search, v.Category, v.SalesOnly, v.FeaturedOnly)
 		} else {
 			values := url.Values{}
 			if v.Search != "" {

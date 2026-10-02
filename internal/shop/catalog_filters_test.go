@@ -270,7 +270,7 @@ func TestHTTPCatalogFullContextAcrossWritesAndErrors(t *testing.T) {
 			if htmx {
 				location = response.Header().Get("HX-Push-Url")
 			}
-			if location != f.EditURL(71) {
+			if location != f.EditURL(73) {
 				t.Errorf("create lost context: %s", location)
 			}
 			f.Query = "no longer matches <anything>"

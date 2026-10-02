@@ -101,7 +101,7 @@ def main():
                     assert error.code == 404
             stop(process)
             with closing(sqlite3.connect(path)) as db:
-                assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 71
+                assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 73
                 assert db.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 1
                 assert db.execute("SELECT COUNT(*) FROM baskets WHERE synthetic=1").fetchone()[0] == 2
             # Bad app config must fail before it resets anything.
@@ -109,7 +109,7 @@ def main():
                                      capture_output=True, text=True, timeout=5)
             assert invalid.returncode != 0 and "APP_ORIGIN" in invalid.stderr
             with closing(sqlite3.connect(path)) as db:
-                assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 71
+                assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 73
             process = start()
             # Ordinary demo restarts persist all data and grants. Only the
             # manager's explicitly confirmed POST resets the shared demo.
@@ -136,7 +136,7 @@ def main():
                 assert error.code == 404
             stop(process)
             with closing(sqlite3.connect(path)) as db:
-                assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 70
+                assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 72
                 assert db.execute("SELECT stock FROM products WHERE id=1").fetchone()[0] == 24
                 assert db.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
                 assert db.execute("SELECT COUNT(*) FROM cart").fetchone()[0] == 0
@@ -147,7 +147,7 @@ def main():
             assert len(backups) == 1
             with closing(sqlite3.connect(f"file:{backups[0]}?mode=ro", uri=True)) as db:
                 assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-                assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 71
+                assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 73
                 assert db.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 1
                 assert db.execute("SELECT COUNT(*) FROM adjustments").fetchone()[0] == 1
                 assert db.execute("SELECT COUNT(*) FROM baskets WHERE synthetic=1").fetchone()[0] == 2

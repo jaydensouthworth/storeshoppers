@@ -14,7 +14,7 @@ Each phase is accepted only when the intended task works end to end, relevant in
 
 ## Verified live foundation
 
-As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/f4d03c4fc602786afe9511281c0dc4831664f180). This checkpoint contains 89 verified published files.
+As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/c4ca7160d3ddba4c1456994ad8031f126ace1b50). This checkpoint contains 100 verified published files.
 
 - 70 fake products; configurable categories/types; create, edit, archive and restore; dedicated editors and a manager sidebar
 - Safe bundled illustration picker, immutable SKU and separate demo-local product codes; uploads, generated scan labels and camera scanning are not implemented
@@ -22,12 +22,13 @@ As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdad
 - Persisted 15-minute stock holds, expiry/reacquisition, available/reserved counts, scoped practice baskets and audited manager basket overrides
 - Plaintext checkout instructions capped at 500 characters; Picking progress percentages/counts and a distinct Ready status. The default Orders view already shows these states
 - Reasoned stock audit, per-line picking, guarded readiness, customer status refresh and normal HTML fallback
+- Scheduled fixed-cent sales, independent Featured choices, sale-aware price review and a weekly-sales storefront
 - Simulated Shoppers roster with reasoned assignment, reassignment and task cancellation, truthful order progress and explicit unrecorded scanner telemetry
 - Working-order quantity changes and substitutions, explicit partial finish/cancellation, stock disposition and immutable original receipts
 - Versioned populated-data migrations and restart persistence; server-side validation, CSRF and non-negative transactional inventory
 - The public known-password hint appears only when the configured password matches the demo value; this remains intentionally limited demo access
 
-Verification for this release: 181 top-level tests, 82.1% core coverage, race checks, vet, build, HTTP/restart checks and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36945598014). Authenticated-manager QA passed on desktop and at 400 CSS pixels. Physical-phone testing and a fuller accessibility audit remain open.
+Verification for this release: 203 top-level tests, 83.0% core coverage, race checks, vet, build, HTTP/restart checks and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36949475661). Authenticated-manager QA passed on desktop and at 400 CSS pixels. Physical-phone testing and a fuller accessibility audit remain open.
 
 ## Ordered implementation backlog
 
@@ -49,19 +50,19 @@ Preserve requested receipt lines and the placed total. Use separate fulfillment/
 
 ### 3. Add the Shoppers workspace
 
-**Implemented and locally verified in schema v6; publication and live verification are pending for this checkpoint:** Shoppers appears directly below Orders. A fixed simulated roster has working, audited assign/reassign/cancel-task controls and progress derived from actual order picking records. Cancelling a task leaves its order open and unassigned, with stock and picked counts intact. Ready or completion ends the active task in the same transaction. One active task per order is enforced; a shopper can hold several orders. Demo ownership applies before workload counts, filters, history and pagination. Selected editors preserve filter context and recover failed drafts; the order ticket links to its current assignment. Closed-order searches use structured historical assignee records. Scan rates remain explicitly unrecorded until real scanner telemetry exists. See [Shoppers](SHOPPERS.md).
+**Implemented and live-verified in schema v6:** Shoppers appears directly below Orders. A fixed simulated roster has working, audited assign/reassign/cancel-task controls and progress derived from actual order picking records. Cancelling a task leaves its order open and unassigned, with stock and picked counts intact. Ready or completion ends the active task in the same transaction. One active task per order is enforced; a shopper can hold several orders. Demo ownership applies before workload counts, filters, history and pagination. Selected editors preserve filter context and recover failed drafts; the order ticket links to its current assignment. Closed-order searches use structured historical assignee records. Scan rates remain explicitly unrecorded until real scanner telemetry exists. See [Shoppers](SHOPPERS.md).
 
 **Acceptance:** task changes preserve order/stock integrity and session scope, expose the current assignment clearly, and remain recoverable after interruption.
 
 ### 4. Manage promotions and make weekly sales drive the homepage
 
-Implemented locally in schema v7; release/live verification pending: Promotions and Featured management with exact integer-cent sale prices, explicit UTC intervals, overlap guards, audit and dedicated editors. Weekly-sales hero, Shop all sales and featured shelves use active data with an honest empty fallback. Customer and first-time working additions use the same effective price rules, while placed and retained working snapshots remain immutable. Demo examples require an explicit preview/confirmation or confirmed global reset. See [Promotions](PROMOTIONS.md).
+Implemented and live-verified in schema v7: Promotions and Featured management with exact integer-cent sale prices, explicit UTC intervals, overlap guards, audit and dedicated editors. Weekly-sales hero, Shop all sales and featured shelves use active data with an honest empty fallback. Customer and first-time working additions use the same effective price rules, while placed and retained working snapshots remain immutable. Demo examples require an explicit preview/confirmation or confirmed global reset. See [Promotions](PROMOTIONS.md).
 
 **Acceptance:** active/scheduled/expired promotions display consistently; stale sale prices require review and totals match the current valid quote.
 
 ### 5. Complete individual product pages and catalog presentation
 
-Provide a full page per product with description and package/quantity information. Optional nutrition panels must be clearly labelled as demo data; do not fabricate health or allergen claims. Include non-food examples such as deodorant and razors. The local illustration picker is complete. Add constrained local uploads only after a secure implementation; no arbitrary server-side URL fetching or unsanitized SVG.
+Implemented locally in schema v8; integrated release/browser verification is tracked separately: full product pages, manager-editable body and package details, optional clearly illustrative food nutrition, and counted deodorant/razor examples with bundled illustrations. Existing catalog migration invents no metadata or stock; a demo-only reviewed action can add the two examples without overwriting edits. Details remain separate from selling-unit execution and immutable order snapshots. See [Product details](PRODUCT_DETAILS.md). Constrained local uploads remain later work; no arbitrary server-side URL fetching or unsanitized SVG.
 
 **Acceptance:** product details, available stock, units and basket actions agree; archived/referenced products retain their history, and both food and non-food items render sensibly on mobile.
 

@@ -520,7 +520,7 @@ func TestRelativeDatabasePathPersistsAcrossReopen(t *testing.T) {
 	if p := testProduct(t, reopened, 1); p.Stock != 25 || p.Version != 3 {
 		t.Errorf("stock/version reset on restart: %+v", p)
 	}
-	if testCount(t, reopened, "products") != 70 || testCount(t, reopened, "orders") != 1 || testCount(t, reopened, "adjustments") != 1 {
+	if testCount(t, reopened, "products") != 72 || testCount(t, reopened, "orders") != 1 || testCount(t, reopened, "adjustments") != 1 {
 		t.Error("reopening duplicated or lost persisted data")
 	}
 }

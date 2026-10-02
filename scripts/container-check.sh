@@ -139,7 +139,7 @@ import sys
 root = Path(sys.argv[1])
 with closing(sqlite3.connect(root / "reset.db")) as db:
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-    assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 70
+    assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 72
     assert db.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
     assert db.execute("SELECT stock FROM products WHERE id=1").fetchone()[0] == 24
 preserved_order = False

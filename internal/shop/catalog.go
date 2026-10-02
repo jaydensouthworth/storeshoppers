@@ -207,7 +207,7 @@ func (s *Store) ArchiveTaxonomy(kind string, id, version int64) error {
 }
 func validIcon(icon string) bool {
 	switch icon {
-	case "apple", "leaf", "bread", "milk", "egg", "pasta", "oil", "jam":
+	case "apple", "leaf", "bread", "milk", "egg", "pasta", "oil", "jam", "deodorant", "razor":
 		return true
 	}
 	return false
@@ -253,6 +253,10 @@ func activeTaxonomy(tx *sql.Tx, kind string, id int64) (string, error) {
 	return name, err
 }
 func (s *Store) SaveProduct(p Product) (int64, error) {
+	return s.saveProductAndDetails(p, nil)
+}
+
+func (s *Store) saveProductAndDetails(p Product, details *ProductDetails) (int64, error) {
 	if err := s.ExpireHolds(); err != nil {
 		return 0, err
 	}
@@ -268,6 +272,11 @@ func (s *Store) SaveProduct(p Product) (int64, error) {
 	if err != nil {
 		return 0, catalogError(err)
 	}
+	if details != nil {
+		if err = saveProductDetails(tx, id, *details); err != nil {
+			return 0, err
+		}
+	}
 	action := "edit"
 	if p.ID == 0 {
 		action = "create"
@@ -276,7 +285,11 @@ func (s *Store) SaveProduct(p Product) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err = catalogEvent(tx, "product", id, action, current.Name, productAuditDetails(current)); err != nil {
+	audit := productAuditDetails(current)
+	if details != nil {
+		audit += productDetailsAudit(*details)
+	}
+	if err = catalogEvent(tx, "product", id, action, current.Name, audit); err != nil {
 		return 0, err
 	}
 	if err = tx.Commit(); err != nil {

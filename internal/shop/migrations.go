@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-const latestSchemaVersion = 7
+const latestSchemaVersion = 8
 
 //go:embed migrations/002_picking.sql
 var pickingMigration string
@@ -25,6 +25,9 @@ var shoppersMigration string
 
 //go:embed migrations/007_promotions.sql
 var promotionsMigration string
+
+//go:embed migrations/008_product_details.sql
+var productDetailsMigration string
 
 // migrate applies the baseline and every additive upgrade under one immediate
 // transaction. An interrupted or failed upgrade leaves the prior schema intact.
@@ -81,6 +84,16 @@ func (s *Store) migrate() error {
 	if version < 7 {
 		if err = applyMigration(tx, promotionsMigration); err != nil {
 			return fmt.Errorf("migration 7: %w", err)
+		}
+	}
+	if version < 8 {
+		if err = applyMigration(tx, productDetailsMigration); err != nil {
+			return fmt.Errorf("migration 8: %w", err)
+		}
+		if existing == 0 {
+			if err = seedProductDetails(tx); err != nil {
+				return fmt.Errorf("product detail seed: %w", err)
+			}
 		}
 	}
 	return tx.Commit()

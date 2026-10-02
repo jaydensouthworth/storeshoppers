@@ -89,7 +89,7 @@ func TestHTTPCatalogPagesAndContext(t *testing.T) {
 			if response.Code != http.StatusOK || !reflect.DeepEqual(catalogHTTPIDs(body), want) {
 				t.Fatalf("htmx %t page %d rows=%v want=%v", htmx, page, catalogHTTPIDs(body), want)
 			}
-			if !strings.Contains(body, "70 results</strong>") || !strings.Contains(body, fmt.Sprintf("Showing %d–%d", (page-1)*20+1, end)) || !strings.Contains(body, fmt.Sprintf("Page %d of 4", page)) {
+			if !strings.Contains(body, "72 results</strong>") || !strings.Contains(body, fmt.Sprintf("Showing %d–%d", (page-1)*20+1, end)) || !strings.Contains(body, fmt.Sprintf("Page %d of 4", page)) {
 				t.Errorf("wrong page/range/total: page %d", page)
 			}
 			if page > 1 && !adminFindLink(body, func(u *url.URL) bool { return u.String() == f.PageURL(page-1) }) {
@@ -135,7 +135,7 @@ func TestHTTPCatalogPageNormalizationAndEmptyResults(t *testing.T) {
 		query, target string
 		rows          int
 	}{
-		{"page=999&sort=sku", "/manager/catalog?page=4&sort=sku", 10},
+		{"page=999&sort=sku", "/manager/catalog?page=4&sort=sku", 12},
 		{"page=0002&sort=sku", "/manager/catalog?page=2&sort=sku", 20},
 		{"page=1000001", "/manager/catalog", 20},
 		{"page=-7", "/manager/catalog", 20},
