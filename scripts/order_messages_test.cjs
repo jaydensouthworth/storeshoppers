@@ -264,3 +264,56 @@ test('a held Older response cannot restore a feed after access ends',()=>{
   const h=harness({phone:true});const history=h.navigation('older');h.input('A pending note');h.submit();h.respond(h.calls[1],{status:403,headers:{'X-Messages-Access':'ended','X-Messages-State':'revoked'}});
   assert.equal(h.respond(history,{meta:{messagesOlder:'true'}}).load.prevented,true);assert.equal(h.feed.cleared,true);assert.equal(h.fire('htmx:historyCacheMiss',{xhr:{}}).prevented,true);assert.equal(h.controller.getState().revoked,true);
 });
+
+test('a definite same-conversation refusal may refresh credentials while requiring explicit resend',()=>{
+  const h=harness();h.input('Keep my customer note');h.submit();const original=h.calls[0];assert.equal(original.options.values.csrf,'csrf-demo');
+  h.respond(original,{result:'stale',values:{csrf:'csrf-after-manager-login',command_key:'key-b',body:'Keep my customer note'},meta:{messagesServerError:'Your session form changed. Review this retained draft before sending again.'}});
+  assert.equal(h.controller.getState().revoked,false);assert.equal(h.controller.getState().uncertain,null);assert.equal(h.fields.csrf.value,'csrf-after-manager-login');assert.equal(h.fields.command_key.value,'key-b');assert.equal(h.fields.body.value,'Keep my customer note');assert.equal(h.fields.body.readOnly,false);assert.equal(h.ids.get('message-send').disabled,false);assert.equal(h.calls.filter(x=>x.method==='POST').length,1);assert.match(h.notice,/Review/);
+  h.submit();assert.equal(h.calls.filter(x=>x.method==='POST').length,2);assert.equal(h.calls[1].options.values.csrf,'csrf-after-manager-login');assert.equal(h.calls[1].options.values.command_key,'key-b');assert.equal(h.calls[1].options.values.body,'Keep my customer note');
+});
+test('closure that removes the assignment gives read-only wording with no misleading review action',()=>{
+  for(const draft of ['', 'An unsent note']){const h=harness({body:draft});h.controller.refresh();h.respond(h.calls[0],{meta:{messagesCanSend:'false',messagesState:'closed',messagesContext:'conversation/0/0',messagesContextVersion:'2',messagesAssignmentName:'',messagesReason:'This order is cancelled.'}});
+    assert.equal(h.controller.getState().state,'closed');assert.equal(h.controller.getState().review,false);assert.equal(h.ids.get('message-review').hidden,true);assert.equal(h.ids.get('message-send').disabled,true);assert.equal(h.fields.body.value,draft);assert.match(h.notice,/closed and read-only/);assert.doesNotMatch(h.notice,/assigned shopper changed|Check \/ review/);assert.equal(h.calls.filter(x=>x.method==='POST').length,0);
+  }
+});
+test('closure keeps result checking available for a genuinely uncertain earlier send',()=>{
+  const h=harness();h.input('An earlier uncertain note');h.submit();const original={...h.calls[0].options.values};h.error(h.calls[0]);h.controller.refresh();h.respond(h.calls[1],{meta:{messagesCanSend:'false',messagesState:'closed',messagesContext:'conversation/0/0',messagesContextVersion:'2',messagesAssignmentName:'',messagesReason:'This order is cancelled.'}});
+  assert.equal(h.controller.getState().review,false);assert.equal(h.ids.get('message-review').hidden,true);assert.equal(h.ids.get('message-uncertain').hidden,false);assert.equal(h.ids.get('message-check').disabled,false);assert.equal(h.ids.get('message-retry').disabled,true);assert.deepEqual(h.controller.getState().uncertain,original);assert.match(h.notice,/closed and read-only/);assert.doesNotMatch(h.notice,/retry/i);h.submit('message-check');assert.equal(h.calls.at(-1).url,'/orders/1/messages/check');assert.deepEqual(h.calls.at(-1).options.values,original);
+});
+
+test('a send becoming uncertain after closure offers checking without suggesting another send',()=>{
+  const h=harness();h.input('A note in flight');h.submit();const send=h.calls[0];h.controller.refresh();h.respond(h.calls[1],{meta:{messagesCanSend:'false',messagesState:'closed',messagesContext:'conversation/0/0',messagesContextVersion:'2',messagesReason:'Order cancelled.'}});h.error(send);
+  assert.match(h.notice,/Check send result/);assert.match(h.notice,/read-only/);assert.doesNotMatch(h.notice,/retry/i);assert.equal(h.ids.get('message-check').disabled,false);assert.equal(h.ids.get('message-retry').disabled,true);
+});
+
+test('an absent send response transfers only refreshed CSRF while retaining exact uncertain intent',()=>{
+  const h=harness(),csrf='a'.repeat(64);h.input('  Keep this exact note 😀\n');h.submit();const original={...h.calls[0].options.values};h.respond(h.calls[0],{result:'absent',values:{...original,csrf}});
+  assert.deepEqual(h.controller.getState().uncertain,{...original,csrf});assert.equal(h.fields.csrf.value,csrf);assert.equal(h.fields.command_key.value,original.command_key);assert.equal(h.fields.body.value,original.body);assert.equal(h.fields.body.readOnly,true);assert.equal(h.ids.get('message-send').disabled,true);assert.equal(h.ids.get('message-check').disabled,false);assert.equal(h.ids.get('message-retry').disabled,false);assert.equal(h.calls.filter(x=>x.method==='POST').length,1);
+  h.submit('message-retry');assert.deepEqual(h.calls[1].options.values,{...original,csrf});assert.equal(h.calls[1].url,'/orders/1/messages');
+});
+test('an in-flight lookup may refresh CSRF without minting a second send key',()=>{
+  const h=harness(),csrf='b'.repeat(64);h.input('Original lookup intent');h.submit();const send=h.calls[0],original={...send.options.values};h.error(send);h.submit('message-check');const check=h.calls[1];h.respond(check,{result:'absent',values:{...original,csrf}});
+  assert.equal(h.fields.command_key.value,'key-a');assert.deepEqual(h.controller.getState().uncertain,{...original,csrf});assert.equal(h.calls.filter(x=>x.method==='POST').length,2);
+  assert.equal(h.respond(send,{result:'sent',ack:'key-a',values:{command_key:'late-key',body:''}}).load.prevented,true);assert.equal(h.fields.csrf.value,csrf);assert.equal(h.fields.body.value,original.body);
+  h.submit('message-retry');assert.deepEqual(h.calls.at(-1).options.values,{...original,csrf});assert.equal(h.calls.at(-1).options.values.command_key,'key-a');
+});
+test('absent-token adoption compares CRLF and outer whitespace without altering the submitted body',()=>{
+  const h=harness(),csrf='c'.repeat(64);h.input('  First line\r\nSecond line 😀  ');h.submit();const original={...h.calls[0].options.values};h.respond(h.calls[0],{result:'absent',values:{...original,csrf,body:'First line\nSecond line 😀'}});
+  assert.equal(h.fields.csrf.value,csrf);assert.equal(h.fields.body.value,original.body);assert.equal(h.controller.getState().uncertain.body,original.body);h.submit('message-retry');assert.equal(h.calls.at(-1).options.values.body,original.body);
+});
+test('absent responses cannot transfer authentication across any mismatched identity or payload',()=>{
+  for(const change of [{conversation_key:'other-conversation'},{assignment_id:'2'},{assignment_version:'2'},{command_key:'replacement-key'},{body:'A different message'}]){const h=harness(),csrf='d'.repeat(64);h.input('Original note');h.submit();const original={...h.calls[0].options.values};h.respond(h.calls[0],{result:'absent',values:{...original,csrf,...change}});
+    assert.equal(h.fields.csrf.value,original.csrf);assert.deepEqual(h.controller.getState().uncertain,original);assert.equal(h.fields.command_key.value,original.command_key);assert.equal(h.fields.body.value,original.body);assert.equal(h.calls.filter(x=>x.method==='POST').length,1);
+  }
+});
+test('absent responses require matching authority context and a well-formed refreshed token',()=>{
+  for(const options of [{values:{csrf:'invalid token'}},{values:{csrf:''}},{values:{csrf:'e'.repeat(64)},meta:{messagesContext:'other/1/1'}}]){const h=harness();h.input('Original note');h.submit();const original={...h.calls[0].options.values};h.respond(h.calls[0],{result:'absent',...options});assert.equal(h.fields.csrf.value,original.csrf);assert.deepEqual(h.controller.getState().uncertain,original);assert.equal(h.fields.command_key.value,original.command_key);}
+});
+test('a late older lookup cannot overwrite a newer token-only recovery',()=>{
+  const h=harness();h.input('Same original intent');h.submit();h.error(h.calls[0]);h.submit('message-check');const oldCheck=h.calls[1],original={...oldCheck.options.values};expireRequest(h,requestDeadline(h));h.submit('message-check');const newCheck=h.calls[2];h.respond(newCheck,{result:'absent',values:{...original,csrf:'f'.repeat(64)}});
+  assert.equal(h.respond(oldCheck,{result:'absent',values:{...original,csrf:'a'.repeat(64)}}).load.prevented,true);assert.equal(h.fields.csrf.value,'f'.repeat(64));assert.equal(h.controller.getState().uncertain.csrf,'f'.repeat(64));assert.equal(h.fields.command_key.value,'key-a');assert.equal(h.calls.filter(x=>x.method==='POST').length,3);
+});
+test('an absent token refresh cannot reopen or supersede newer closed authority',()=>{
+  const h=harness();h.input('An in-flight note');h.submit();const send=h.calls[0],original={...send.options.values};h.controller.refresh();h.respond(h.calls[1],{meta:{messagesCanSend:'false',messagesState:'closed',messagesContext:'conversation/0/0',messagesContextVersion:'2',messagesReason:'Order cancelled.'}});h.respond(send,{result:'absent',values:{...original,csrf:'b'.repeat(64)}});
+  assert.equal(h.controller.getState().state,'closed');assert.equal(h.fields.csrf.value,original.csrf);assert.deepEqual(h.controller.getState().uncertain,original);assert.equal(h.ids.get('message-check').disabled,false);assert.equal(h.ids.get('message-retry').disabled,true);
+});

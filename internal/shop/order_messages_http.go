@@ -223,6 +223,10 @@ func (a *App) sendMessage(w http.ResponseWriter, r *http.Request, phone bool) {
 			result, err = a.store.SendCustomerMessage(id, messageCustomerCookie(r), r.PostForm.Get("csrf"), c)
 		}
 	}
+	if !phone && errors.Is(err, ErrMessageCSRF) {
+		a.recoverCustomerMessageForm(w, r, c)
+		return
+	}
 	if a.messageAccessError(w, err) {
 		return
 	}
@@ -290,7 +294,11 @@ func (a *App) checkMessage(w http.ResponseWriter, r *http.Request, phone bool) {
 		return
 	}
 	if subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf")), []byte(conversation.CSRF)) != 1 {
-		a.messageAccessError(w, ErrMessageCSRF)
+		if !phone {
+			a.recoverCustomerMessageForm(w, r, c)
+		} else {
+			a.messageAccessError(w, ErrHandheldCSRF)
+		}
 		return
 	}
 	var found *OrderMessage
@@ -343,6 +351,77 @@ func (a *App) checkMessage(w http.ResponseWriter, r *http.Request, phone bool) {
 		v.ResultKind = "absent"
 		v.CommandKey = c.Key
 		v.Message = "No saved result is visible yet. This does not prove an earlier request cannot still finish. Check again or retry the same unchanged message."
+	}
+	part := ""
+	if r.Header.Get("HX-Request") == "true" {
+		part = "composer"
+	}
+	a.renderMessages(w, r, v, part)
+}
+
+// Manager sign-in/out rotates CSRF inside the same customer session. This is
+// not a new conversation or lost ownership. Recover only that exact owner and
+// epoch-bound conversation, using read-only result reconciliation; never send.
+// Phone CSRF cannot use this path because rotation there may mean a new grant.
+func (a *App) recoverCustomerMessageForm(w http.ResponseWriter, r *http.Request, c MessageCommand) {
+	conversation, err := a.messageConversation(r, false, MessageQuery{})
+	if err != nil {
+		if !a.messageAccessError(w, err) {
+			a.fail(w, err)
+		}
+		return
+	}
+	if c.ConversationKey != conversation.ConversationKey {
+		a.messageAccessError(w, ErrNotFound)
+		return
+	}
+	found, err := a.store.FindCustomerMessage(conversation.OrderID, messageCustomerCookie(r), c.ConversationKey, c.Key)
+	if a.messageAccessError(w, err) {
+		return
+	}
+	if err != nil && !messageProblem(err) {
+		a.fail(w, err)
+		return
+	}
+	current, viewErr := a.messageConversation(r, false, MessageQuery{})
+	if viewErr != nil {
+		if !a.messageAccessError(w, viewErr) {
+			a.fail(w, viewErr)
+		}
+		return
+	}
+	if c.ConversationKey != current.ConversationKey {
+		a.messageAccessError(w, ErrNotFound)
+		return
+	}
+	v := newMessagesView(current, false)
+	v.Draft = messageDraft(c.Body)
+	body, bodyErr := normalizeMessageBody(c.Body)
+	switch {
+	case found != nil && bodyErr == nil && found.Body == body && found.AssignmentID == c.AssignmentID && found.AssignmentVersion == c.AssignmentVersion:
+		v.SendState = "saved"
+		v.ResultKind = "sent"
+		v.ResultKey = c.Key
+		v.AcknowledgedRevision = found.Revision
+		v.Draft = ""
+		v.Message = "Your earlier message is already saved. The form was refreshed; no duplicate was sent."
+	case found == nil && err == nil && bodyErr == nil && c.AssignmentID == current.AssignmentID && c.AssignmentVersion == current.AssignmentVersion:
+		// An earlier read-only check may already have paired this same key with
+		// current CSRF. Absence must never fork another sendable key for the same
+		// intent. Refresh only credentials; keep body, key and assignment exact.
+		v.SendState = "unconfirmed"
+		v.ResultKind = "absent"
+		v.CommandKey = c.Key
+		v.Message = "Your form was refreshed and the exact draft is kept. No saved result is visible yet. Check again or explicitly retry the same message; nothing was sent automatically."
+	default:
+		// A changed/invalid payload or assignment needs a new deliberate review.
+		// This response creates only a reviewed form, never another message.
+		v.SendState = "rejected"
+		v.ResultKind = "stale"
+		v.Error = "Your message form was refreshed after the workspace changed. Nothing new was sent. Review your retained draft and current recipient before sending."
+		if found != nil {
+			v.Error = "The earlier request saved different text or assignment context. Your draft is kept for review in this refreshed form."
+		}
 	}
 	part := ""
 	if r.Header.Get("HX-Request") == "true" {

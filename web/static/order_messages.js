@@ -103,14 +103,23 @@
       if (request && request.barrier !== barrier && (!explicit || (meta.version <= version && (!Number.isFinite(meta.revision) || meta.revision <= revision)))) return false;
       const changed = context && meta.context && meta.context !== context;
       const restrictive = meta.state !== "open";
-      if (changed || restrictive) { barrier++; if (changed) review = true; }
+      if (changed || restrictive) {
+        barrier++;
+        if (meta.state === "closed" || meta.state === "unassigned") review = false;
+        else if (changed) review = true;
+      }
       // A feed cannot lift a refusal/context barrier, even when server revisions tie.
       if (!explicit && !changed && state !== "open" && meta.state === "open") { fresh = true; review = true; render(); return false; }
       if (meta.context) context = meta.context;
       version = meta.version; state = meta.state; expires = meta.expires || 0;
       if (Number.isFinite(meta.revision)) revision = Math.max(revision, meta.revision);
       fresh = true;
-      if (changed && !pending && !uncertain) notice("The assigned shopper changed. Check / review this draft before deciding whether to send it.",true);
+      if (state === "closed" && uncertain) notice("This conversation is closed and read-only. The earlier send is still uncertain; use Check send result to find out whether it was saved.");
+      if (changed && !pending && !uncertain) {
+        if (state === "closed") notice("This conversation is closed and read-only. Saved notes are still available." + (field("body")?.value.trim() ? " Your unsent draft is kept but cannot be sent." : ""));
+        else if (state === "unassigned") notice("This conversation is read-only until a shopper is assigned. Your saved notes and any unsent draft are kept.");
+        else notice("The assigned shopper changed. Check / review this draft before deciding whether to send it.",true);
+      }
       const status = id("messages-authority");
       if (status) status.textContent = meta.reason || (state === "open" ? "Conversation open · Sent means saved, not read." : "Read-only conversation");
       const readOnly = id("message-readonly"); if (readOnly) readOnly.textContent = meta.reason || "This conversation is currently read-only.";
@@ -145,7 +154,8 @@
     function ambiguous(request) {
       if (obsolete(request) || request.lane !== "send") return;
       if (request.payload) uncertain = {...request.payload}; pending = null;
-      notice("We couldn’t confirm whether this exact note was saved. Check send result, or explicitly retry the same message. It will not be sent automatically.",true,true);
+      const recovery = state !== "open" ? "Check send result. This conversation is read-only, so another send is not available." : review ? "Check send result before reviewing the current assignment." : "Check send result, or explicitly retry the same message.";
+      notice("We couldn’t confirm whether this exact note was saved. " + recovery + " It will not be sent automatically.",true,true);
       render();
       // Establish the uncertain payload first, then retire this transport. An
       // abort or a late load must never acknowledge over a subsequent lookup.
@@ -187,17 +197,33 @@
       const meta = headerMeta(xhr,metadata(composer));
       const sent = result === "sent" && ack === request.payload?.command_key;
       const rejected = result === "invalid" || result === "stale";
+      const incoming = name => composer.querySelector('[name="' + name + '"]')?.value;
       if (!sent && !rejected) {
-        if (result === "absent" && (request.kind === "check" || request.kind === "review")) {
-          const sameContext = meta.context === [request.payload.conversation_key,request.payload.assignment_id,request.payload.assignment_version].join("/");
-          if (applyAuthority(meta,request,true) && sameContext) review = false;
+        if (result === "absent") {
+          const original = request.payload;
+          const sameContext = meta.context === [original.conversation_key,original.assignment_id,original.assignment_version].join("/");
+          const sameIdentity = ["conversation_key","assignment_id","assignment_version","command_key"].every(name => incoming(name) === original[name]);
+          // HTML parsing normalizes CRLF; the server trims outer whitespace.
+          // Compare that normalization only, retaining the original body bytes.
+          const normalized = body => body.replace(/\r\n/g,"\n").trim();
+          const sameBody = typeof incoming("body") === "string" && normalized(incoming("body")) === normalized(original.body);
+          if (sameContext && sameIdentity && sameBody && applyAuthority(meta,request,true)) {
+            if (revoked || obsolete(request)) return;
+            review = false;
+            const refreshedCSRF = incoming("csrf");
+            if (refreshedCSRF === original.csrf || /^[a-f0-9]{64}$/.test(refreshedCSRF || "")) {
+              // Rotate authentication only. Absence is not a terminal result:
+              // never replace its key, body or assignment with a new intent.
+              request.payload = {...original,csrf:refreshedCSRF};
+              setField("csrf",refreshedCSRF);
+            }
+          }
         }
         ambiguous(request); return;
       }
       const accepted = applyAuthority(meta,request,true);
       if (revoked || obsolete(request)) return;
       const current = field("body")?.value || "", owned = current === request.payload?.body;
-      const incoming = name => composer.querySelector('[name="' + name + '"]')?.value;
       if (accepted) {
         for (const name of ["csrf","conversation_key","assignment_id","assignment_version"]) if (incoming(name) !== undefined) setField(name,incoming(name));
         review = false;

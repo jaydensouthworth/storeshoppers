@@ -165,8 +165,8 @@ func TestMessagesHTTPOversizeUnicodeCSRFAndClosedRead(t *testing.T) {
 	bad.Set("body", "Fake note")
 	bad.Set("csrf", "wrong")
 	denied := handheldHTTPRequest(t, a, "POST", path, []*http.Cookie{customer}, bad, nil)
-	if denied.Code != 403 || denied.Header().Get("X-Messages-Access") != "ended" {
-		t.Fatal("CSRF did not end unsafe composer")
+	if denied.Code != 200 || denied.Header().Get("X-Messages-Result") != "absent" || testCount(t, s, "order_messages") != 1 {
+		t.Fatal("CSRF did not refuse mutation and offer explicit same-owner recovery")
 	}
 	task := handheldTaskTest(t, s, g)
 	for i, l := range task.Lines {
@@ -186,5 +186,65 @@ func TestMessagesHTTPOversizeUnicodeCSRFAndClosedRead(t *testing.T) {
 	revoked := handheldHTTPRequest(t, a, "GET", "/handheld/messages", []*http.Cookie{phone}, nil, nil)
 	if revoked.Code != 403 {
 		t.Fatal("Ready did not close phone conversation authority")
+	}
+}
+
+func TestMessagesHTTPManagerCSRFChangeKeepsSameConversationDraft(t *testing.T) {
+	for _, route := range []string{"", "/check"} {
+		t.Run(route, func(t *testing.T) {
+			s, a, owner, id, customer, _, _ := messageHTTPFixture(t)
+			path := fmt.Sprintf("/orders/%d/messages", id)
+			page := handheldHTTPRequest(t, a, "GET", path, []*http.Cookie{customer}, nil, nil)
+			form := handheldHTTPForm(t, page, path)
+			form.Set("body", "Retain this fake draft after manager sign-in")
+			oldKey, oldCSRF := form.Get("command_key"), form.Get("csrf")
+			if err := s.Manager(owner.ID, true); err != nil {
+				t.Fatal(err)
+			}
+			before := fingerprintTest(t, s.db)
+			recovered := handheldHTTPRequest(t, a, "POST", path+route, []*http.Cookie{customer}, form, map[string]string{"HX-Request": "true"})
+			next := handheldHTTPForm(t, recovered, path)
+			if recovered.Code != 200 || recovered.Header().Get("X-Messages-Access") != "" || recovered.Header().Get("X-Messages-Result") != "absent" || !strings.Contains(recovered.Body.String(), form.Get("body")) || next.Get("csrf") == oldCSRF || next.Get("command_key") != oldKey || next.Get("conversation_key") != form.Get("conversation_key") {
+				t.Fatal("same-owner form rotation destroyed draft or failed explicit recovery")
+			}
+			if fingerprintTest(t, s.db) != before {
+				t.Fatal("CSRF recovery changed stored state")
+			}
+			next.Set("body", form.Get("body"))
+			saved := handheldHTTPRequest(t, a, "POST", path, []*http.Cookie{customer}, next, map[string]string{"HX-Request": "true"})
+			if saved.Header().Get("X-Messages-Result") != "sent" || testCount(t, s, "order_messages") != 1 {
+				t.Fatal("reviewed explicit send failed")
+			}
+		})
+	}
+}
+func TestMessagesHTTPCSRFRecoveryReconcilesSavedIntentAndRejectsAnotherConversation(t *testing.T) {
+	s, a, owner, id, customer, phone, g := messageHTTPFixture(t)
+	path := fmt.Sprintf("/orders/%d/messages", id)
+	page := handheldHTTPRequest(t, a, "GET", path, []*http.Cookie{customer}, nil, nil)
+	form := handheldHTTPForm(t, page, path)
+	form.Set("body", "Already saved before token rotation")
+	_ = handheldHTTPRequest(t, a, "POST", path, []*http.Cookie{customer}, form, nil)
+	if err := s.Manager(owner.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	before := fingerprintTest(t, s.db)
+	found := handheldHTTPRequest(t, a, "POST", path, []*http.Cookie{customer}, form, map[string]string{"HX-Request": "true"})
+	if found.Header().Get("X-Messages-Result") != "sent" || found.Header().Get("X-Messages-Key") != form.Get("command_key") || fingerprintTest(t, s.db) != before {
+		t.Fatal("rotated-token retry failed to reconcile exact earlier outcome")
+	}
+	different, _ := url.ParseQuery(form.Encode())
+	different.Set("conversation_key", strings.Repeat("a", 64))
+	refused := handheldHTTPRequest(t, a, "POST", path+"/check", []*http.Cookie{customer}, different, nil)
+	if refused.Code != 403 || strings.Contains(refused.Body.String(), form.Get("body")) {
+		t.Fatal("old conversation draft transferred to another context")
+	}
+	ppage := handheldHTTPRequest(t, a, "GET", "/handheld/messages", []*http.Cookie{phone}, nil, nil)
+	pf := handheldHTTPForm(t, ppage, "/handheld/messages")
+	pf.Set("csrf", g.CSRF+"wrong")
+	pf.Set("body", "Private old phone draft")
+	pbad := handheldHTTPRequest(t, a, "POST", "/handheld/messages", []*http.Cookie{phone}, pf, nil)
+	if pbad.Code != 403 || strings.Contains(pbad.Body.String(), "Private old phone draft") {
+		t.Fatal("phone grant identity change recovered as customer token rotation")
 	}
 }

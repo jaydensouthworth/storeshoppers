@@ -116,6 +116,12 @@ def main():
             assert {cookie.name for cookie in client.jar} == {"shop_handheld"}, "Phone inherited broad identity"
             secrets.extend(cookie.value for cookie in client.jar)
 
+        def manager_lock(page):
+            forms = [form for form in page.all_forms if form["action"] == "/manager/logout"]
+            assert forms, "Rendered manager lock form missing"
+            assert all(form["method"] == forms[0]["method"] and form["fields"] == forms[0]["fields"] for form in forms), "Ambiguous manager lock controls"
+            return forms[0]
+
         def no_private(page):
             assert all(note not in page.html for note in private_notes), "Private manager/report note leaked into chat"
             assert all(secret not in page.html for secret in secrets if secret and secret not in (
@@ -320,7 +326,14 @@ def main():
             for client, form in ((desktop, first), (phone, reply)):
                 for suffix in ("", "/check"):
                     bad_csrf = dict(form["fields"], csrf="invalid-smoke-csrf")
-                    denied(client, form["action"] + suffix, bad_csrf)
+                    if client is desktop:
+                        before = snapshot()
+                        status, headers, recovered_body = raw_request(client, form["action"] + suffix, bad_csrf, hx=True)
+                        assert status == 200 and headers.get("X-Messages-Result") == "sent", "Same-owner CSRF recovery failed to reconcile earlier saved intent"
+                        assert snapshot() == before, "CSRF recovery mutated data"
+                        no_private(Page(recovered_body))
+                    else:
+                        denied(client, form["action"] + suffix, bad_csrf)
                     for bad_headers in ({"Origin": "https://invalid.example"},
                                         {"Origin": ""}, {"Sec-Fetch-Site": "cross-site"}):
                         before = snapshot()
@@ -348,6 +361,33 @@ def main():
             _, weighed = phone.post(pending_weight, hx=True)
             assert "Saved 527 g" in weighed.text, "Chat invalidated a previously reviewed phone weight approval"
             assert query("SELECT allocated_quantity,picked_quantity,measurement_confirmed FROM working_order_items WHERE id=?", (lid,)) == [(527, 527, 1)], "Pending measurement did not remain confirmable"
+
+            # Manager sign-out/sign-in rotates this customer's CSRF token but
+            # leaves the owner and conversation intact. Retain an unsent form,
+            # refresh it read-only, then send only after a deliberate review.
+            _, customer = conversation(desktop, customer_path)
+            old_form = form_for(customer, "Fake draft retained through manager sign-in")
+            _, ticket = desktop.get(f"/manager/orders/{oid}")
+            desktop.post(manager_lock(ticket))
+            desktop.login()
+            after_rotation = snapshot()
+            recovered = send(desktop, old_form, "absent")
+            fresh_form = form_for(recovered)
+            assert fresh_form["fields"]["body"] == old_form["fields"]["body"], "Manager sign-in erased customer draft"
+            assert fresh_form["fields"]["csrf"] != old_form["fields"]["csrf"], "Manager sign-in recovery retained expired CSRF"
+            assert fresh_form["fields"]["command_key"] == old_form["fields"]["command_key"], "Token refresh forked a second key for the same intent"
+            check(desktop, old_form, "absent")
+            assert snapshot() == after_rotation, "Form recovery sent a message automatically"
+            send(desktop, fresh_form)
+            # If the original outcome was already saved, rotating CSRF cannot
+            # cause the same retained key to become a duplicate new message.
+            _, ticket = desktop.get(f"/manager/orders/{oid}")
+            desktop.post(manager_lock(ticket))
+            desktop.login()
+            after_second_rotation = snapshot()
+            send(desktop, fresh_form)
+            check(desktop, fresh_form, "sent")
+            assert snapshot() == after_second_rotation, "Rotated-token saved-intent recovery duplicated a message"
 
             # Reassignment must close old authority before replay lookup, retain
             # old attribution, and demand review of a customer's old draft.
@@ -401,7 +441,7 @@ def main():
             stop()
             logs = log_path.read_text()
             assert all(secret not in logs for secret in secrets if secret), "Authentication secret appeared in application logs"
-            print("Order-message process smoke passed: independent customer/phone/stranger sessions; two-way escaped plaintext; plain HTML and scoped HX; cursors; exact retries and read-only uncertain checks; Unicode/CSRF/origin guards; unchanged basket/stock/receipt/picking state; pending weight confirmation; lost-response restart; reassignment and immutable attribution; Ready access closure. No browser or physical-device claim.")
+            print("Order-message process smoke passed: independent customer/phone/stranger sessions; two-way escaped plaintext; plain HTML and scoped HX; cursors; exact retries and read-only uncertain checks; Unicode/CSRF/origin guards; unchanged basket/stock/receipt/picking state; pending weight confirmation; lost-response restart; manager sign-in draft/result recovery; reassignment and immutable attribution; Ready access closure. No browser or physical-device claim.")
         finally:
             stop()
 
