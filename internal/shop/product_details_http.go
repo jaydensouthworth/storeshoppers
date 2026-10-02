@@ -11,6 +11,7 @@ import (
 )
 
 type ProductDetailPage struct {
+	Barcode *ProductBarcodeLabel
 	Product Product
 	Details ProductDetails
 	BackURL string
@@ -54,6 +55,11 @@ func (a *App) populateProductPage(v *View, id int64) error {
 	v.Section = "product"
 	v.Title = p.Name
 	v.ProductPage = &ProductDetailPage{Product: p, Details: d, BackURL: storefrontURL(v.Search, v.Category, v.SalesOnly, v.FeaturedOnly)}
+	label, labelErr := a.store.ProductBarcode(id)
+	if labelErr != nil && !errors.Is(labelErr, ErrNotFound) {
+		return labelErr
+	}
+	v.ProductPage.Barcode = label
 	return nil
 }
 func (a *App) showProduct(w http.ResponseWriter, r *http.Request) {

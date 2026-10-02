@@ -336,3 +336,18 @@ test("ordinary and reset layouts initialize appearance before styles with one co
   assert.match(appTemplate, /data-theme-system[^>]*>Use system appearance<\/button>/);
   assert.equal([...appTemplate.matchAll(/data-theme-control hidden/g)].length, 2);
 });
+
+
+test("handheld and phone-pairing layouts retain prepaint theme and final color layer", () => {
+  for (const name of ["handheld.html", "handheld_pairing.html"]) {
+    const markup = fs.readFileSync(path.join(rootPath, "web/templates", name), "utf8");
+    const head = markup.slice(markup.indexOf("<head>"), markup.indexOf("</head>"));
+    assert.ok(head.indexOf('/static/theme.js') < head.indexOf('rel="stylesheet"'));
+    assert.match(head, /<script src="\/static\/theme.js"><\/script>/);
+    const styles = [...head.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)];
+    assert.equal(styles.at(-1)[1], "/static/theme.css");
+    const header = markup.slice(markup.indexOf("<header"), markup.indexOf("</header>"));
+    assert.equal([...header.matchAll(/{{template "theme-control" \.}}/g)].length, 1);
+    assert.match(markup, /{{template "theme-footer" \.}}/);
+  }
+});

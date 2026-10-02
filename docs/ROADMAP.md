@@ -39,19 +39,23 @@ accessibility audit remain open.
 
 ## Ordered implementation backlog
 
-**Current implementation:** simulated staff management now includes
-scoped roster editing, explicit availability, assignment capacity and recoverable
-archive/restore. Preserve the original three identities and every existing task.
-Alongside this, customer basket draft recovery now ensures changing a quantity or
-renewing a hold cannot silently erase instructions, and checkout cannot silently
-ignore an unapplied quantity edit. These are bounded workflow improvements, rather than
-employee authentication or the later phone scanner.
+**Live schema13 release:** simulated staff management includes scoped roster editing,
+explicit availability, assignment capacity and recoverable archive/restore. Basket
+instructions and quantity drafts survive updates/renewals, and checkout refuses to
+ignore an unapplied quantity. [Published source](https://github.com/jaydensouthworth/storeshoppers/tree/a3ba30a2f93a8674d1ed7c9126193402a9b93a2d)
+and [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37036138721)
+passed 372 top-level Go tests, 54 JavaScript checks, race/vet/build, twelve real
+HTTP/restart suites and Docker persistence checks. Live desktop and 388 CSS-pixel
+workflows passed. All 72 products, four sales and five featured entries were
+preserved; only the synthetic QA order/profile were cleaned up.
 
-The schema12 foundation, compact appearance toggle and dismissible Employees
-guide are live and verified. Pre-migration recovery archives and writer fences
-protect upgrades. Preserve shared catalog/offers/artwork and visitor changes.
-Local checks, migration/restart checks, CI and live desktop/mobile acceptance must
-pass before the new roster release is described as live.
+**Current implementation, not yet a verified live release:** schema14 phone-first
+workspace, one-time assignment pairing, real product Code 128 labels,
+camera/photo/manual recognition and explicit counted-pick confirmation. Keep the
+public fake-data boundary and independent visitor/phone authorization. See
+[Handheld demo](HANDHELD.md) and the [expanded sourced project plan](https://chatgpt.com/space/page_6abd4f41ae448191a351b73099da8658).
+Local checks, review, CI and live desktop/narrow acceptance must pass before this
+increment is described as live; physical S23 Ultra optics remain a distinct check.
 
 ### 1. Manager usability and explicit reset
 
@@ -109,11 +113,26 @@ Implemented in schema10: gram checkout, bounded once-per-line rounding, separate
 
 Implemented and live-verified: System, Light and Dark choices on storefront and manager, persistent explicit choice, system-default behavior, HTMX/history continuity and a no-JavaScript system fallback. Desktop and 402/321 CSS-pixel layouts preserve readable controls and the bold palette. See [Appearance](DARK_MODE.md). Continue checking new manager controls and product imagery in both themes.
 
-### 8. Build the later two-screen barcode demo
+### 8. Build the connected phone-first shopping workflow
 
-The barcode identity foundation is complete; legacy seed numbers are placeholders, not validated retail UPC/GTINs. Generate independently decodable demo-local Code 128 labels from stored identities, then add a desktop fake-shop label display and phone-friendly pick list. Begin with manual entry; add user-triggered camera scanning only after HTTPS and intended-device testing. Keep these screens in the same app.
+Authorized and in progress in schema14: a visually separate `/handheld/` workspace
+within the same Go app, clear storefront entry, short-lived one-time pairing,
+assignment-scoped grants, real Code 128 labels, explicit user-triggered camera and
+photo decoding, manual fallback and shared counted-pick transactions. Scan recognition
+never implies a pick. Private manager notes and unrelated visitor orders remain
+inaccessible. See [Handheld architecture and acceptance](HANDHELD.md).
 
-Both entry methods must use the same authorized picking service, version checks and idempotent request handling. Test unknown/wrong/archived codes, over-picking, retries, competing writes, permission failures and interrupted sessions. Preserve leading zeroes and distinguish product identity from package weight. No camera workflow, real retail barcode support or scan-rate analytics is claimed today. Named roles and an assignment policy are required before access extends beyond the bounded fake-data demo.
+The staged follow-ups are phone measured-weight review and exceptions, in-app
+customer/shopper messaging, structured substitution preferences and approvals,
+unavailable handling, staging/pickup handoff, then batch operations. Chat has its own
+revision and does not itself authorize a substitution. Ready closes the picking task,
+so staging requires an explicit new authority boundary. Real notifications, customer
+PII, payments and production employee accounts remain outside this fake-data demo.
+
+Acceptance includes wrong/unknown/archived codes, concurrency, duplicate/reordered
+commands, offline/retry/Back, grant expiry/revocation, secure cross-device separation,
+stock/receipt invariants and real process restart. The actual Samsung S23 Ultra camera
+must be tested against desktop labels; simulated media tests cannot establish that.
 
 ### 9. Continue release hardening and portfolio evidence
 

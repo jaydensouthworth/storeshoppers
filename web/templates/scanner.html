@@ -1,0 +1,12 @@
+{{define "product-barcode"}}{{if .}}
+<section class="product-barcode" aria-labelledby="barcode-label-title"><p class="eyebrow">IN-STORE SHOPPING DEMO</p><h2 id="barcode-label-title">Scan this product</h2><p>Open the paired shopper task on your phone. Choose Start camera, point at this label, then review the recognized code.</p><div class="barcode-label"><img src="{{.ImageURL}}" width="{{.Width}}" height="{{.Height}}" alt="Code 128 label for {{.Code}}"><p>{{.Code}}</p></div><p class="fine-print">Demo-local Code 128 · identifies this product only. It never supplies a quantity or weight.</p><a href="{{.ImageURL}}" target="_blank" rel="noopener">Open full-size label</a></section>
+{{end}}{{end}}
+
+{{define "handheld-scanner"}}
+<div class="handheld-scanner" data-handheld-scanner hidden>
+  <p class="fine-print">Camera and photo decoding happen on this device. No image is uploaded. Scan one demo Code 128 label at a time.</p>
+  <div class="scanner-actions"><button type="button" class="secondary" data-scan-start>Start camera</button><button type="button" class="secondary" data-scan-stop hidden>Stop camera</button><label class="secondary scanner-photo">Choose a photo<input type="file" accept="image/jpeg,image/png,image/webp" data-scan-photo></label></div>
+  <video data-scan-video autoplay playsinline muted hidden aria-label="Live barcode camera preview"></video>
+  <p class="scanner-status" role="status" aria-live="polite" aria-atomic="true" data-scan-status>Or type the printed code below.</p>
+</div>
+{{end}}

@@ -59,7 +59,7 @@ func TestWeightedPromotionMigrationV11PreservesRowsRollbackAndRestart(t *testing
 			path, now := populatedWeightedPromotionV11(t)
 			old := migrationTestStore(t, path, now)
 			before := shopperPriorTables(t, old.db)
-			roots := migrationQuerySnapshot(t, old.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events') ORDER BY name`)
+			roots := migrationQuerySnapshot(t, old.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events','handheld_state','handheld_pair_sessions','handheld_invitations','handheld_grants','order_event_actors','handheld_pick_commands','handheld_pair_commands') ORDER BY name`)
 			if fail {
 				testExec(t, old, `CREATE TRIGGER fail_promotion_unit_version BEFORE INSERT ON schema_version WHEN NEW.version=12 BEGIN SELECT RAISE(ABORT,'promotion basis failure'); END`)
 				fingerprint := fingerprintTest(t, old.db)
@@ -81,7 +81,7 @@ func TestWeightedPromotionMigrationV11PreservesRowsRollbackAndRestart(t *testing
 			old.Close()
 			s := openPromotionMigrationStore(t, path, now)
 			assertShopperPriorTables(t, s.db, before)
-			if !reflect.DeepEqual(roots, migrationQuerySnapshot(t, s.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events') ORDER BY name`)) {
+			if !reflect.DeepEqual(roots, migrationQuerySnapshot(t, s.db, `SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND name NOT IN ('shoppers','shopper_roster_profiles','shopper_roster_events','handheld_state','handheld_pair_sessions','handheld_invitations','handheld_grants','order_event_actors','handheld_pick_commands','handheld_pair_commands') ORDER BY name`)) {
 				t.Fatal("additive migration rebuilt tables")
 			}
 			var count int

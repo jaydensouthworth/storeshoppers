@@ -7,10 +7,14 @@ export GOPATH="${GOPATH:-/tmp/instore-gopath}"
 node --check web/static/app.js
 node --check web/static/theme.js
 node --check web/static/demo_guide.js
+node --check web/static/scanner.js
+node --check web/static/handheld.js
 node --test scripts/interaction_test.cjs
 node --test scripts/cart_drafts_test.cjs
 node --test scripts/theme_test.cjs
 node --test scripts/demo_guide_test.cjs
+node --test scripts/scanner_test.cjs
+node --test scripts/handheld_test.cjs
 test -z "$(gofmt -l cmd internal web/embed.go)"
 go vet ./...
 go test -race -coverprofile=coverage.out ./...
@@ -27,3 +31,5 @@ python3 scripts/product_images_smoke.py
 python3 scripts/weighted_smoke.py
 python3 scripts/attention_smoke.py
 python3 scripts/weighted_promotions_smoke.py
+
+python3 scripts/handheld_smoke.py

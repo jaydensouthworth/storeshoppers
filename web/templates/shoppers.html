@@ -4,7 +4,7 @@
     {{if .Order.Assignment}}<strong>{{.Order.Assignment.ShopperName}} <span class="demo-person-label">Simulated shopper</span></strong><p>Assigned to this order. Picking counts are recorded on the working list below.</p>
     {{else if or (eq .Order.Status "Placed") (eq .Order.Status "Picking")}}<strong>Unassigned</strong><p>Assign a simulated shopper, or continue picking with the manager controls.</p>
     {{else}}<strong>No active picking task</strong><p>This order is ready or closed. Its assignment history stays available in Shoppers.</p>{{end}}
-  </div><a class="secondary small" href="{{.AssignmentURL}}">{{if or (eq .Order.Status "Placed") (eq .Order.Status "Picking")}}Manage assignment{{else}}View task history{{end}} →</a>
+  </div>{{if .Order.Assignment}}<a class="secondary small" href="/manager/orders/{{.Order.ID}}/phone">Connect shopper phone →</a>{{end}}<a class="secondary small" href="{{.AssignmentURL}}">{{if or (eq .Order.Status "Placed") (eq .Order.Status "Picking")}}Manage assignment{{else}}View task history{{end}} →</a>
 </section>
 {{end}}
 
@@ -21,6 +21,7 @@
   <div class="section-title"><div><p class="eyebrow">SELECTED ORDER</p><h2 id="assignment-editor-title">{{$task.Order.Reference}}</h2></div><a class="text-link" href="{{printf "/manager/shoppers?%s" $w.ContextQuery}}">Close editor</a></div>
   <div class="shopper-editor-summary"><span class="pill status-{{$task.Order.Status}}">{{if eq $task.Order.CompletionKind "cancelled"}}Cancelled order{{else if eq $task.Order.CompletionKind "partial"}}Closed · partial{{else}}{{$task.Order.Status}}{{end}}</span><span>{{$task.Order.PickedCount}} / {{$task.Order.RequiredCount}} {{$task.Order.ProgressLabel}} picked</span><a class="text-link" href="{{.OrderURL $task.Order.ID}}">Open order and edit items →</a></div>
   {{if or (eq $task.Order.Status "Placed") (eq $task.Order.Status "Picking")}}
+  {{if $task.Assignment}}<p><a class="secondary" href="/manager/orders/{{$task.Order.ID}}/phone">Connect shopper phone →</a></p>{{end}}
   <p class="shopper-current-assignment">{{if $task.Assignment}}Currently assigned to <strong>{{$task.Assignment.ShopperName}}</strong>.{{else}}<strong>Unassigned.</strong> Pick a shopper to create a task for this order.{{end}}</p>
   {{if $draft}}<div class="notice manager-draft-notice" role="status"><strong>Your change was not saved. Review the current assignment and retry.</strong><p>Your reason and selection are kept below. Submitted action: <strong>{{$draft.Action}}</strong>. The form now uses the latest saved version.{{if $draft.Truncated}} Long or unsupported values were shortened for display.{{end}}</p></div>{{end}}
   <form class="shopper-assignment-form" method="post" action="/manager/shoppers/orders/{{$task.Order.ID}}" hx-post="/manager/shoppers/orders/{{$task.Order.ID}}" hx-target="#workspace" hx-swap="outerHTML" hx-disabled-elt="find button" hx-indicator="#pending">

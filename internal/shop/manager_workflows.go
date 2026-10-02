@@ -59,38 +59,64 @@ func (s *Store) MarkWorkingLinePicked(orderID, lineID, picked, pickVersion, orde
 	if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	if status != "Placed" && status != "Picking" {
-		return ErrTerminal
-	}
-	if currentVersion != orderVersion {
-		return ErrConflict
-	}
-	var quantity, currentPickVersion, before, productID int64
-	err = tx.QueryRow(`SELECT product_id,quantity,picked_quantity,pick_version FROM working_order_items WHERE id=? AND order_id=? AND quantity>0 AND sale_unit='each'`, lineID, orderID).Scan(&productID, &quantity, &before, &currentPickVersion)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-	if currentPickVersion != pickVersion {
-		return ErrConflict
-	}
-	if picked > quantity {
-		return ErrInvalid
-	}
-	if _, err = tx.Exec(`UPDATE working_order_items SET picked_quantity=?,pick_version=pick_version+1 WHERE id=?`, picked, lineID); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(`UPDATE orders SET status='Picking',order_version=order_version+1 WHERE id=?`, orderID); err != nil {
-		return err
-	}
-	details := fmt.Sprintf("Working line %d, product %d: picked %d → %d of %d; status %s → Picking", lineID, productID, before, picked, quantity, status)
-	if _, err = tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,?,'pick','Manager saved picked count',?)`, orderID, key, hash, details); err != nil {
+	if _, err = markWorkingLinePickedTx(tx, orderID, lineID, picked, pickVersion, orderVersion, currentVersion, status, key, hash, pickActor{Kind: "manager", Source: "manager"}); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
+
+// Caller owns the immediate transaction and must authorize its actor before
+// replay lookup. Both manager and bounded worker commands use these stock-free
+// count/version/audit invariants; neither invokes the other actor's authority.
+type pickActor struct {
+	Kind, Source, ShopperName        string
+	GrantID, AssignmentID, ShopperID int64
+}
+
+func markWorkingLinePickedTx(tx *sql.Tx, orderID, lineID, picked, pickVersion, orderVersion, currentVersion int64, status, key, hash string, actor pickActor) (int64, error) {
+	if status != "Placed" && status != "Picking" {
+		return 0, ErrTerminal
+	}
+	if currentVersion != orderVersion {
+		return 0, ErrConflict
+	}
+	var quantity, currentPickVersion, before, productID int64
+	err := tx.QueryRow(`SELECT product_id,quantity,picked_quantity,pick_version FROM working_order_items WHERE id=? AND order_id=? AND quantity>0 AND sale_unit='each'`, lineID, orderID).Scan(&productID, &quantity, &before, &currentPickVersion)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	if currentPickVersion != pickVersion {
+		return 0, ErrConflict
+	}
+	if picked < 0 || picked > quantity || picked > 99 {
+		return 0, ErrInvalid
+	}
+	if _, err = tx.Exec(`UPDATE working_order_items SET picked_quantity=?,pick_version=pick_version+1 WHERE id=?`, picked, lineID); err != nil {
+		return 0, err
+	}
+	if _, err = tx.Exec(`UPDATE orders SET status='Picking',order_version=order_version+1 WHERE id=?`, orderID); err != nil {
+		return 0, err
+	}
+	details := fmt.Sprintf("Working line %d, product %d: picked %d → %d of %d; status %s → Picking", lineID, productID, before, picked, quantity, status)
+	reason := "Manager saved picked count"
+	if actor.Kind == "worker" {
+		reason = fmt.Sprintf("Paired shopper %s confirmed picked count (%s code)", actor.ShopperName, actor.Source)
+	}
+	result, err := tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,?,'pick',?,?)`, orderID, key, hash, reason, details)
+	if err != nil {
+		return 0, err
+	}
+	eventID, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	_, err = tx.Exec(`INSERT INTO order_event_actors(event_id,actor,source,grant_id,assignment_id,shopper_id,shopper_name) VALUES(?,?,?,NULLIF(?,0),NULLIF(?,0),NULLIF(?,0),?)`, eventID, actor.Kind, actor.Source, actor.GrantID, actor.AssignmentID, actor.ShopperID, actor.ShopperName)
+	return eventID, err
+}
+
 func routineOrderReason(action string, quantity int64, reason string) string {
 	reason = strings.TrimSpace(reason)
 	if reason != "" {

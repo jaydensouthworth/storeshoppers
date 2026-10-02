@@ -149,11 +149,11 @@ func TestShopperRosterMigrationFencesAlreadyOpenV12Writer(t *testing.T) {
 	defer statement.Close()
 	s := openPromotionMigrationStore(t, path, now)
 	before := fingerprintTest(t, s.db)
-	if _, err = statement.Exec(); err == nil || !strings.Contains(err.Error(), "writer 13") {
+	if _, err = statement.Exec(); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("writer %d", latestSchemaVersion)) {
 		t.Fatal("prepared v12 writer accepted", err)
 	}
 	for _, query := range []string{`UPDATE shopper_assignments SET version=version+1`, `DELETE FROM shopper_event_links`, `UPDATE products SET stock=stock-1 WHERE id=1`, `UPDATE shopper_roster_profiles SET archived=1`, `INSERT INTO shopper_roster_events(scope,shopper_id,command_key,command_hash,name,action,details) VALUES('',1,'old-writer-command','hash','Avery','edit','Must be fenced')`, `INSERT INTO schema_version VALUES(14)`} {
-		if _, err = old.Exec(query); err == nil || !strings.Contains(err.Error(), "writer 13") {
+		if _, err = old.Exec(query); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("writer %d", latestSchemaVersion)) {
 			t.Fatal("v12 mutation accepted", query, err)
 		}
 	}

@@ -25,9 +25,12 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Customer status refresh with a normal HTML fallback
 - Compact light/dark toggle with saved preferences and a system appearance option
 - Dismissible demo guide pointing visitors to the Employees workspace
+- Separate phone-first in-store demo with one-time assignment pairing and independent customer/phone sessions
+- Real Code 128 product labels, user-triggered camera/photo decoding and manual fallback
+- Explicit replay-safe counted-pick confirmation with shared manager progress and revocable task access
 - Persistent SQLite storage and locally bundled frontend assets
 
-This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Weighted selling uses reviewed actual grams and immutable requested receipts; its quantity and recovery rules are recorded in [Weighted products](docs/WEIGHTED_PRODUCTS.md). The later phone/barcode workflow remains in the [ordered roadmap](docs/ROADMAP.md).
+This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Weighted selling uses reviewed actual grams and immutable requested receipts; its quantity and recovery rules are recorded in [Weighted products](docs/WEIGHTED_PRODUCTS.md). The phone workflow, privacy boundaries and physical-device acceptance checklist are in [Handheld demo](docs/HANDHELD.md); later connected workflows remain in the [ordered roadmap](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -100,7 +103,7 @@ Fresh stores get 72 fake products, including deodorant and razors. The schema-v8
 
 Existing file-backed databases receive a verified recovery snapshot before an upgrade in `<database>.migration-backups`. Archives have a separate 256 MiB cap and are never automatically purged; backup failure stops migration with the original data unchanged. Current-schema restarts preserve data and create no new snapshot. Older application images refuse a newer schema, so recovery uses a forward fix or a deliberately restored archive, not an image-only rollback. See [Schema compatibility and recovery](docs/SCHEMA_COMPATIBILITY.md).
 
-Schema 10 enables weighed products with integer grams, cents per kilogram and a requested quantity step. Actual weights use an explicit preview and confirmation; accepted allocations, measurements and final amounts remain separate from the immutable requested receipt. Baskets hold counted units or grams for 15 minutes; checkout converts those holds without a second deduction. Mixed views use product-line progress. See [Weighted products](docs/WEIGHTED_PRODUCTS.md) for limits, migration and compatibility safeguards. Existing numeric barcode values remain legacy placeholders; local `SHOPDEMO-` identifiers are not retail GTINs. Label generation and camera scanning remain later work.
+Schema 10 enables weighed products with integer grams, cents per kilogram and a requested quantity step. Actual weights use an explicit preview and confirmation; accepted allocations, measurements and final amounts remain separate from the immutable requested receipt. Baskets hold counted units or grams for 15 minutes; checkout converts those holds without a second deduction. Mixed views use product-line progress. See [Weighted products](docs/WEIGHTED_PRODUCTS.md) for limits, migration and compatibility safeguards. Existing numeric barcode values remain legacy placeholders; local `SHOPDEMO-` identifiers are not retail GTINs. Schema 14 renders these exact stored identities as independently decodable Code 128 demo labels; they are still not retail GTINs.
 
 Schema 11 adds explicit manager review holds and private internal notes. The Orders
 queue searches references, original/working product names and SKUs, with scoped
@@ -129,3 +132,5 @@ Schema 12 extends sales and featured choices to weighed products. Offers record 
 Schema 13 adds visitor-scoped simulated shopper profiles, availability and active-order
 capacity. New assignments check eligibility transactionally, while current work and
 historical identities survive profile edits and archive/restore. See [Shoppers](docs/SHOPPERS.md).
+
+Schema 14 adds one-time, short-lived phone pairing and revocable assignment-scoped grants. The separate `/handheld/` workspace shares authorized counted picking with the manager, preserves stock and placed receipts, and supports local camera/photo decoding without uploads. Product pages expose real demo scan labels. Actual phone weight review, messaging, structured substitution approvals and staging remain staged follow-ups. See [Handheld demo](docs/HANDHELD.md).

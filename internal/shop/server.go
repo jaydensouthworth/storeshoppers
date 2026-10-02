@@ -128,6 +128,8 @@ func New(store *Store, cfg Config) (*App, error) {
 	})
 	a.mux.HandleFunc("GET /{$}", a.showStore)
 	a.mux.HandleFunc("GET /products/{id}", a.showProduct)
+	a.mux.HandleFunc("GET /products/{id}/barcode.png", a.showProductBarcode)
+	a.registerHandheldRoutes()
 	a.mux.HandleFunc("GET /cart", a.showCart)
 	a.mux.HandleFunc("POST /cart", a.changeCart)
 	a.mux.HandleFunc("POST /cart/renew", a.renewCart)
@@ -199,7 +201,13 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+	csp := "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+	if strings.HasPrefix(r.URL.Path, "/handheld/") {
+		// Camera streams and selected photos stay on-device. Permit only local
+		// blob media here, without widening storefront or manager policy.
+		csp = strings.Replace(csp, "img-src 'self' data:;", "img-src 'self' data: blob:; media-src 'self' blob:;", 1)
+	}
+	w.Header().Set("Content-Security-Policy", csp)
 	origin, _ := url.Parse(a.config.Origin)
 	if r.Host != origin.Host {
 		http.Error(w, "Unrecognized host", http.StatusBadRequest)
