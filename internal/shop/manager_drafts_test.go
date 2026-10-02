@@ -81,7 +81,7 @@ func TestManagerBasketDraftRetainsValidationInputHTMLAndHTMX(t *testing.T) {
 						values.Set("product_id", "2")
 					}
 					if kind == "add" {
-						quantityID, reasonID = "basket-new-quantity", "basket-add-reason"
+						quantityID, reasonID = "basket-picker-add-quantity-2", "basket-add-reason"
 					}
 				case "renew":
 					values.Set("revision", "not-a-revision")
@@ -424,7 +424,7 @@ func TestManagerBasketDraftRemovedLineRecoversInAddForm(t *testing.T) {
 			}
 			body := w.Body.String()
 			assertManagerDraftResponse(t, body, htmx, ErrConflict)
-			if got := managerDraftInput(t, body, "basket-new-quantity"); got != "4" {
+			if got := managerDraftInput(t, body, "basket-picker-add-quantity-1"); got != "4" {
 				t.Errorf("removed-line quantity lost: %q", got)
 			}
 			if got := managerDraftInput(t, body, "basket-add-reason"); got != values.Get("reason") {
@@ -433,7 +433,7 @@ func TestManagerBasketDraftRemovedLineRecoversInAddForm(t *testing.T) {
 			if !regexp.MustCompile(`<input\b[^>]*type="radio"[^>]*value="1"[^>]*\bchecked\b`).MatchString(body) {
 				t.Error("removed-line product not selected in recovery form")
 			}
-			form := managerDraftForm(t, body, "basket-new-quantity")
+			form := managerDraftForm(t, body, "basket-picker-add-quantity-1")
 			if got, _ := adminInput(form, "revision"); got != fmt.Sprint(current.Revision) {
 				t.Errorf("removed-line revision=%q, want %d", got, current.Revision)
 			}

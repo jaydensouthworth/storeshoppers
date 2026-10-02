@@ -8,7 +8,7 @@ The Products catalog defaults to active products sorted by name. Managers can co
 - Active, archived, or both catalog states
 - Name, SKU, newest identity, or unit-price sorting
 
-Available stock excludes reserved basket units. Grams never enter the counted low-stock filter. Unit prices retain their per-item/per-kilogram labels, and filtering does not make weighed products orderable. Archived identities remain searchable by choosing archived or all products; public scanner and checkout eligibility are unchanged.
+Available stock excludes reserved basket units. Grams never enter the counted low-stock filter. Unit prices retain their per-item/per-kilogram labels, and weighted ordering follows the gram bounds and review rules in [Weighted products](WEIGHTED_PRODUCTS.md). Archived identities remain searchable by choosing archived or all products; public scanner and checkout eligibility are unchanged.
 
 The search field stays visible. Secondary controls use a native, initially closed disclosure and normal GET form, with optional HTMX enhancement. The result count and clear action remain visible outside the disclosure. Add product appears only in the catalog header; the main manager navigation points to Products, rather than placing a create action in every section.
 

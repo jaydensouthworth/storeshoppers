@@ -121,7 +121,7 @@ func installDemoBaseline(destination, source *sql.DB, install func(*sql.DB, *sql
 
 func freshDemoDatabase(pageSize int) (*sql.DB, error) { return freshDemoDatabaseAt(pageSize, time.Now) }
 func freshDemoDatabaseAt(pageSize int, now func() time.Time) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", ":memory:?_foreign_keys=on&_txlock=immediate")
+	db, err := sql.Open(applicationSQLiteDriver, ":memory:?_foreign_keys=on&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
@@ -257,6 +257,14 @@ func checkSQLite(db *sql.DB) error {
 }
 
 func preserveDemoDatabase(source *sql.DB, directory, fingerprint string, budget int64) (string, error) {
+	return preserveSQLiteDatabase(source, directory, fingerprint, budget, "demo")
+}
+
+func preserveSQLiteDatabase(source *sql.DB, directory, fingerprint string, budget int64, kind string) (string, error) {
+	budgetRemedy := "retain/archive backups elsewhere; no backups were removed"
+	if kind == "demo" {
+		budgetRemedy = "retain/archive backups elsewhere or explicitly raise DEMO_BACKUP_MAX_BYTES; no backups were removed"
+	}
 	if err := os.Mkdir(directory, 0700); err != nil && !errors.Is(err, os.ErrExist) {
 		return "", err
 	}
@@ -265,7 +273,7 @@ func preserveDemoDatabase(source *sql.DB, directory, fingerprint string, budget 
 		return "", err
 	}
 	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return "", errors.New("demo backup directory must be a private directory (mode 0700), not a symlink")
+		return "", fmt.Errorf("%s backup directory must be a private directory (mode 0700), not a symlink", kind)
 	}
 	// Persist the directory's name too, not just its later contents. Otherwise a
 	// newly-created archive directory could disappear after a power failure.
@@ -274,6 +282,7 @@ func preserveDemoDatabase(source *sql.DB, directory, fingerprint string, budget 
 	}
 	var used int64
 	var matching []string
+	var storedFiles []fs.FileInfo
 	err = filepath.WalkDir(directory, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -283,13 +292,26 @@ func preserveDemoDatabase(source *sql.DB, directory, fingerprint string, budget 
 			return e
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
-			return errors.New("demo backup directory contains a symlink; review it manually")
+			return fmt.Errorf("%s backup directory contains a symlink; review it manually", kind)
 		}
 		if info.Mode().IsRegular() {
-			if info.Size() > budget-used {
-				return fmt.Errorf("demo backup budget %d bytes is exhausted; retain/archive backups elsewhere or explicitly raise DEMO_BACKUP_MAX_BYTES; no backups were removed", budget)
+			// Publication can stop between linking the completed name and
+			// removing its incomplete name. Both names must be retained, but
+			// they occupy one file's storage and must not prevent safe reuse.
+			counted := false
+			for _, stored := range storedFiles {
+				if os.SameFile(info, stored) {
+					counted = true
+					break
+				}
 			}
-			used += info.Size()
+			if !counted {
+				if info.Size() > budget-used {
+					return fmt.Errorf("%s backup budget %d bytes is exhausted; %s", kind, budget, budgetRemedy)
+				}
+				used += info.Size()
+				storedFiles = append(storedFiles, info)
+			}
 			if strings.HasSuffix(path, "-"+fingerprint+".sqlite3") {
 				matching = append(matching, path)
 			}
@@ -319,7 +341,7 @@ func preserveDemoDatabase(source *sql.DB, directory, fingerprint string, budget 
 			}
 			return path, nil
 		}
-		return "", fmt.Errorf("existing matching demo backup failed verification at %q; review it manually", path)
+		return "", fmt.Errorf("existing matching %s backup failed verification at %q; review it manually", kind, path)
 	}
 	var pages, pageSize int64
 	if err = source.QueryRow("PRAGMA page_count").Scan(&pages); err != nil {
@@ -329,7 +351,7 @@ func preserveDemoDatabase(source *sql.DB, directory, fingerprint string, budget 
 		return "", err
 	}
 	if pages > (budget-used)/pageSize {
-		return "", fmt.Errorf("demo backup budget exceeded: %d bytes used, %d bytes needed, %d byte cap; retain/archive backups elsewhere or explicitly raise DEMO_BACKUP_MAX_BYTES; no backups were removed", used, pages*pageSize, budget)
+		return "", fmt.Errorf("%s backup budget exceeded: %d bytes used, %d bytes needed, %d byte cap; %s", kind, used, pages*pageSize, budget, budgetRemedy)
 	}
 	name := time.Now().UTC().Format("20060102T150405.000000000Z") + "-" + fingerprint + ".sqlite3"
 	final := filepath.Join(directory, name)
@@ -361,7 +383,7 @@ func preserveDemoDatabase(source *sql.DB, directory, fingerprint string, budget 
 		actual, err = databaseFingerprint(backup)
 	}
 	if err == nil && actual != fingerprint {
-		err = errors.New("demo backup fingerprint mismatch")
+		err = fmt.Errorf("%s backup fingerprint mismatch", kind)
 	}
 	err = errors.Join(err, backup.Close())
 	if err != nil {
@@ -370,7 +392,15 @@ func preserveDemoDatabase(source *sql.DB, directory, fingerprint string, budget 
 	if err = syncPath(partial); err != nil {
 		return "", err
 	}
-	if err = os.Rename(partial, final); err != nil {
+	// Link publishes without replacing an existing recovery point. A crash can
+	// leave both names, but they refer to the same fully verified, synced file.
+	if err = os.Link(partial, final); err != nil {
+		return "", err
+	}
+	if err = syncPath(directory); err != nil {
+		return "", err
+	}
+	if err = os.Remove(partial); err != nil {
 		return "", err
 	}
 	if err = syncPath(directory); err != nil {

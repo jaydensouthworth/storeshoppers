@@ -1,12 +1,16 @@
 package shop
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
 	_ "embed"
+	"errors"
 	"fmt"
 )
 
-const latestSchemaVersion = 9
+const latestSchemaVersion = 12
+const weightedSchemaVersion = 10
 
 //go:embed migrations/002_picking.sql
 var pickingMigration string
@@ -32,10 +36,64 @@ var productDetailsMigration string
 //go:embed migrations/009_product_images.sql
 var productImagesMigration string
 
-// migrate applies the baseline and every additive upgrade under one immediate
-// transaction. An interrupted or failed upgrade leaves the prior schema intact.
-func (s *Store) migrate() error {
-	tx, err := s.db.Begin()
+//go:embed migrations/010_weighted.sql
+var weightedMigration string
+
+//go:embed migrations/011_attention.sql
+var attentionMigration string
+
+//go:embed migrations/012_weighted_promotions.sql
+var weightedPromotionsMigration string
+
+// migrate pins the connection so foreign_keys is disabled BEFORE BEGIN
+// IMMEDIATE. Rebuilds, data copies, writer fences and version markers commit
+// together. An interrupted or failed upgrade leaves the prior schema intact.
+func (s *Store) migrate() (err error) {
+	return s.migrateWithBackup(preserveMigrationDatabase)
+}
+
+func (s *Store) migrateWithBackup(preserve func(*sql.Tx) (string, error)) (err error) {
+	ctx := context.Background()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	var trusted int
+	if err = conn.QueryRowContext(ctx, `PRAGMA trusted_schema`).Scan(&trusted); err != nil {
+		return err
+	}
+	if trusted != 1 {
+		return fmt.Errorf("%w: SQLite writer fence cannot operate with trusted_schema disabled", ErrSchemaIncompatible)
+	}
+	if _, err = conn.ExecContext(ctx, `PRAGMA foreign_keys=OFF`); err != nil {
+		return err
+	}
+	defer func() {
+		_, restoreErr := conn.ExecContext(ctx, `PRAGMA foreign_keys=ON`)
+		var enabled int
+		if restoreErr == nil {
+			restoreErr = conn.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&enabled)
+			if restoreErr == nil && enabled != 1 {
+				restoreErr = errors.New("foreign key enforcement was not restored")
+			}
+		}
+		if restoreErr != nil {
+			// Never put a connection without enforcement back in the pool.
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+			err = errors.Join(err, fmt.Errorf("restore SQLite foreign keys: %w", restoreErr))
+		}
+	}()
+	var enabled int
+	if err = conn.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&enabled); err != nil {
+		return err
+	}
+	if enabled != 0 {
+		return errors.New("disable SQLite foreign keys before migration")
+	}
+	// All application connections use _txlock=immediate, including reset's
+	// fresh database. Pinning preserves that immediate transaction behavior.
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -47,13 +105,33 @@ func (s *Store) migrate() error {
 	if err = tx.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_version'`).Scan(&hasVersion); err != nil {
 		return err
 	}
+	var priorVersion int
 	if hasVersion != 0 {
-		var version int
-		if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_version`).Scan(&version); err != nil {
+		if err = tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_version`).Scan(&priorVersion); err != nil {
 			return err
 		}
-		if version > latestSchemaVersion {
-			return fmt.Errorf("%w: database schema %d is newer than supported schema %d", ErrSchemaIncompatible, version, latestSchemaVersion)
+		if priorVersion > latestSchemaVersion {
+			return fmt.Errorf("%w: database schema %d is newer than supported schema %d", ErrSchemaIncompatible, priorVersion, latestSchemaVersion)
+		}
+	}
+	// The writer lock prevents other connections changing the committed source
+	// while a separate read-only handle captures it. No schema/content writes,
+	// including the baseline's IF NOT EXISTS statements, may precede this step.
+	var existingObjects int
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'`).Scan(&existingObjects); err != nil {
+		return err
+	}
+	if existingObjects > 0 && priorVersion < latestSchemaVersion {
+		backup, backupErr := preserve(tx)
+		if backupErr != nil {
+			return fmt.Errorf("migration backup refused; original data retained: %w", backupErr)
+		}
+		if backup != "" {
+			defer func() {
+				if err != nil {
+					err = fmt.Errorf("upgrade from schema %d failed; pre-migration data retained at %q: %w", priorVersion, backup, err)
+				}
+			}()
 		}
 	}
 	var existing int
@@ -116,6 +194,48 @@ func (s *Store) migrate() error {
 		if err = applyMigration(tx, productImagesMigration); err != nil {
 			return fmt.Errorf("migration 9: %w", err)
 		}
+	}
+	if version < weightedSchemaVersion {
+		if err = migrateWeighted(tx); err != nil {
+			return fmt.Errorf("migration %d: %w", weightedSchemaVersion, err)
+		}
+	}
+	if version < 11 {
+		if err = applyMigration(tx, attentionMigration); err != nil {
+			return fmt.Errorf("migration 11: %w", err)
+		}
+		if err = installWriterFences(tx, 11); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(`INSERT INTO schema_version VALUES(11)`); err != nil {
+			return err
+		}
+	}
+	if version < 12 {
+		if err = applyMigration(tx, weightedPromotionsMigration); err != nil {
+			return fmt.Errorf("migration 12: %w", err)
+		}
+		if err = installWriterFences(tx, latestSchemaVersion); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(`INSERT INTO schema_version VALUES(12)`); err != nil {
+			return err
+		}
+	}
+	// Run this inside the transaction so an invalid parent/child relationship
+	// rolls back the complete rebuild rather than reporting after commitment.
+	rows, err := tx.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	if rows.Next() {
+		rows.Close()
+		return errors.New("migration foreign key check failed")
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
 	}
 	return tx.Commit()
 }

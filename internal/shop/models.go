@@ -5,16 +5,17 @@ import (
 	"fmt"
 )
 
-var ErrPickedDisposition = errors.New("Choose what happened to the picked units being removed: returned and available to sell, or unavailable/damaged.")
+var ErrPickedDisposition = errors.New("Choose what happened to the quantity being removed: returned and available to sell, or unavailable/damaged.")
 var ErrOrderQuote = errors.New("Catalog choices or prices changed. Review the refreshed choices and recorded prices, then submit this manager change again.")
 var ErrUseReady = errors.New("All working units are already picked. Use Mark ready and Confirm collected to finish the normal collection flow.")
 var ErrTerminal = errors.New("This order is ready or closed. Its final receipt and stock disposition cannot be changed or reopened; a separate amendment/refund workflow is not supported in this demo.")
-var ErrStockCapacity = errors.New("Returning these units would exceed the 10,000-unit stock limit. Reconcile physical inventory first, or choose write-off only for units that cannot be resold.")
+var ErrStockCapacity = errors.New("Returning this stock would exceed the product’s stock limit. Reconcile physical inventory first, or choose write-off only for stock that cannot be resold.")
 var ErrConflict = errors.New("This changed since you opened it. Refresh and try again.")
 var ErrHold = errors.New("Your stock hold expired or needs review. Review and reserve your basket for 15 minutes before checkout.")
 var ErrStock = errors.New("Not enough stock for this order. Review your basket and try again.")
 var ErrEmpty = errors.New("Add something to your basket first.")
 var ErrInvalid = errors.New("Please check the submitted values.")
+var ErrAttention = errors.New("Resolve the manager hold before marking ready or finishing this order. Review the hold below.")
 var ErrIncomplete = errors.New("Pick every required item before marking this order ready.")
 var ErrUnavailable = errors.New("This product is archived or not available to order. Remove it from your basket to continue.")
 var ErrQuote = errors.New("Your basket prices or availability changed. Review the current basket, then place your order again.")
@@ -59,6 +60,7 @@ type CartLine struct {
 	Quantity, Subtotal, Reserved int64
 }
 type Basket struct {
+	HasWeight              bool
 	ID, Label, HoldLabel   string
 	Synthetic, NeedsReview bool
 	HoldUntil, Revision    int64
@@ -77,26 +79,34 @@ type OrderItem struct {
 type WorkingOrderItem struct {
 	OrderItem
 	LineID, Unavailable, Cancelled int64
+	Allocated                      int64
+	Measured                       bool
 }
 type OrderEvent struct {
+	Visibility                       string
 	Action, Reason, Details, Created string
 }
 type Order struct {
-	Assignment                        *ShopperAssignment
-	WorkingPrices                     map[int64]int64
-	Version, WorkingTotal, FinalTotal int64
-	Finalized                         bool
-	CompletionKind                    string
-	WorkingItems                      []WorkingOrderItem
-	Events                            []OrderEvent
-	Instructions                      string
-	Percent                           int64
-	ID                                int64
-	Reference, Status, Created        string
-	Total                             int64
-	Items                             []OrderItem
-	PickedCount, RequiredCount        int64
-	AllPicked                         bool
+	AttentionReason                                string
+	AttentionSince                                 int64
+	Held                                           bool
+	HasWeight                                      bool
+	Assignment                                     *ShopperAssignment
+	WorkingSteps                                   map[int64]int64
+	WorkingPrices                                  map[int64]int64
+	Version, WorkingTotal, FinalTotal, PickedTotal int64
+	Finalized                                      bool
+	CompletionKind                                 string
+	WorkingItems                                   []WorkingOrderItem
+	Events                                         []OrderEvent
+	Instructions                                   string
+	Percent                                        int64
+	ID                                             int64
+	Reference, Status, Created                     string
+	Total                                          int64
+	Items                                          []OrderItem
+	PickedCount, RequiredCount                     int64
+	AllPicked                                      bool
 }
 type Adjustment struct {
 	Product, Reason, Created string

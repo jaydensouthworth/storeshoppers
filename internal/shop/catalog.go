@@ -351,10 +351,19 @@ func saveProductAt(tx *sql.Tx, p Product, now int64) (int64, error) {
 	unitChanged := old.SaleUnit != p.SaleUnit || old.PriceBasis != p.PriceBasis
 	if unitChanged {
 		var used int
-		if err = tx.QueryRow(`SELECT (SELECT COUNT(*) FROM order_items WHERE product_id=?)+(SELECT COUNT(*) FROM working_order_items WHERE product_id=?)`, p.ID, p.ID).Scan(&used); err != nil {
+		if err = tx.QueryRow(`SELECT (SELECT COUNT(*) FROM order_items WHERE product_id=?)+(SELECT COUNT(*) FROM working_order_items WHERE product_id=?)+(SELECT COUNT(*) FROM cart WHERE product_id=?)`, p.ID, p.ID, p.ID).Scan(&used); err != nil {
 			return 0, err
 		}
 		if used > 0 || old.Stock != 0 || old.Reserved != 0 {
+			return 0, ErrUnitLocked
+		}
+	}
+	if old.QuantityStep != p.QuantityStep {
+		var invalidCarts int
+		if err = tx.QueryRow(`SELECT COUNT(*) FROM cart WHERE product_id=? AND quantity%?<>0`, p.ID, p.QuantityStep).Scan(&invalidCarts); err != nil {
+			return 0, err
+		}
+		if invalidCarts > 0 {
 			return 0, ErrUnitLocked
 		}
 	}

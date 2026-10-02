@@ -12,6 +12,27 @@ type ProductPicker struct {
 	SourceLineID, OrderVersion, BasketRevision, SelectedID int64
 	Results                                                []Product
 	More                                                   bool
+	DefaultQuantity                                        int64
+	QuantityDraft                                          string
+}
+
+func (p ProductPicker) QuantityValue(product Product) string {
+	if p.SelectedID == product.ID && p.QuantityDraft != "" {
+		return p.QuantityDraft
+	}
+	quantity := product.QuantityStep
+	if p.DefaultQuantity > 0 && p.DefaultQuantity%product.QuantityStep == 0 && p.DefaultQuantity <= product.QuantityLimit() {
+		quantity = p.DefaultQuantity
+	}
+	return fmt.Sprint(quantity)
+}
+
+// Only the selected product's field is interpreted. Keep the old generic field
+// as a fallback for open forms and API clients from the counted workflow.
+func selectedPickerQuantity(r *http.Request, productID int64) {
+	if values, ok := r.PostForm[fmt.Sprintf("quantity_%d", productID)]; ok && len(values) > 0 {
+		r.PostForm.Set("quantity", values[0])
+	}
 }
 
 // ProductPickerResults is bounded server-side. Caller must verify the owning
@@ -22,8 +43,8 @@ func (s *Store) ProductPickerResults(search string, selected, source int64, excl
 	if err != nil {
 		return nil, false, err
 	}
-	args := []any{source, search, search, search, selected}
-	where := `WHERE p.archived=0 AND c.archived=0 AND COALESCE(t.archived,0)=0 AND p.sale_unit='each' AND p.stock>0 AND p.id<>? AND (?='' OR instr(lower(p.name||' '||p.sku||' '||p.barcode),lower(?))>0 OR EXISTS(SELECT 1 FROM product_codes pc WHERE pc.product_id=p.id AND pc.archived=0 AND instr(lower(pc.raw_value||' '||pc.normalized_value),lower(?))>0) OR p.id=?)`
+	args := []any{source, source, source, search, search, search, selected}
+	where := `WHERE p.archived=0 AND c.archived=0 AND COALESCE(t.archived,0)=0 AND (?=0 OR p.sale_unit=(SELECT sale_unit FROM products WHERE id=?)) AND p.stock>0 AND p.id<>? AND (?='' OR instr(lower(p.name||' '||p.sku||' '||p.barcode),lower(?))>0 OR EXISTS(SELECT 1 FROM product_codes pc WHERE pc.product_id=p.id AND pc.archived=0 AND instr(lower(pc.raw_value||' '||pc.normalized_value),lower(?))>0) OR p.id=?)`
 	for id := range excluded {
 		where += ` AND p.id<>?`
 		args = append(args, id)
@@ -78,6 +99,9 @@ func (a *App) populateProductPicker(r *http.Request, v *View, basket bool) error
 		selected = v.BasketDraft.ProductID
 	}
 	p := &ProductPicker{Search: search, Context: context, SourceLineID: lineID, SelectedID: selected, CatalogQuote: v.OrderCatalogQuote, OrderVersion: v.Order.Version, BasketRevision: v.ManagedBasket.Revision}
+	if r.Method == http.MethodPost {
+		p.QuantityDraft, _ = boundedManagerDraft(r.PostForm.Get("quantity"), 64)
+	}
 	excluded := make(map[int64]bool)
 	var source int64
 	if basket {
@@ -105,6 +129,7 @@ func (a *App) populateProductPicker(r *http.Request, v *View, basket bool) error
 			for _, line := range v.Order.WorkingItems {
 				if line.LineID == lineID {
 					source = line.ProductID
+					p.DefaultQuantity = line.Quantity
 				}
 			}
 			if source == 0 {
@@ -118,6 +143,13 @@ func (a *App) populateProductPicker(r *http.Request, v *View, basket bool) error
 	p.Results, p.More, err = a.store.ProductPickerResults(search, selected, source, excluded)
 	if err != nil {
 		return err
+	}
+	if !basket {
+		for i := range p.Results {
+			if step, exists := v.Order.WorkingSteps[p.Results[i].ID]; exists {
+				p.Results[i].QuantityStep = step
+			}
+		}
 	}
 	v.ProductPicker = p
 	return nil

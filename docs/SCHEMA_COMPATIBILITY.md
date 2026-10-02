@@ -1,10 +1,7 @@
 # Runtime schema compatibility
 
 The compatibility fence was introduced in a preparatory **schema 8** release.
-The current image release uses **schema 9**, adding only image metadata and
-retained assets; quantity meanings and receipt data are unchanged. The fence
-protects a guarded binary that remains running while another process upgrades
-the same database.
+The image release uses **schema 9** and adds image metadata/assets without changing quantity meanings. Schema 10 adds weighted execution and database writer fences; see [Weighted products](WEIGHTED_PRODUCTS.md). The application compatibility checks below protect a guarded binary that remains running while another process upgrades the same database.
 
 ## Mutation boundary
 
@@ -19,7 +16,7 @@ This covers session creation, manager sign-in/sign-out and CSRF rotation,
 reservation expiry, basket edits/renewal/practice setup, checkout, stock/audit,
 catalog/taxonomy/details/example commands, promotions/features, picking (including
 the atomic start-and-pick working-line command), working-order overrides, order
-transitions and shopper assignment.
+transitions shopper assignment, and manager hold/release/internal notes.
 Existing transaction, ownership, optimistic-version and replay rules remain.
 
 If the old command acquires the lock first, its entire compatible transaction
@@ -43,6 +40,27 @@ Two deliberate exceptions remain:
 
 There is no persistent application lock and no lock held merely because a
 process is running. Another compatible process can start normally.
+
+## Recovery before upgrade
+
+Before changing an existing file-backed database, startup keeps its SQLite
+IMMEDIATE writer lock and opens a separate read-only source handle. The supported
+Backup API captures the committed original state, including WAL contents, images,
+custom tables and sequence marks. The archive is checked against the complete
+schema/data fingerprint and synced before migration writes begin.
+
+Archives live beside the database in `<database>.migration-backups`, with private
+directory/file permissions and a separate 256 MiB budget. Matching verified
+snapshots are reused on retry. Current-schema restarts, fresh empty databases and
+in-memory fixtures do not create archives. Backup failure or a full budget refuses
+the upgrade with the original database unchanged; no archive is automatically
+purged or overwritten. Migration failure rolls back the database and reports the
+recovery path. The migration and its version marker still commit atomically.
+
+An older image cannot serve a successfully upgraded database. Prefer a forward
+repair; restoring a pre-upgrade archive requires deliberately stopping database
+users and reviewing any newer changes first. Never copy a backup over a running
+main/WAL pair or assume an image rollback downgrades the schema.
 
 ## Requests, rendering and readiness
 
@@ -71,19 +89,24 @@ the earlier compatible transaction did nothing.
 
 ## Deployment boundary before an incompatible migration
 
-**This guard cannot protect an older, unguarded binary.** Publishing a guarded
-schema-8 release, observing its healthy page or waiting an arbitrary interval
-does not prove that every previous process has stopped using the database.
-An unguarded process can still write after a future migration and reinterpret
-quantities incorrectly. The current deployment's replica overlap and drain
-behavior have not been established by these source tests.
+Every schema10+ application connection registers an immutable compiled-version
+SQL callback. Versioned INSERT/UPDATE/DELETE triggers fence all application
+tables. Schema11 adds v11 fences while retaining v10 fences; a schema10 process
+cannot mark a held order ready or write another table after the upgrade. The
+real schema10→11 overlap smoke verifies old Ready and health return503 with the
+complete database fingerprint unchanged. Earlier unguarded applications lack
+the callback and are refused by row triggers, but can still have unguarded
+read-only responses and readiness. The weighted overlap evidence records that
+unguarded health can return200.
 
-Before introducing weighted quantity semantics or rebuilding tables, verify an
-operational way to stop/drain all unguarded processes, or separately implement
-and prove a database-enforced compatibility boundary that covers those clients.
-Do not infer this prerequisite from the preparatory release alone. No deployment
-configuration changes, live database writes, connection-specific SQL functions
-or compatibility triggers are included here.
+These fences do not cover direct file access, DDL or Backup API page copying.
+Reset has its own exact-version/exclusive checks. The response check is an
+observation, not an interprocess lease through socket delivery. The current guarded predecessor refuses incompatible reads and writes during
+overlap. A much older unguarded binary can still serve errors or stale responses;
+row fences prevent its tested mutations from changing data. Deployment checks
+should focus on the current application and its health, rather than assuming that
+a saved historical image is still running. No local test proves process drain.
+See [Weighted products](WEIGHTED_PRODUCTS.md) and [Order review and queue](ORDER_ATTENTION.md).
 
 The marker is a contract: supported migrations must advance it monotonically
 and atomically with their schema/data changes. The guard does not inspect every
@@ -107,3 +130,7 @@ archive and never reaches baseline installation. An incompatible fresh source is
 also refused before copying and leaves both source and destination unchanged.
 These use isolated temporary databases and simulated future version advancement,
 not a production migration.
+
+Schema12 adds promotion price-basis snapshots and v12 writer fences while retaining v10/v11 generations. Already-open schema11 connections cannot mutate the upgraded catalog or offers. This source supports schema12. Older guarded binaries return503 instead of attempting to serve a migrated database.
+
+The combined schema12 executable passed fresh process-overlap probes against unguarded8, guarded8, image9 and weighted10. Prior table fields and sequence marks survived, current writer fences covered all29 application tables, and every rejected mutation preserved the complete database fingerprint. Guarded requests/readiness returned503; ancient unguarded health still returned200. Local tests establish data safety during the tested overlap, not deployment routing or the absence of an old replica.

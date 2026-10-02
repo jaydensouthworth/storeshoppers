@@ -4,7 +4,7 @@
 
 `products.stock` is **available stock**, not physical stock. Each `cart` line stores its desired quantity and currently held `reserved` quantity. Available + all held quantities is bounded at 10,000 per product; manager adjustments change available only and cannot use held units or overflow the eventual release. Product selling-unit/basis changes are blocked while available stock, held stock, or historical order use remains.
 
-A successful explicit basket edit or review reserves the entire resulting counted-item basket atomically for 15 minutes. Quantities remain integers 0–99; zero removes a line. A stale revision, insufficient stock, archived/weighed product or failed write cannot partly reserve a basket. Removing a line is always possible: if the remaining basket cannot renew, only that line is released/removed and the old deadline remains. An empty basket has no deadline. Manager overrides use the same service, expected basket revision and a 3–120-character reason.
+A successful explicit basket edit or review reserves the entire resulting basket atomically for 15 minutes. Counted quantities remain integers 0–99; weighed requests use integer grams up to 100,000 in the product’s step. Zero removes a line. A stale revision, insufficient stock, archived product or failed write cannot partly reserve a basket. Removing a line is always possible: if the remaining basket cannot renew, only that line is released/removed and the old deadline remains. An empty basket has no deadline. Manager overrides use the same service, expected basket revision and a 3–120-character reason.
 
 Expiry is deadline-based and persisted. Startup, basket/catalog/manager reads and relevant inventory writes reconcile overdue allocations in one immediate SQLite transaction. Stock release, clearing held quantities and advancing revisions commit together. No background process is needed, and restart/duplicate reads cannot release twice. A database at rest may contain expired allocations until the next reconciliation; application inventory reads reconcile before reporting availability. Expired owner sessions release their real and practice allocations as well. Reading or polling never extends a deadline.
 
@@ -26,7 +26,7 @@ The practice action idempotently creates two labeled synthetic baskets for the c
 
 Checkout accepts up to 500 Unicode characters of plain text, normalizes CRLF, rejects invalid UTF-8 and control characters other than newline/tab, and HTML-escapes output. Use only fake grocery instructions; the demo is not a place for health, payment or other private information. Validation retains the entered text in the checkout form. The placed snapshot appears on the session-owned receipt and authorized manager pick ticket; it does not enter the public inventory/catalog logs.
 
-Shopping progress explicitly displays floor(picked counted units × 100 / required counted units). Ready still requires every line picked. Weighed quantities, substitutions, final-total reconciliation, cancellation, returns and scanner execution remain separate work.
+Counted-only progress displays floor(picked units × 100 / required units). Mixed orders use completed product lines, with each line’s units or grams shown separately. Ready requires counted picks and confirmed actual grams. See [Weighted products](WEIGHTED_PRODUCTS.md) and [Manager order overrides](ORDER_OVERRIDES.md); scanner execution remains deferred.
 
 ## Manager navigation
 
@@ -35,3 +35,5 @@ Manager pages share task-focused navigation: Orders, Baskets, Products, Categori
 ## Verification boundary
 
 Run `./scripts/check.sh` for formatting, vet, race tests, build and real HTTP/restart smoke checks. Deterministic tests inject a concurrency-safe clock rather than sleeping 15 minutes. Automated HTML checks complement live desktop/mobile browser QA; they do not replace real-device testing. Named identities, cleanup/retention, production authorization, full accessibility/real-device testing and operational hardening remain outstanding.
+
+An all-zero estimate cannot create or renew reservations. Removing an item still works if it leaves a zero-rounded gram line: only the removed allocation is released, the remaining hold is not renewed, and checkout stays disabled until the total is positive.

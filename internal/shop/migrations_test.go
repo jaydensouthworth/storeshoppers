@@ -58,7 +58,7 @@ INSERT INTO schema_version VALUES(2);`
 
 func migrationRawDB(t *testing.T, path string) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open(applicationSQLiteDriver, path)
 	if err != nil {
 		t.Fatal(err)
 	}

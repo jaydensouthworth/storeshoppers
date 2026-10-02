@@ -15,6 +15,7 @@ import (
 // Shopper is a fixed simulated roster identity, not a login or a live device.
 // Progress comes only from currently assigned orders' recorded working lines.
 type Shopper struct {
+	HasWeight                               bool
 	ID                                      int64
 	Name, Initials                          string
 	ActiveOrders, Picked, Required, Percent int64
@@ -40,6 +41,7 @@ type ShopperDraft struct {
 	Truncated                 bool
 }
 type ShoppersWorkspace struct {
+	QueueContext                                        string
 	Query, Status, ShopperFilter, ContextQuery          string
 	Roster                                              []Shopper
 	Tasks                                               []ShopperTask
@@ -199,8 +201,12 @@ func endShopperAssignment(tx *sql.Tx, id int64, outcome string) error {
 const shopperOrderCTE = `WITH scoped_orders AS (
  SELECT o.* FROM orders o WHERE (? OR o.session_id=?)
 ), progress AS (
- SELECT o.id,COALESCE(SUM(CASE WHEN w.sale_unit='each' THEN w.picked_quantity ELSE 0 END),0) picked,
- COALESCE(SUM(CASE WHEN w.sale_unit='each' THEN w.quantity ELSE 0 END),0) required
+ SELECT o.id,
+ COALESCE(SUM(CASE WHEN w.sale_unit='each' THEN w.picked_quantity ELSE 0 END),0) counted_picked,
+ COALESCE(SUM(CASE WHEN w.sale_unit='each' THEN w.quantity ELSE 0 END),0) counted_required,
+ COALESCE(SUM(CASE WHEN w.quantity>0 AND ((w.sale_unit='g' AND w.measurement_confirmed=1 AND w.unavailable_quantity=0 AND w.cancelled_quantity=0) OR (w.sale_unit='each' AND w.picked_quantity=w.quantity)) THEN 1 ELSE 0 END),0) lines_picked,
+ COALESCE(SUM(CASE WHEN w.quantity>0 THEN 1 ELSE 0 END),0) lines_required,
+ COALESCE(MAX(CASE WHEN w.quantity>0 AND w.sale_unit='g' THEN 1 ELSE 0 END),0) has_weight
  FROM scoped_orders o LEFT JOIN working_order_items w ON w.order_id=o.id GROUP BY o.id
 ), historical_shoppers AS (
  SELECT DISTINCT e.order_id,s.id shopper_id,s.name
@@ -208,7 +214,7 @@ const shopperOrderCTE = `WITH scoped_orders AS (
  JOIN shopper_event_links l ON l.event_id=e.id
  JOIN shoppers s ON s.id=l.from_shopper_id OR s.id=l.to_shopper_id
 ), tasks AS (
- SELECT o.*,p.picked,p.required,
+ SELECT o.*,p.counted_picked,p.counted_required,p.lines_picked,p.lines_required,p.has_weight,CASE WHEN p.has_weight=1 THEN p.lines_picked ELSE p.counted_picked END picked,CASE WHEN p.has_weight=1 THEN p.lines_required ELSE p.counted_required END required,
  COALESCE((SELECT group_concat(h.name,' ') FROM historical_shoppers h WHERE h.order_id=o.id),'') historical_names,
  a.id assignment_id,a.shopper_id,a.version assignment_version,a.state assignment_state,a.created assignment_created,a.ended assignment_ended,s.name shopper_name
  FROM scoped_orders o JOIN progress p ON p.id=o.id
@@ -223,7 +229,7 @@ const shopperTaskFilter = ` WHERE (?='' OR instr(lower(reference||' '||status||'
 func (s *Store) Shoppers(f ShopperFilters, sid string, allOrders bool, selected int64) (*ShoppersWorkspace, error) {
 	out := &ShoppersWorkspace{Query: f.Query, Status: f.Status, ShopperFilter: f.ShopperFilter, Page: f.Page, CommandKey: token()}
 	if selected > 0 {
-		o, err := s.Order(selected, sid, allOrders)
+		o, err := s.ManagerOrder(selected, sid, allOrders)
 		if err != nil {
 			return nil, err
 		}
@@ -239,13 +245,13 @@ func (s *Store) Shoppers(f ShopperFilters, sid string, allOrders bool, selected 
 		return nil, err
 	}
 	out.UnassignedOrders = out.OpenOrders - out.AssignedOrders
-	rows, err := tx.Query(shopperOrderCTE+`SELECT s.id,s.name,s.initials,COUNT(t.id),COALESCE(SUM(t.picked),0),COALESCE(SUM(t.required),0) FROM shoppers s LEFT JOIN tasks t ON t.shopper_id=s.id GROUP BY s.id ORDER BY s.id`, allOrders, sid)
+	rows, err := tx.Query(shopperOrderCTE+`SELECT s.id,s.name,s.initials,COUNT(t.id),CASE WHEN COALESCE(MAX(t.has_weight),0)=1 THEN COALESCE(SUM(t.lines_picked),0) ELSE COALESCE(SUM(t.counted_picked),0) END,CASE WHEN COALESCE(MAX(t.has_weight),0)=1 THEN COALESCE(SUM(t.lines_required),0) ELSE COALESCE(SUM(t.counted_required),0) END,COALESCE(MAX(t.has_weight),0) FROM shoppers s LEFT JOIN tasks t ON t.shopper_id=s.id GROUP BY s.id ORDER BY s.id`, allOrders, sid)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var sh Shopper
-		if err = rows.Scan(&sh.ID, &sh.Name, &sh.Initials, &sh.ActiveOrders, &sh.Picked, &sh.Required); err != nil {
+		if err = rows.Scan(&sh.ID, &sh.Name, &sh.Initials, &sh.ActiveOrders, &sh.Picked, &sh.Required, &sh.HasWeight); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -287,7 +293,7 @@ func (s *Store) Shoppers(f ShopperFilters, sid string, allOrders bool, selected 
 		out.Last = min(out.First+19, int(out.Total))
 	}
 	args = append(args, 20, (out.Page-1)*20)
-	rows, err = tx.Query(shopperOrderCTE+`SELECT id,reference,status,created,total,order_version,completion_kind,picked,required,assignment_id,shopper_id,assignment_version,shopper_name,assignment_state,assignment_created,assignment_ended FROM tasks`+shopperTaskFilter+` ORDER BY id DESC LIMIT ? OFFSET ?`, args...)
+	rows, err = tx.Query(shopperOrderCTE+`SELECT id,reference,status,created,total,order_version,completion_kind,picked,required,has_weight,assignment_id,shopper_id,assignment_version,shopper_name,assignment_state,assignment_created,assignment_ended FROM tasks`+shopperTaskFilter+` ORDER BY id DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +302,7 @@ func (s *Store) Shoppers(f ShopperFilters, sid string, allOrders bool, selected 
 		var aid, shopper, version sql.NullInt64
 		var name, state, created, ended sql.NullString
 		o := &task.Order
-		if err = rows.Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Version, &o.CompletionKind, &o.PickedCount, &o.RequiredCount, &aid, &shopper, &version, &name, &state, &created, &ended); err != nil {
+		if err = rows.Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Version, &o.CompletionKind, &o.PickedCount, &o.RequiredCount, &o.HasWeight, &aid, &shopper, &version, &name, &state, &created, &ended); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -337,4 +343,11 @@ func (s *Store) Shoppers(f ShopperFilters, sid string, allOrders bool, selected 
 		return nil, err
 	}
 	return out, tx.Commit()
+}
+
+func (s Shopper) ProgressLabel() string {
+	if s.HasWeight {
+		return "product lines"
+	}
+	return "units"
 }

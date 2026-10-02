@@ -67,7 +67,7 @@ func TestManagerDashboardShowsPickingSeparateFromReady(t *testing.T) {
 					t.Errorf("%s lost an order in its default view: %s", path, ref)
 				}
 			}
-			for _, state := range []string{`status-Placed`, `status-Picking`, `status-Ready`, `status-Completed`, `50% shopped`, `1 / 2 picked`, `100% shopped`} {
+			for _, state := range []string{`status-Placed`, `status-Picking`, `status-Ready`, `status-Completed`, `50% shopped`, `1 / 2 units picked`, `100% shopped`} {
 				if !strings.Contains(body, state) {
 					t.Errorf("%s missing visible status/progress %q", path, state)
 				}

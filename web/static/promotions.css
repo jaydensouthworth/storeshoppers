@@ -30,15 +30,15 @@
 .weekly-offer .offer-ends { margin: 0; color: var(--ink); font-size: 9px; line-height: 1.5; }
 .weekly-offer .offer-ends > span { color: var(--red); font-weight: 700; }
 .weekly-offer .offer-ends strong { font-weight: 400; }
-.weekly-offer > form { grid-column: 1/-1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px dashed var(--ink); padding-top: 8px; margin: 0; }
-.weekly-offer > form > span { font-size: 10px; }
-.weekly-offer > form > .action-feedback { flex-basis: 100%; }
+.weekly-offer > :is(form,.weekly-weight-action) { grid-column: 1/-1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px dashed var(--ink); padding-top: 8px; margin: 0; }
+.weekly-offer > :is(form,.weekly-weight-action) > span { font-size: 10px; }
+.weekly-offer > :is(form,.weekly-weight-action) > .action-feedback { flex-basis: 100%; }
 .weekly-offer .add-button { min-height: 44px; padding: 9px 12px; gap: 14px; font-size: 11px; }
 .weekly-spread-1 .weekly-offer { grid-template-columns: 110px minmax(0,1fr) minmax(140px,190px); grid-template-rows: auto; gap: 24px; padding-inline: 28px; }
 .weekly-spread-1 .weekly-offer-art svg { height: 128px; }
 .weekly-spread-1 .weekly-offer h2 { font-size: 26px; }
 .weekly-spread-1 .weekly-price strong { font-size: 44px; }
-.weekly-spread-1 .weekly-offer > form { grid-column: 3; flex-direction: column; align-items: stretch; border-top: 0; border-left: 1px dashed var(--ink); padding: 0 0 0 20px; }
+.weekly-spread-1 .weekly-offer > :is(form,.weekly-weight-action) { grid-column: 3; flex-direction: column; align-items: stretch; border-top: 0; border-left: 1px dashed var(--ink); padding: 0 0 0 20px; }
 .weekly-spread-1 .weekly-offer .add-button { justify-content: space-between; }
 .weekly-basket-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 18px; padding: 0 16px; border-top: 2px solid var(--ink); background: #fff; }
 .weekly-basket-bar p { margin: 0; }
@@ -86,8 +86,8 @@
   .weekly-offer-art svg,.weekly-spread-1 .weekly-offer-art svg { height: 76px; }
   .weekly-offer h2,.weekly-spread-1 .weekly-offer h2 { font-size: 18px; }
   .weekly-offer .weekly-price strong,.weekly-spread-1 .weekly-price strong { font-size: 32px; }
-  .weekly-offer > form,.weekly-spread-1 .weekly-offer > form { grid-column: 3; flex-direction: column; align-items: stretch; border: 0; padding: 0; gap: 8px; }
-  .weekly-offer > form > span { font-size: 9px; text-align: center; }
+  .weekly-offer > :is(form,.weekly-weight-action),.weekly-spread-1 .weekly-offer > :is(form,.weekly-weight-action) { grid-column: 3; flex-direction: column; align-items: stretch; border: 0; padding: 0; gap: 8px; }
+  .weekly-offer > :is(form,.weekly-weight-action) > span { font-size: 9px; text-align: center; }
   .weekly-offer .add-button { min-width: 0; padding: 9px; gap: 9px; justify-content: space-between; }
   .weekly-offer:has(.action-feedback) > form { grid-column: 1/-1; flex-direction: row; align-items: center; border-top: 1px dashed var(--ink); padding-top: 8px; }
   .weekly-basket-summary,.weekly-basket-note,.weekly-basket-link { display: none; }
@@ -123,7 +123,7 @@
 .featured-price strong { font-size: 16px; }
 .featured-price del { color: var(--muted); }
 .featured-copy .offer-ends { grid-row: 4; align-self: start; margin: 0 0 10px; }
-.featured-copy > form { grid-row: 5; align-self: start; margin: 0; }
+.featured-copy > :is(form,.featured-weight-action) { grid-row: 5; align-self: start; margin: 0; }
 .featured-copy .secondary { width: 100%; min-height: 44px; padding: 8px; font-size: 10px; }
 /* Share natural category/title/price/date/action tracks within each shelf row.
    An absent sale date leaves its track empty; neighbors determine its size. */
@@ -240,3 +240,5 @@
 }
 
 .featured-heading > .text-link { font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
+
+.weekly-weight-action > a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; text-align: center; text-decoration: none; }

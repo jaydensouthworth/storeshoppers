@@ -658,12 +658,12 @@ func TestPromotionsExampleSalesPreviewReplayAndNoOverwrite(t *testing.T) {
 }
 
 func TestPromotionsUnavailableProductsRejectSalesAndFeatures(t *testing.T) {
-	for _, state := range []string{"archived", "weighted"} {
+	for _, state := range []string{"archived", "archived category", "archived type"} {
 		t.Run(state, func(t *testing.T) {
 			s, clock, _ := promotionTestStore(t)
 			product := testCreateProduct(t, s, func(p *Product) {
-				if state == "weighted" {
-					p.SaleUnit, p.PriceBasis, p.QuantityStep = "g", 1000, 100
+				if state == "archived type" {
+					p.TypeID = 1
 				}
 			})
 			if state == "archived" {
@@ -671,6 +671,12 @@ func TestPromotionsUnavailableProductsRejectSalesAndFeatures(t *testing.T) {
 					t.Fatal(err)
 				}
 				product = testCatalogProduct(t, s, product.ID)
+			}
+			if state == "archived category" {
+				testExec(t, s, `UPDATE categories SET archived=1 WHERE id=?`, product.CategoryID)
+			}
+			if state == "archived type" {
+				testExec(t, s, `UPDATE product_types SET archived=1 WHERE id=?`, product.TypeID)
 			}
 			before := fingerprintTest(t, s.db)
 			_, err := s.SavePromotion(Promotion{ProductID: product.ID, ProductVersion: product.PriceVersion, SalePrice: 399, Starts: clock.now().Unix(), Ends: clock.now().Unix() + 60})

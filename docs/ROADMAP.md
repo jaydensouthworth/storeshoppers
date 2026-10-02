@@ -14,10 +14,10 @@ Each phase is accepted only when the intended task works end to end, relevant in
 
 ## Verified live foundation
 
-As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/04fbe9227905aeefedce5ae683c86a5abf44699c). This checkpoint contains 144 verified published files.
+As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/b43a76e95cded1c8ce0fe1c851dfb7ab6b717dd7). This checkpoint contains 127 verified published files.
 
 - 72 fake products; configurable categories/types; create, edit, archive and restore; dedicated editors and a manager sidebar
-- Safe bundled illustrations and bounded JPEG/PNG upload previews with explicit public confirmation, immutable normalized variants and recoverable storage; generated scan labels/camera scanning remain deferred
+- Safe bundled illustration picker, immutable SKU and separate demo-local product codes; uploads, generated scan labels and camera scanning are not implemented
 - Session baskets, atomic simulated checkout, replay protection, ownership checks, immutable receipt/measurement snapshots and stale-price review
 - Persisted 15-minute stock holds, expiry/reacquisition, available/reserved counts, scoped practice baskets and audited manager basket overrides
 - Plaintext checkout instructions capped at 500 characters; Picking progress percentages/counts and a distinct Ready status. The default Orders view already shows these states
@@ -28,11 +28,11 @@ As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdad
 - Versioned populated-data migrations and restart persistence; server-side validation, CSRF and non-negative transactional inventory
 - The public known-password hint appears only when the configured password matches the demo value; this remains intentionally limited demo access
 
-Verification for this release: 282 top-level Go tests, 21 JavaScript interaction/theme tests, 83.9% core coverage, 94.3% image-normalization coverage, race checks, vet, build, eight HTTP/restart smoke suites and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36969438744). Live desktop and 402 CSS-pixel actions covered basket edits, visible expired-form feedback, direct Mark picked/start, partial picking, searched substitutions, working-item additions/removals and own-order cancellation with stock audit. Physical-phone testing and a fuller accessibility audit remain open.
+Verification for this release: 246 top-level Go tests, 21 JavaScript interaction/theme tests, 83.8% core coverage, race checks, vet, build, seven HTTP/restart smoke suites and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36963942277). Live desktop and 402 CSS-pixel actions covered basket edits, visible expired-form feedback, direct Mark picked/start, partial picking, searched substitutions, working-item additions/removals and own-order cancellation with stock audit. Physical-phone testing and a fuller accessibility audit remain open.
 
 ## Ordered implementation backlog
 
-**Current priority:** finish image-editor action sizing, then integrate weighted execution as schema10 with its independent migration/overlap review. The image upload/preview/save/public-display/restore flow is live-verified at desktop and402px in Dark mode. The preparatory schema-8 compatibility safeguard is published with passing CI. Mixed regular/sale Featured rows and persistent System/Light/Dark appearance are live and checked on desktop and narrow screens. The compact circular is live: 306 CSS pixels at 1366×768 and 1440×901, with catalog controls/products above the fold. Routine manager controls and visible stale-form recovery are verified; see [Manager workflows](MANAGER_WORKFLOWS.md). The missing hosting volume was added and exact sale/audit records survived a deployment. Continue compatibility safeguards, weighted execution, safe image uploads and remaining manager workflows in tested phases without overwriting visitor changes.
+**Current priority:** finish the protected schema12 rollout and verify retained records plus ordinary/weighted manager and customer workflows. The integrated release includes images9, weighted10, manager holds11 and gram promotions12; automatic pre-migration recovery snapshots and compatibility refusal protect the update. The preparatory schema-8 compatibility safeguard is published with passing CI. Mixed regular/sale Featured rows and persistent System/Light/Dark appearance are live and checked on desktop and narrow screens. The compact circular is live: 306 CSS pixels at 1366×768 and 1440×901, with catalog controls/products above the fold. Routine manager controls and visible stale-form recovery are verified; see [Manager workflows](MANAGER_WORKFLOWS.md). The missing hosting volume was added and exact sale/audit records survived a deployment. Safe image uploads are live and checked. Continue compatibility safeguards, weighted execution and remaining manager workflows in tested phases without overwriting visitor changes.
 
 ### 1. Manager usability and explicit reset
 
@@ -46,7 +46,7 @@ Verification for this release: 282 top-level Go tests, 21 JavaScript interaction
 
 **Implemented and live-verified in schema v5:** confirmed working-order additions/removals, quantity changes, whole-line counted substitutions and explicit reasoned manager overrides. Incomplete orders can finish with unavailable/cancelled remainders and deliberate stock disposition, while actual picked counts remain truthful. Whole-order cancellation and scoped order history are included. See [Manager order overrides](ORDER_OVERRIDES.md).
 
-Preserve requested receipt lines and the placed total. Use separate fulfillment/allocation records, resolution history and a final fulfillment total. Checkout instructions retain the shopper’s guidance, while explicit, reasoned manager overrides remain permitted. A structured substitution-preference field is a later refinement; this increment supports counted same-unit changes. Missing physical stock must not produce phantom returns. Validate scope, state and versions; update allocations, stock, totals and audit in one transaction. Final totals stay nullable until Ready, allow an explicitly all-unavailable final zero and freeze at Ready. Ready remains frozen except collection; historical amendments/refunds and a Needs attention workflow remain future work. See [catalog and fulfillment evolution](CATALOG_EVOLUTION.md).
+Preserve requested receipt lines and the placed total. Use separate fulfillment/allocation records, resolution history and a final fulfillment total. Checkout instructions retain the shopper’s guidance, while explicit, reasoned manager overrides remain permitted. A structured substitution-preference field is a later refinement; this increment supports counted same-unit changes. Missing physical stock must not produce phantom returns. Validate scope, state and versions; update allocations, stock, totals and audit in one transaction. Final totals stay nullable until Ready, allow an explicitly all-unavailable final zero and freeze at Ready. Ready remains frozen except collection; historical amendments/refunds remain future work. Explicit manager holds are implemented in the local schema11 candidate; see [Order review and queue](ORDER_ATTENTION.md). See [catalog and fulfillment evolution](CATALOG_EVOLUTION.md).
 
 **Acceptance:** additions, removals, partial quantities, substitutions, override reasons, unavailable items and cancellation paths work end to end; failed/stale/repeated writes cannot oversell, double-deduct or double-return stock. Original receipts remain unchanged and final outcomes are understandable to both manager and customer.
 
@@ -62,15 +62,17 @@ Implemented and live-verified in schema v7: Promotions and Featured management w
 
 **Acceptance:** active/scheduled/expired promotions display consistently; stale sale prices require review and totals match the current valid quote.
 
+Schema12 extends sales and Featured to gram products, with saved cents-per-kilogram offer bases, explicit Choose grams actions, and the same stale-quote/immutable-receipt rules.
+
 ### 5. Complete individual product pages and catalog presentation
 
-Implemented and live-verified in schema v8: full product pages, manager-editable body and package details, optional clearly illustrative food nutrition, and counted deodorant/razor examples with bundled illustrations. Existing catalog migration invents no metadata or stock; a demo-only reviewed action can add the two examples without overwriting edits. Details remain separate from selling-unit execution and immutable order snapshots. See [Product details](PRODUCT_DETAILS.md). Schema9 image support is implemented and live-verified: bounded JPEG/PNG previews, confirmed attachment, normalized immutable variants and retained recovery storage. No arbitrary URL fetching or SVG upload.
+Implemented and live-verified in schema v8: full product pages, manager-editable body and package details, optional clearly illustrative food nutrition, and counted deodorant/razor examples with bundled illustrations. Existing catalog migration invents no metadata or stock; a demo-only reviewed action can add the two examples without overwriting edits. Details remain separate from selling-unit execution and immutable order snapshots. See [Product details](PRODUCT_DETAILS.md). The schema9 image foundation is integrated: bounded JPEG/PNG previews, confirmed attachment, normalized immutable variants and retained recovery storage. No arbitrary URL fetching or SVG upload.
 
 **Acceptance:** product details, available stock, units and basket actions agree; archived/referenced products retain their history, and both food and non-food items render sensibly on mobile.
 
 ### 6. Implement weighted selling and actual-weight reconciliation
 
-Gram measurement metadata already exists, but weighted checkout and actual-weight reconciliation do not. Use a dedicated quantity/pricing migration with integer cents and grams, bounded line rounding, immutable unit/rate snapshots and unit-specific totals. Implement weighted checkout before reconciling actual picked weight, with explicit tolerance/review and transactional allocation changes. Do not mix grams and units into one misleading item count.
+Implemented in schema10: gram checkout, bounded once-per-line rounding, separate requested/allocated/measured quantities, explicit actual-weight amount/stock preview, same-unit substitutions and unit-aware totals. See [Weighted products](WEIGHTED_PRODUCTS.md). Migration/overlap tests protect data; live desktop and narrow workflow checks verify the release. No camera/scanning UI is included.
 
 **Acceptance:** populated migrations, rounding/bounds, competing orders and above/below-requested weights preserve history and stock; failed reconciliation rolls back every effect.
 
@@ -91,3 +93,14 @@ Keep versioned migrations, recoverable backup/restore and deliberate cleanup pol
 ## Outside the current demo
 
 Real payments, tax/shipping calculation, emails, customer personal information, multi-store inventory, delivery routing, supplier integrations and production retail use remain outside this scope.
+
+### 7. Explicit manager review and a usable order queue
+
+Implemented in schema11: private reasoned hold/release/internal-note
+commands, customer-safe history queries, factual held/unassigned filters,
+reference/product/SKU search, accurate scoped counts and stable 20-row pages.
+Working items, weights and assignments stay available while held; Ready/partial
+finish require release, and cancellation closes the hold atomically. Queue
+context survives all ticket forms and the assignment round-trip. Browser visual
+QA complements the migration, scope and command tests. No analytics, risk score,
+physical logistics, payments, refunds or customer accounts were added.

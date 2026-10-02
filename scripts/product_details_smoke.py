@@ -128,7 +128,7 @@ def main():
         try:
             with closing(sqlite3.connect(db_path)) as db:
                 assert db.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 72
-                assert db.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 9
+                assert db.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 12
             _, deodorant = request("/products/71")
             assert "Everyday deodorant" in deodorant and 'id="nutrition-title"' not in deodorant
             _, razors = request("/products/72")
@@ -200,7 +200,15 @@ def main():
             weighted_id = urllib.parse.parse_qs(urllib.parse.urlsplit(weighted_route).query)["edit"][0]
             _, weighted_page = request("/products/" + weighted_id)
             assert "Smoke weighed almonds" in weighted_page
-            assert not any(f["action"] == "/cart" for f in DetailForms(weighted_page).forms)
+            weighted_cart = [f for f in DetailForms(weighted_page).forms if f["action"] == "/cart"]
+            assert len(weighted_cart) == 1
+            assert weighted_cart[0]["fields"]["product_id"] == weighted_id
+            assert 'min="100" max="100000" step="100"' in weighted_page
+            # New catalog products start sold out; quantity and submit controls
+            # remain disabled until the separate audited stock action.
+            assert 'id="detail-quantity"' in weighted_page and 'required disabled' in weighted_page
+            assert 'id="detail-add-' + weighted_id + '"' in weighted_page
+            assert "Requested grams reserve stock" in weighted_page
 
             # Existing example installation is an informative, non-mutating page.
             _, installed = request("/manager/catalog/examples")

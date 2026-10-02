@@ -14,12 +14,26 @@ var ErrPromotionOverlap = errors.New("This product already has a sale in that ti
 var ErrPromotionPrice = errors.New("Sale prices must be below the regular price. Adjust or cancel active/upcoming sales before changing their regular price or selling unit.")
 var ErrExampleSales = errors.New("Example sales require the unchanged demo apples, bread and milk, with no overlapping sales or existing featured choices. Nothing was changed.")
 
+var ErrPromotionUnit = errors.New("This offer was created for a different selling unit. Keep its history and create a new sale.")
+
 type Promotion struct {
+	SaleUnit, CurrentSaleUnit                       string
+	PriceBasis                                      int64
 	ID, ProductID, SalePrice, Starts, Ends, Version int64
 	ProductVersion, RegularPrice                    int64
 	ProductName, SKU, Status                        string
 	Cancelled, Unavailable                          bool
 }
+
+func rateUnit(unit string) string {
+	if unit == "g" {
+		return "per kg"
+	}
+	return "each"
+}
+func (p Product) RateUnit() string          { return rateUnit(p.SaleUnit) }
+func (p Promotion) RateUnit() string        { return rateUnit(p.SaleUnit) }
+func (p Promotion) RegularRateUnit() string { return rateUnit(p.CurrentSaleUnit) }
 
 func (p Promotion) StartInput() string {
 	return time.Unix(p.Starts, 0).UTC().Format("2006-01-02T15:04")
@@ -57,13 +71,13 @@ type pricingState struct {
 // product cursor. A transaction caller sees rates and product data atomically.
 func loadPricing(q querier, now int64) (pricingState, error) {
 	state := pricingState{sales: map[int64]Promotion{}, features: map[int64]featuredPrice{}, boundaries: map[int64]int64{}}
-	rows, err := q.Query(`SELECT id,product_id,sale_price,starts,ends,version FROM promotions WHERE cancelled=0 AND starts<=? AND ends>? ORDER BY id`, now, now)
+	rows, err := q.Query(`SELECT id,product_id,sale_price,starts,ends,version,sale_unit,price_basis FROM promotions WHERE cancelled=0 AND starts<=? AND ends>? ORDER BY id`, now, now)
 	if err != nil {
 		return state, err
 	}
 	for rows.Next() {
 		var p Promotion
-		if err = rows.Scan(&p.ID, &p.ProductID, &p.SalePrice, &p.Starts, &p.Ends, &p.Version); err != nil {
+		if err = rows.Scan(&p.ID, &p.ProductID, &p.SalePrice, &p.Starts, &p.Ends, &p.Version, &p.SaleUnit, &p.PriceBasis); err != nil {
 			rows.Close()
 			return state, err
 		}
@@ -111,16 +125,16 @@ func (s pricingState) apply(p *Product) {
 	f := s.features[p.ID]
 	p.Featured = f.Featured
 	p.FeatureVersion = f.Version
-	if sale, ok := s.sales[p.ID]; ok && !p.Archived && p.SaleUnit == "each" && sale.SalePrice < p.Price {
+	if sale, ok := s.sales[p.ID]; ok && !p.Archived && p.SaleUnit == sale.SaleUnit && p.PriceBasis == sale.PriceBasis && sale.SalePrice < p.Price {
 		p.SalePrice, p.PromotionID, p.PromotionVersion, p.SaleStarts, p.SaleEnds = sale.SalePrice, sale.ID, sale.Version, sale.Starts, sale.Ends
 	}
 }
 
-const promotionSelect = `s.id,s.product_id,s.sale_price,s.starts,s.ends,s.version,s.cancelled,p.name,p.sku,p.price,p.price_version,(p.archived OR c.archived OR COALESCE(t.archived,0) OR p.sale_unit<>'each') FROM promotions s JOIN products p ON p.id=s.product_id JOIN categories c ON c.id=p.category_id LEFT JOIN product_types t ON t.id=p.type_id `
+const promotionSelect = `s.id,s.product_id,s.sale_price,s.starts,s.ends,s.version,s.cancelled,p.name,p.sku,p.price,p.price_version,(p.archived OR c.archived OR COALESCE(t.archived,0) OR p.sale_unit<>s.sale_unit OR p.price_basis<>s.price_basis),s.sale_unit,s.price_basis,p.sale_unit FROM promotions s JOIN products p ON p.id=s.product_id JOIN categories c ON c.id=p.category_id LEFT JOIN product_types t ON t.id=p.type_id `
 
 func scanPromotion(row scanner, now int64) (Promotion, error) {
 	var p Promotion
-	err := row.Scan(&p.ID, &p.ProductID, &p.SalePrice, &p.Starts, &p.Ends, &p.Version, &p.Cancelled, &p.ProductName, &p.SKU, &p.RegularPrice, &p.ProductVersion, &p.Unavailable)
+	err := row.Scan(&p.ID, &p.ProductID, &p.SalePrice, &p.Starts, &p.Ends, &p.Version, &p.Cancelled, &p.ProductName, &p.SKU, &p.RegularPrice, &p.ProductVersion, &p.Unavailable, &p.SaleUnit, &p.PriceBasis, &p.CurrentSaleUnit)
 	switch {
 	case p.Cancelled:
 		p.Status = "Cancelled"
@@ -151,7 +165,7 @@ func (s *Store) Promotions() ([]Promotion, error) {
 	return all, rows.Err()
 }
 func promotionAudit(tx *sql.Tx, p Promotion, action string, now int64) error {
-	details := fmt.Sprintf("%s; starts %s, ends %s; SKU %s", Money(p.SalePrice), p.StartLabel(), p.EndLabel(), p.SKU)
+	details := fmt.Sprintf("%s %s; starts %s, ends %s; SKU %s", Money(p.SalePrice), p.RateUnit(), p.StartLabel(), p.EndLabel(), p.SKU)
 	_, err := tx.Exec(`INSERT INTO promotion_events(product_id,promotion_id,action,name,details,created) VALUES(?,?,?,?,?,?)`, p.ProductID, p.ID, action, p.ProductName, details, time.Unix(now, 0).UTC().Format("2006-01-02 15:04:05 UTC"))
 	return err
 }
@@ -167,7 +181,7 @@ func promotionProduct(tx *sql.Tx, id int64) (Product, error) {
 	if err = tx.QueryRow(`SELECT c.archived OR COALESCE(t.archived,0) FROM products p JOIN categories c ON c.id=p.category_id LEFT JOIN product_types t ON t.id=p.type_id WHERE p.id=?`, id).Scan(&inactive); err != nil {
 		return p, err
 	}
-	if p.Archived || inactive || p.SaleUnit != "each" {
+	if p.Archived || inactive {
 		return p, ErrUnavailable
 	}
 	return p, nil
@@ -187,14 +201,18 @@ func savePromotion(tx *sql.Tx, p Promotion, now int64, action string) (int64, er
 		return 0, ErrPromotionPrice
 	}
 	if p.ID > 0 {
-		var priorProduct, version int64
+		var priorProduct, version, priorBasis int64
+		var priorUnit string
 		var cancelled bool
-		err = tx.QueryRow(`SELECT product_id,version,cancelled FROM promotions WHERE id=?`, p.ID).Scan(&priorProduct, &version, &cancelled)
+		err = tx.QueryRow(`SELECT product_id,version,cancelled,sale_unit,price_basis FROM promotions WHERE id=?`, p.ID).Scan(&priorProduct, &version, &cancelled, &priorUnit, &priorBasis)
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, ErrNotFound
 		}
 		if err != nil {
 			return 0, err
+		}
+		if priorUnit != product.SaleUnit || priorBasis != product.PriceBasis {
+			return 0, ErrPromotionUnit
 		}
 		if priorProduct != p.ProductID || version != p.Version || cancelled {
 			return 0, ErrConflict
@@ -208,7 +226,7 @@ func savePromotion(tx *sql.Tx, p Promotion, now int64, action string) (int64, er
 		return 0, ErrPromotionOverlap
 	}
 	if p.ID == 0 {
-		r, e := tx.Exec(`INSERT INTO promotions(product_id,sale_price,starts,ends) VALUES(?,?,?,?)`, p.ProductID, p.SalePrice, p.Starts, p.Ends)
+		r, e := tx.Exec(`INSERT INTO promotions(product_id,sale_price,starts,ends,sale_unit,price_basis) VALUES(?,?,?,?,?,?)`, p.ProductID, p.SalePrice, p.Starts, p.Ends, product.SaleUnit, product.PriceBasis)
 		if e != nil {
 			return 0, e
 		}
@@ -222,7 +240,7 @@ func savePromotion(tx *sql.Tx, p Promotion, now int64, action string) (int64, er
 	if _, err = tx.Exec(`UPDATE products SET price_version=price_version+1 WHERE id=?`, p.ProductID); err != nil {
 		return 0, err
 	}
-	p.ProductName, p.SKU = product.Name, product.SKU
+	p.ProductName, p.SKU, p.SaleUnit, p.CurrentSaleUnit, p.PriceBasis = product.Name, product.SKU, product.SaleUnit, product.SaleUnit, product.PriceBasis
 	if err = promotionAudit(tx, p, action, now); err != nil {
 		return 0, err
 	}

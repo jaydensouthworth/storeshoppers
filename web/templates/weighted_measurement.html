@@ -1,0 +1,28 @@
+{{define "weight-review"}}
+{{if .WeightReview}}{{$r := .WeightReview}}{{$c := $r.Command}}
+<section id="weight-review-{{$c.LineID}}" class="panel weight-review" aria-labelledby="weight-review-title" data-feedback-scope>
+<div class="section-title"><div><p class="eyebrow">REVIEW BEFORE SAVING</p><h2 id="weight-review-title">ACTUAL WEIGHT · {{$r.Name}}</h2></div><span class="pill">Not saved yet</span></div>
+<p>The original requested receipt stays unchanged. Confirm this exact weight, amount and stock handling to update the working order.</p>
+<dl class="weight-review-values"><div><dt>Working target</dt><dd>{{$r.Target}} g</dd></div><div><dt>Current accepted allocation</dt><dd>{{$r.Allocated}} g</dd></div><div><dt>New actual weight</dt><dd>{{$c.Actual}} g</dd></div><div><dt>Recorded rate</dt><dd>{{money $r.Price}} per kg</dd></div><div><dt>Current line amount</dt><dd>{{money $r.OldSubtotal}}</dd></div><div><dt>New line amount</dt><dd>{{money $r.NewSubtotal}}</dd></div><div><dt>Amount change</dt><dd>{{$r.AmountChange}}</dd></div></dl>
+<p class="weight-stock-effect"><strong>Stock consequence:</strong> {{$r.StockEffect}}</p><p class="plain-instructions"><strong>Reason:</strong> {{$c.Reason}}</p>
+<form id="confirm-weight-{{$c.LineID}}" method="post" action="/manager/orders/{{.Order.ID}}/lines/{{$c.LineID}}/weight/confirm" hx-post="/manager/orders/{{.Order.ID}}/lines/{{$c.LineID}}/weight/confirm" hx-target="#workspace" hx-swap="outerHTML" hx-disabled-elt="find button" hx-indicator="#pending">
+{{template "csrf" .}}{{template "order-context-fields" .}}<input type="hidden" name="pick_version" value="{{$c.PickVersion}}"><input type="hidden" name="order_version" value="{{$c.OrderVersion}}"><input type="hidden" name="command_key" value="{{$c.Key}}"><input type="hidden" name="review" value="{{$c.Review}}"><input type="hidden" name="actual" value="{{$c.Actual}}"><input type="hidden" name="reason" value="{{$c.Reason}}"><input type="hidden" name="disposition" value="{{$c.Disposition}}">
+<button id="confirm-actual-{{$c.LineID}}" class="button" type="submit">Confirm {{$c.Actual}} g and {{money $r.NewSubtotal}}</button><a class="secondary" href="{{.OrderURL .Order.ID}}">Cancel review</a><a class="text-link" href="#measure-line-{{$c.LineID}}">Edit weight below</a>
+</form></section>
+{{end}}
+{{end}}
+
+{{define "weight-measurement-form"}}
+{{$v := .View}}{{$line := .Line}}{{$draft := $v.WeightDraft}}{{$hasDraft := and $draft (eq $draft.LineID $line.LineID)}}
+<details class="working-edit weight-measurement" {{if or $hasDraft (not $line.Measured)}}open{{end}}><summary>{{if $line.Measured}}Review another actual weight{{else}}Enter actual weight{{end}}</summary>
+<form id="measure-line-{{$line.LineID}}" class="working-edit-form" method="post" action="/manager/orders/{{$v.Order.ID}}/lines/{{$line.LineID}}/weight/preview" hx-post="/manager/orders/{{$v.Order.ID}}/lines/{{$line.LineID}}/weight/preview" hx-target="#workspace" hx-swap="outerHTML" hx-disabled-elt="find button" hx-indicator="#pending">
+{{template "csrf" $v}}{{template "order-context-fields" $v}}<input type="hidden" name="pick_version" value="{{$line.PickVersion}}"><input type="hidden" name="order_version" value="{{$v.Order.Version}}"><input type="hidden" name="command_key" value="{{$v.OrderCommandKey}}-weight-{{$line.LineID}}">
+<p>Target {{$line.Quantity}} g · accepted allocation {{$line.Allocated}} g. Enter the scale reading in whole grams. Actual weight can differ from the requested step; every change requires review.</p>
+{{if and $hasDraft (not $v.WeightReview)}}<div class="notice manager-draft-notice"><strong>Your submitted weight has not been saved.</strong><p>Submitted actual: {{$draft.Actual}} g. Your reason and stock choice are retained. Review the current allocation, then preview again.{{if $draft.Truncated}} Long or unsupported values were shortened for display.{{end}}</p></div>{{end}}
+<label for="actual-grams-{{$line.LineID}}">Actual picked weight (g)</label><input id="actual-grams-{{$line.LineID}}" name="actual" type="number" min="0" max="{{$line.QuantityLimit}}" step="1" value="{{if $hasDraft}}{{$draft.Actual}}{{else if $line.Measured}}{{$line.Picked}}{{else}}{{$line.Quantity}}{{end}}" required>
+<label for="weight-disposition-{{$line.LineID}}">If actual weight is below {{$line.Allocated}} g</label><select id="weight-disposition-{{$line.LineID}}" name="disposition"><option value="">Choose stock handling if reducing allocation</option><option value="restock" {{if and $hasDraft (eq $draft.Disposition "restock")}}selected{{end}}>Restock: physically returned and resalable</option><option value="writeoff" {{if and $hasDraft (eq $draft.Disposition "writeoff")}}selected{{end}}>Write off: unavailable, damaged or not resalable</option></select>
+<p class="fine-print">Zero grams explicitly resolves this line with no fulfilled weight. Missing or damaged grams must not return to available stock.</p>
+<label for="weight-reason-{{$line.LineID}}">Measurement note (optional)</label><input id="weight-reason-{{$line.LineID}}" name="reason" value="{{if $hasDraft}}{{$draft.Reason}}{{end}}" maxlength="240" placeholder="Optional fake demo note">
+<button id="preview-actual-{{$line.LineID}}" class="button" type="submit">Preview weight, amount &amp; stock</button>
+</form></details>
+{{end}}

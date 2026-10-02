@@ -40,7 +40,7 @@ func OpenWithClock(path string, now func() time.Time) (*Store, error) {
 	q.Set("_busy_timeout", "5000")
 	q.Set("_txlock", "immediate")
 	u.RawQuery = q.Encode()
-	db, err := sql.Open("sqlite3", u.String())
+	db, err := sql.Open(applicationSQLiteDriver, u.String())
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 		return 0, ErrEmpty
 	}
 	for _, l := range b.Lines {
-		if l.Product.Archived || l.Product.SaleUnit != "each" {
+		if l.Product.Archived {
 			return 0, ErrUnavailable
 		}
 	}
@@ -142,6 +142,9 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 	}
 	if b.NeedsReview || b.HoldUntil <= now {
 		return 0, ErrHold
+	}
+	if b.Total == 0 {
+		return 0, ErrZeroEstimate
 	}
 	if !b.CanCheckout {
 		return 0, ErrStock
@@ -159,7 +162,7 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 			return 0, e
 		}
 	}
-	if _, e = tx.Exec(`INSERT INTO working_order_items(order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step) SELECT order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step FROM order_items WHERE order_id=?`, id); e != nil {
+	if _, e = tx.Exec(`INSERT INTO working_order_items(order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step,allocated_quantity) SELECT order_id,product_id,name,price,quantity,sku,sale_unit,price_basis,quantity_step,quantity FROM order_items WHERE order_id=?`, id); e != nil {
 		return 0, e
 	}
 	if _, e = tx.Exec(`DELETE FROM cart WHERE basket_id=?`, b.ID); e != nil {
@@ -179,24 +182,12 @@ func (s *Store) CheckoutWithInstructions(sid, key string, revision int64, quote,
 func (s *Store) Orders(sid string, manager bool) ([]Order, error) {
 	return s.OrdersSearch(sid, manager, "")
 }
-func (s *Store) OrdersSearch(sid string, manager bool, search string) ([]Order, error) {
-	rows, err := s.db.Query(`SELECT o.id,o.reference,o.status,o.created,o.total,o.order_version,o.final_total,o.completion_kind,COALESCE(SUM(CASE WHEN i.sale_unit='each' THEN i.picked_quantity ELSE 0 END),0),COALESCE(SUM(CASE WHEN i.sale_unit='each' THEN i.quantity ELSE 0 END),0),COALESCE(SUM((i.quantity-i.unavailable_quantity-i.cancelled_quantity)*i.price),0) FROM orders o LEFT JOIN working_order_items i ON i.order_id=o.id WHERE (? OR o.session_id=?) AND (?='' OR instr(lower(o.reference||' '||o.status||' '||o.completion_kind),lower(?))>0) GROUP BY o.id ORDER BY o.id DESC LIMIT 100`, manager, sid, search, search)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var all []Order
-	for rows.Next() {
-		var o Order
-		var final sql.NullInt64
-		if err = rows.Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Version, &final, &o.CompletionKind, &o.PickedCount, &o.RequiredCount, &o.WorkingTotal); err != nil {
-			return nil, err
-		}
-		o.Finalized, o.FinalTotal = final.Valid, final.Int64
-		setOrderProgress(&o)
-		all = append(all, o)
-	}
-	return all, rows.Err()
+
+// OrdersSearch is a customer-safe first-page convenience. HTTP queues expose
+// the full count and navigation through readOrderQueue/OrderQueue.
+func (s *Store) OrdersSearch(sid string, allOrders bool, search string) ([]Order, error) {
+	q, err := s.readOrderQueue(sid, allOrders, OrderFilters{Query: search}, false)
+	return q.Orders, err
 }
 func setOrderProgress(o *Order) {
 	o.AllPicked = o.RequiredCount > 0 && o.PickedCount == o.RequiredCount && o.CompletionKind != "cancelled"
@@ -204,10 +195,20 @@ func setOrderProgress(o *Order) {
 		o.Percent = 100 * o.PickedCount / o.RequiredCount
 	}
 }
-func (s *Store) Order(id int64, sid string, manager bool) (Order, error) {
+
+// Order is customer-safe regardless of its ownership-scope flag.
+func (s *Store) Order(id int64, sid string, allOrders bool) (Order, error) {
+	return s.readOrder(id, sid, allOrders, false)
+}
+
+// ManagerOrder explicitly opts into private manager history after the HTTP gate.
+func (s *Store) ManagerOrder(id int64, sid string, allOrders bool) (Order, error) {
+	return s.readOrder(id, sid, allOrders, true)
+}
+func (s *Store) readOrder(id int64, sid string, allOrders, private bool) (Order, error) {
 	var o Order
 	var final sql.NullInt64
-	err := s.db.QueryRow(`SELECT id,reference,status,created,total,instructions,order_version,final_total,completion_kind FROM orders WHERE id=? AND (? OR session_id=?)`, id, manager, sid).Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Instructions, &o.Version, &final, &o.CompletionKind)
+	err := s.db.QueryRow(`SELECT id,reference,status,created,total,instructions,order_version,final_total,completion_kind,attention_reason<>'' AND status IN ('Placed','Picking'),CASE WHEN ? THEN attention_reason ELSE '' END,CASE WHEN ? THEN attention_since ELSE 0 END FROM orders WHERE id=? AND (? OR session_id=?)`, private, private, id, allOrders, sid).Scan(&o.ID, &o.Reference, &o.Status, &o.Created, &o.Total, &o.Instructions, &o.Version, &final, &o.CompletionKind, &o.Held, &o.AttentionReason, &o.AttentionSince)
 	if errors.Is(err, sql.ErrNoRows) {
 		return o, ErrNotFound
 	}
@@ -236,40 +237,37 @@ func (s *Store) Order(id int64, sid string, manager bool) (Order, error) {
 	if err != nil {
 		return o, err
 	}
-	for _, i := range o.WorkingItems {
-		o.WorkingTotal += i.Subtotal
-		if i.SaleUnit == "each" {
-			o.PickedCount += i.Picked
-			o.RequiredCount += i.Quantity
-		}
+	if err = summarizeWorking(&o, o.WorkingItems); err != nil {
+		return o, err
 	}
-	setOrderProgress(&o)
 	o.WorkingPrices = make(map[int64]int64)
-	rows, err = s.db.Query(`SELECT product_id,price FROM working_order_items WHERE order_id=?`, id)
+	o.WorkingSteps = make(map[int64]int64)
+	rows, err = s.db.Query(`SELECT product_id,price,quantity_step FROM working_order_items WHERE order_id=?`, id)
 	if err != nil {
 		return o, err
 	}
 	for rows.Next() {
-		var pid, price int64
-		if err = rows.Scan(&pid, &price); err != nil {
+		var pid, price, step int64
+		if err = rows.Scan(&pid, &price, &step); err != nil {
 			rows.Close()
 			return o, err
 		}
 		o.WorkingPrices[pid] = price
+		o.WorkingSteps[pid] = step
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
 		return o, err
 	}
-	rows, err = s.db.Query(`SELECT action,reason,details,created FROM order_events WHERE order_id=? ORDER BY id DESC LIMIT 100`, id)
+	rows, err = s.db.Query(`SELECT action,reason,details,created,visibility FROM order_events WHERE order_id=? AND (? OR visibility='customer') ORDER BY id DESC LIMIT 100`, id, private)
 	if err != nil {
 		return o, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var e OrderEvent
-		if err = rows.Scan(&e.Action, &e.Reason, &e.Details, &e.Created); err != nil {
+		if err = rows.Scan(&e.Action, &e.Reason, &e.Details, &e.Created, &e.Visibility); err != nil {
 			return o, err
 		}
 		o.Events = append(o.Events, e)
@@ -287,7 +285,7 @@ func (s *Store) Adjust(pid, delta, version int64, reason string) error {
 		return err
 	}
 	reason = strings.TrimSpace(reason)
-	if delta == 0 || delta < -10000 || delta > 10000 || len(reason) < 3 || len(reason) > 120 {
+	if delta == 0 || delta < -maxGramStock || delta > maxGramStock || len(reason) < 3 || len(reason) > 120 {
 		return ErrInvalid
 	}
 	tx, e := s.beginWrite()
@@ -295,7 +293,17 @@ func (s *Store) Adjust(pid, delta, version int64, reason string) error {
 		return e
 	}
 	defer tx.Rollback()
-	result, e := tx.Exec(`UPDATE products SET stock=stock+?,version=version+1 WHERE id=? AND version=? AND stock+? >= 0 AND stock+?+(SELECT COALESCE(SUM(reserved),0) FROM cart WHERE product_id=products.id)<=10000 AND archived=0`, delta, pid, version, delta, delta)
+	var unit string
+	if err := tx.QueryRow(`SELECT sale_unit FROM products WHERE id=?`, pid).Scan(&unit); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrConflict
+		}
+		return err
+	}
+	if delta < -stockLimit(unit) || delta > stockLimit(unit) {
+		return ErrInvalid
+	}
+	result, e := tx.Exec(`UPDATE products SET stock=stock+?,version=version+1 WHERE id=? AND version=? AND stock+? >= 0 AND stock+?+(SELECT COALESCE(SUM(reserved),0) FROM cart WHERE product_id=products.id)<=CASE sale_unit WHEN 'g' THEN 1000000 ELSE 10000 END AND ABS(?)<=CASE sale_unit WHEN 'g' THEN 1000000 ELSE 10000 END AND archived=0`, delta, pid, version, delta, delta, delta)
 	if e != nil {
 		return e
 	}
@@ -346,7 +354,8 @@ func (s *Store) AdvanceVersioned(id int64, from string, version int64, sid strin
 	defer tx.Rollback()
 	var current string
 	var currentVersion int64
-	err = tx.QueryRow(`SELECT status,order_version FROM orders WHERE id=? AND (? OR session_id=?)`, id, allOrders, sid).Scan(&current, &currentVersion)
+	var held bool
+	err = tx.QueryRow(`SELECT status,order_version,attention_reason<>'' FROM orders WHERE id=? AND (? OR session_id=?)`, id, allOrders, sid).Scan(&current, &currentVersion, &held)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -356,16 +365,33 @@ func (s *Store) AdvanceVersioned(id int64, from string, version int64, sid strin
 	if current != from || (version != 0 && version != currentVersion) {
 		return ErrConflict
 	}
-	if from == "Picking" {
-		var total, incomplete int
-		if err = tx.QueryRow(`SELECT COUNT(*),COALESCE(SUM(CASE WHEN picked_quantity < quantity THEN 1 ELSE 0 END),0) FROM working_order_items WHERE order_id=? AND quantity>0`, id).Scan(&total, &incomplete); err != nil {
-			return err
+	if held && next == "Ready" {
+		return ErrAttention
+	}
+	var final int64
+	if next == "Ready" || next == "Completed" {
+		items, e := workingOrderItems(tx, id)
+		if e != nil {
+			return e
 		}
-		if total == 0 || incomplete != 0 {
+		if from == "Picking" && len(items) == 0 {
 			return ErrIncomplete
 		}
+		for _, item := range items {
+			if from == "Picking" && !item.Complete() {
+				return ErrIncomplete
+			}
+			amount, e := lineAmount(item.Picked, item.Price, item.PriceBasis, item.SaleUnit)
+			if e != nil {
+				return e
+			}
+			final, e = addAmount(final, amount)
+			if e != nil {
+				return e
+			}
+		}
 	}
-	if _, err = tx.Exec(`UPDATE orders SET status=?,order_version=order_version+1,final_total=CASE WHEN ? IN ('Ready','Completed') THEN COALESCE(final_total,(SELECT COALESCE(SUM(picked_quantity*price),0) FROM working_order_items WHERE order_id=orders.id)) ELSE NULL END,completion_kind=CASE WHEN ? IN ('Ready','Completed') THEN 'full' ELSE '' END WHERE id=? AND status=?`, next, next, next, id, from); err != nil {
+	if _, err = tx.Exec(`UPDATE orders SET status=?,order_version=order_version+1,final_total=CASE WHEN ? IN ('Ready','Completed') THEN COALESCE(final_total,?) ELSE NULL END,completion_kind=CASE WHEN ? IN ('Ready','Completed') THEN 'full' ELSE '' END WHERE id=? AND status=?`, next, next, final, next, id, from); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,'','status','Fulfillment transition',?)`, id, token(), from+" → "+next); err != nil {
@@ -402,7 +428,7 @@ func (s *Store) RecordPicked(orderID, productID, picked, version int64, sid stri
 		return ErrConflict
 	}
 	var quantity, currentVersion int64
-	err = tx.QueryRow(`SELECT quantity,pick_version FROM working_order_items WHERE order_id=? AND product_id=? AND quantity>0`, orderID, productID).Scan(&quantity, &currentVersion)
+	err = tx.QueryRow(`SELECT quantity,pick_version FROM working_order_items WHERE order_id=? AND product_id=? AND quantity>0 AND sale_unit='each'`, orderID, productID).Scan(&quantity, &currentVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}

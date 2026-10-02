@@ -37,6 +37,12 @@ type App struct {
 	resetPending atomic.Bool
 }
 type View struct {
+	CustomerQueue                                            *OrderQueue
+	OrderQueue                                               *OrderQueue
+	OrderFilters                                             OrderFilters
+	AttentionDraft                                           *AttentionDraft
+	WeightDraft                                              *WeightDraft
+	WeightReview                                             *WeightReview
 	Images                                                   *ImageWorkspace
 	CartDraft                                                *ManagerDraft
 	ProductPicker                                            *ProductPicker
@@ -168,8 +174,11 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}", a.saveCatalogTaxonomy)
 	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}/archive", a.archiveCatalogTaxonomy)
 	a.mux.HandleFunc("POST /manager/catalog/{kind}/{id}/restore", a.restoreCatalogTaxonomy)
+	a.mux.HandleFunc("POST /manager/orders/{id}/attention", a.attentionOrder)
 	a.mux.HandleFunc("POST /manager/orders/{id}/override", a.overrideOrder)
 	a.mux.HandleFunc("POST /manager/orders/{id}/lines/{line_id}/pick", a.recordWorkingLinePicked)
+	a.mux.HandleFunc("POST /manager/orders/{id}/lines/{line_id}/weight/preview", a.previewWeight)
+	a.mux.HandleFunc("POST /manager/orders/{id}/lines/{line_id}/weight/confirm", a.confirmWeight)
 	a.mux.HandleFunc("GET /manager/orders/{id}/products", a.searchOrderProducts)
 	a.mux.HandleFunc("GET /manager/baskets/{id}/products", a.searchBasketProducts)
 	a.mux.HandleFunc("GET /manager/orders/{id}", a.showPicking)
@@ -357,10 +366,10 @@ func (a *App) populateStore(v *View) error {
 				v.WeeklySales = append(v.WeeklySales, p)
 			}
 		}
-		if p.Featured && !p.Archived && p.SaleUnit == "each" {
+		if p.Featured && !p.Archived {
 			v.FeaturedCount++
 		}
-		if v.FeaturedOnly && (!p.Featured || p.SaleUnit != "each") {
+		if v.FeaturedOnly && !p.Featured {
 			continue
 		}
 		if v.SalesOnly && !p.OnSale() {
@@ -381,7 +390,7 @@ func (a *App) populateStore(v *View) error {
 		circularIDs[p.ID] = true
 	}
 	for _, p := range all {
-		if p.Featured && !p.Archived && p.SaleUnit == "each" && !circularIDs[p.ID] {
+		if p.Featured && !p.Archived && !circularIDs[p.ID] {
 			v.FeaturedProducts = append(v.FeaturedProducts, p)
 			if len(v.FeaturedProducts) == 4 {
 				break
@@ -444,7 +453,7 @@ func (a *App) changeCart(w http.ResponseWriter, r *http.Request) {
 	v.Title = "Neighborhood Market"
 	v.Search, v.Category, v.SalesOnly, v.FeaturedOnly = storefrontContext(r.PostForm)
 	if e != nil {
-		if !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrNotFound) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrConflict) {
+		if !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrNotFound) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrConflict) && !errors.Is(e, ErrZeroEstimate) {
 			a.fail(w, e)
 			return
 		}
@@ -518,7 +527,7 @@ func (a *App) checkout(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, fmt.Sprintf("/orders/%d", id))
 		return
 	}
-	if !errors.Is(e, ErrConflict) && !errors.Is(e, ErrEmpty) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrQuote) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrHold) {
+	if !errors.Is(e, ErrConflict) && !errors.Is(e, ErrEmpty) && !errors.Is(e, ErrStock) && !errors.Is(e, ErrInvalid) && !errors.Is(e, ErrQuote) && !errors.Is(e, ErrUnavailable) && !errors.Is(e, ErrHold) && !errors.Is(e, ErrZeroEstimate) {
 		a.fail(w, e)
 		return
 	}
@@ -537,8 +546,15 @@ func (a *App) showOrders(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var e error
-	v.Orders, e = a.store.Orders(v.Session.ID, false)
+	queue, e := a.store.readOrderQueue(v.Session.ID, false, OrderFilters{Page: orderFilters(r).Page}, false)
+	v.Orders = queue.Orders
+	if queue.PreviousURL != "" {
+		queue.PreviousURL = fmt.Sprintf("/orders?page=%d", queue.Page-1)
+	}
+	if queue.NextURL != "" {
+		queue.NextURL = fmt.Sprintf("/orders?page=%d", queue.Page+1)
+	}
+	v.CustomerQueue = &queue
 	if e != nil {
 		a.fail(w, e)
 		return
@@ -659,10 +675,13 @@ func (a *App) managerView(w http.ResponseWriter, r *http.Request, message string
 		a.fail(w, err)
 		return
 	}
-	if v.Orders, err = a.store.OrdersSearch(v.Session.ID, !a.config.DemoMode, v.Search); err != nil {
-		a.fail(w, err)
+	v.OrderFilters = orderFilters(r)
+	queue, queueErr := a.store.OrderQueue(v.Session.ID, !a.config.DemoMode, v.OrderFilters)
+	if queueErr != nil {
+		a.fail(w, queueErr)
 		return
 	}
+	v.OrderQueue, v.Orders, v.OrderFilters, v.OpenOrders = &queue, queue.Orders, queue.Filters, queue.Open
 	if v.Adjustments, err = a.store.Adjustments(); err != nil {
 		a.fail(w, err)
 		return
@@ -679,11 +698,6 @@ func (a *App) managerView(w http.ResponseWriter, r *http.Request, message string
 			if p.Stock < 8 {
 				v.LowStock++
 			}
-		}
-	}
-	for _, o := range v.Orders {
-		if o.Status != "Completed" {
-			v.OpenOrders++
 		}
 	}
 	if e != nil && r.Method == http.MethodPost && r.URL.Path == "/manager/inventory" {
@@ -714,7 +728,7 @@ func (a *App) advance(w http.ResponseWriter, r *http.Request) {
 	}
 	version, parseErr := num(r.PostForm.Get("order_version"))
 	if parseErr != nil || version < 1 {
-		if _, scopeErr := a.store.Order(id, session.ID, !a.config.DemoMode); scopeErr != nil {
+		if _, scopeErr := a.store.ManagerOrder(id, session.ID, !a.config.DemoMode); scopeErr != nil {
 			err = scopeErr
 		} else {
 			err = ErrInvalid
@@ -726,12 +740,12 @@ func (a *App) advance(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err != nil && !errors.Is(err, ErrInvalid) && !errors.Is(err, ErrConflict) && !errors.Is(err, ErrIncomplete) {
+	if err != nil && !errors.Is(err, ErrInvalid) && !errors.Is(err, ErrConflict) && !errors.Is(err, ErrIncomplete) && !errors.Is(err, ErrAttention) {
 		a.fail(w, err)
 		return
 	}
 	if err == nil && r.Header.Get("HX-Request") != "true" {
-		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id)+searchQuery(managerSearch(r)))
+		redirect(w, r, orderFilters(r).URL(id))
 		return
 	}
 	message := ""
@@ -750,12 +764,26 @@ func (a *App) showPicking(w http.ResponseWriter, r *http.Request) {
 	a.pickingView(w, r, id, "", nil)
 }
 func (a *App) pickingView(w http.ResponseWriter, r *http.Request, id int64, message string, problem error) {
-	v, ok := a.view(w, r)
+	a.pickingWeightView(w, r, id, message, problem, nil, nil)
+}
+
+func (a *App) pickingWeightView(w http.ResponseWriter, r *http.Request, id int64, message string, problem error, draft *WeightDraft, review *WeightReview) {
+	var v View
+	var ok bool
+	if r.Method == http.MethodPost {
+		session, valid := a.form(w, r)
+		if !valid {
+			return
+		}
+		v, ok = a.viewForSession(w, session)
+	} else {
+		v, ok = a.view(w, r)
+	}
 	if !ok || !a.guard(w, r, v.Session) {
 		return
 	}
 	var err error
-	v.Order, err = a.store.Order(id, v.Session.ID, !a.config.DemoMode)
+	v.Order, err = a.store.ManagerOrder(id, v.Session.ID, !a.config.DemoMode)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -766,7 +794,7 @@ func (a *App) pickingView(w http.ResponseWriter, r *http.Request, id int64, mess
 	}
 
 	if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
-		target := fmt.Sprintf("/manager/orders/%d", id) + searchQuery(managerSearch(r))
+		target := orderFilters(r).URL(id)
 		current, _ := url.Parse(r.Header.Get("HX-Current-URL"))
 		if current == nil || current.RequestURI() != target {
 			w.Header().Set("HX-Push-Url", target)
@@ -779,6 +807,14 @@ func (a *App) pickingView(w http.ResponseWriter, r *http.Request, id int64, mess
 	}
 	v.OrderCatalogQuote = orderCatalogQuote(v.Products)
 	v.OrderCommandKey = token()
+	v.WeightDraft, v.WeightReview = draft, review
+	v.OrderFilters = orderFilters(r)
+	if strings.HasSuffix(r.URL.Path, "/attention") {
+		if problem != nil {
+			v.AttentionDraft = attentionDraft(r)
+		}
+		v.OrderOverrideDraft = recoveredFinishDraft(r)
+	}
 	if problem != nil && r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/override") {
 		v.OrderOverrideDraft = make(map[string]string)
 		for _, field := range []string{"form_id", "product_id", "replacement_id", "quantity", "reason", "disposition", "remainder", "product_q", "picker_context", "picker_line_id"} {
@@ -836,7 +872,7 @@ func (a *App) recordPicked(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil && r.Header.Get("HX-Request") != "true" {
-		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id)+searchQuery(managerSearch(r)))
+		redirect(w, r, orderFilters(r).URL(id))
 		return
 	}
 	message := ""

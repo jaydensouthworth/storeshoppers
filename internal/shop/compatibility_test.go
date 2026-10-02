@@ -79,6 +79,15 @@ func TestSchemaGuardRejectsEveryMutationWithoutChangingData(t *testing.T) {
 		{"assignment", func() error {
 			return s.AssignShopper(orderID, session.ID, true, ShopperCommand{Action: "assign", Version: 1, Key: token(), Reason: "Reviewed assignment", ShopperID: 1})
 		}},
+		{"manager hold", func() error {
+			return s.AttentionOrder(orderID, session.ID, true, AttentionCommand{Action: "hold", Version: 1, Key: token(), Reason: "Needs review"})
+		}},
+		{"manager release", func() error {
+			return s.AttentionOrder(orderID, session.ID, true, AttentionCommand{Action: "release", Version: 1, Key: token()})
+		}},
+		{"internal note", func() error {
+			return s.AttentionOrder(orderID, session.ID, true, AttentionCommand{Action: "note", Version: 1, Key: token(), Reason: "Private review"})
+		}},
 		{"reset", func() error { _, err := s.ResetDemo(DemoResetOptions{}); return err }},
 	} {
 		t.Run(command.name, func(t *testing.T) {

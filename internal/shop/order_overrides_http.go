@@ -2,12 +2,11 @@ package shop
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 )
 
 func orderCommandProblem(err error) bool {
-	return basketProblem(err) || errors.Is(err, ErrTerminal) || errors.Is(err, ErrStockCapacity) || errors.Is(err, ErrOrderQuote) || errors.Is(err, ErrUseReady) || errors.Is(err, ErrPickedDisposition)
+	return basketProblem(err) || errors.Is(err, ErrTerminal) || errors.Is(err, ErrStockCapacity) || errors.Is(err, ErrOrderQuote) || errors.Is(err, ErrUseReady) || errors.Is(err, ErrPickedDisposition) || errors.Is(err, ErrWeightReview) || errors.Is(err, ErrAttention)
 }
 func (a *App) overrideOrder(w http.ResponseWriter, r *http.Request) {
 	session, ok := a.form(w, r)
@@ -20,7 +19,7 @@ func (a *App) overrideOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Check scope before rendering any validation error or repopulating a form.
-	if _, err = a.store.Order(id, session.ID, !a.config.DemoMode); errors.Is(err, ErrNotFound) {
+	if _, err = a.store.ManagerOrder(id, session.ID, !a.config.DemoMode); errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
 	} else if err != nil {
@@ -28,6 +27,11 @@ func (a *App) overrideOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := OrderCommand{CatalogQuote: r.PostForm.Get("catalog_quote"), Action: r.PostForm.Get("action"), Key: r.PostForm.Get("command_key"), Reason: r.PostForm.Get("reason"), Disposition: r.PostForm.Get("disposition"), Remainder: r.PostForm.Get("remainder")}
+	selected, _ := num(r.PostForm.Get("product_id"))
+	if c.Action == "substitute" {
+		selected, _ = num(r.PostForm.Get("replacement_id"))
+	}
+	selectedPickerQuantity(r, selected)
 	c.Version, err = num(r.PostForm.Get("version"))
 	for name, target := range map[string]*int64{"product_id": &c.ProductID, "replacement_id": &c.ReplacementID, "quantity": &c.Quantity} {
 		if raw := r.PostForm.Get(name); raw != "" {
@@ -52,7 +56,7 @@ func (a *App) overrideOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil && r.Header.Get("HX-Request") != "true" {
-		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id)+searchQuery(managerSearch(r)))
+		redirect(w, r, orderFilters(r).URL(id))
 		return
 	}
 	message := ""
@@ -77,7 +81,7 @@ func (a *App) recordWorkingLinePicked(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	order, err := a.store.Order(id, session.ID, !a.config.DemoMode)
+	order, err := a.store.ManagerOrder(id, session.ID, !a.config.DemoMode)
 	if errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
@@ -118,7 +122,7 @@ func (a *App) recordWorkingLinePicked(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil && r.Header.Get("HX-Request") != "true" {
-		redirect(w, r, fmt.Sprintf("/manager/orders/%d", id)+searchQuery(managerSearch(r)))
+		redirect(w, r, orderFilters(r).URL(id))
 		return
 	}
 	message := ""

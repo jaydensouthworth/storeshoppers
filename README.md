@@ -26,7 +26,7 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Persistent System/Light/Dark appearance across storefront and manager pages
 - Persistent SQLite storage and locally bundled frontend assets
 
-This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Weighted selling and the later phone/barcode workflow remain in the [ordered roadmap](docs/ROADMAP.md).
+This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Weighted selling uses reviewed actual grams and immutable requested receipts; its quantity and recovery rules are recorded in [Weighted products](docs/WEIGHTED_PRODUCTS.md). The later phone/barcode workflow remains in the [ordered roadmap](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -97,7 +97,15 @@ Catalog management is implemented in version 3 at `/manager/catalog`. New manage
 
 Fresh stores get 72 fake products, including deodorant and razors. The schema-v8 detail seed runs only for fresh databases and explicitly confirmed resets; existing catalogs are never silently enriched. A demo-only reviewed action can add the two nonfood examples without overwriting existing products. See [Product details](docs/PRODUCT_DETAILS.md). A one-time v3 migration expands only an exact original eight-product catalog, identified by its eight original IDs and placeholder codes, while retaining existing names, prices and stock. A catalog with those eight plus any custom product is not expanded. In normal mode, customized/partial legacy catalogs and established empty stores are not seeded; reopening never restores removed products. An explicitly confirmed demo reset instead restores the full seed after safely preserving the prior database.
 
-Weighed products can be configured with grams, cents per kilogram and a quantity step, but are clearly unavailable to add to a basket or checkout. Existing numeric barcode values are legacy placeholders; the stored local `SHOPDEMO-` identifiers are not retail GTINs. Label generation, camera scanning, weighted checkout and actual-weight reconciliation remain later work. Baskets reserve counted inventory for 15 minutes; checkout consumes that allocation atomically. Manager inventory shows available and reserved separately. See the [catalog evolution plan](docs/CATALOG_EVOLUTION.md) for completed boundaries and deferred work.
+Existing file-backed databases receive a verified recovery snapshot before an upgrade in `<database>.migration-backups`. Archives have a separate 256 MiB cap and are never automatically purged; backup failure stops migration with the original data unchanged. Current-schema restarts preserve data and create no new snapshot. Older application images refuse a newer schema, so recovery uses a forward fix or a deliberately restored archive, not an image-only rollback. See [Schema compatibility and recovery](docs/SCHEMA_COMPATIBILITY.md).
+
+Schema 10 enables weighed products with integer grams, cents per kilogram and a requested quantity step. Actual weights use an explicit preview and confirmation; accepted allocations, measurements and final amounts remain separate from the immutable requested receipt. Baskets hold counted units or grams for 15 minutes; checkout converts those holds without a second deduction. Mixed views use product-line progress. See [Weighted products](docs/WEIGHTED_PRODUCTS.md) for limits, migration and compatibility safeguards. Existing numeric barcode values remain legacy placeholders; local `SHOPDEMO-` identifiers are not retail GTINs. Label generation and camera scanning remain later work.
+
+Schema 11 adds explicit manager review holds and private internal notes. The Orders
+queue searches references, original/working product names and SKUs, with scoped
+counts and stable 20-row pages. Holds leave editing, picking, measured-weight
+review and assignment usable; Ready and partial completion require release.
+Customer trackers show only “Under manager review”. See [Order review and queue](docs/ORDER_ATTENTION.md).
 
 ## Project layout
 
@@ -114,3 +122,5 @@ HTMX is bundled locally with its license. No frontend build service or runtime C
 ### Product images
 
 Open a product in Products and choose **Manage product image**. Preview a JPEG or PNG, review the normalized orientation/colors, then confirm that the demo artwork may be public. The app stores resized JPEG variants and strips filenames/embedded metadata. Existing illustrations stay available. Uploads have strict input, pixel, concurrency, rate and retained-storage limits; resets preserve recovery assets and budgets. See [Product images](docs/PRODUCT_IMAGES.md) for limits and recovery behavior.
+
+Schema 12 extends sales and featured choices to weighed products. Offers record cents per kilogram separately from counted prices, gram quantities are chosen on product pages, and placed order rates remain fixed during measurement.

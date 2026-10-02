@@ -167,7 +167,7 @@ def main():
             assert stock(3) == initial[3]-1
             # Real HTML fallback search, required original-stock outcome and selected radio.
             page = search(page, 'search-sub-button-'+line, 'order-substitute-'+line, 'spinach', 2)
-            _, page = submit(page, 'order-substitute-'+line, {'replacement_id':'2','quantity':'2','reason':'','disposition':'restock'})
+            _, page = submit(page, 'order-substitute-'+line, {'replacement_id':'2','quantity':'2','quantity_2':'2','reason':'','disposition':'restock'})
             assert stock(1) == initial[1] and stock(2) == initial[2]-2 and placed_snapshot(oid) == original
             # Edit count can auto-start Placed, with an exact replay doing no extra work.
             form = copy.deepcopy(page.forms['save-picked-2'])

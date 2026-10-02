@@ -58,7 +58,7 @@ func promotionURL(path, search, state string, page int) string {
 	return path
 }
 func promotionProblem(err error) bool {
-	return errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict) || errors.Is(err, ErrPromotionOverlap) || errors.Is(err, ErrPromotionPrice) || errors.Is(err, ErrUnavailable) || errors.Is(err, ErrExampleSales)
+	return errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict) || errors.Is(err, ErrPromotionOverlap) || errors.Is(err, ErrPromotionUnit) || errors.Is(err, ErrPromotionPrice) || errors.Is(err, ErrUnavailable) || errors.Is(err, ErrExampleSales)
 }
 func (a *App) showPromotions(w http.ResponseWriter, r *http.Request) {
 	a.promotionsView(w, r, "", nil, nil)
@@ -91,7 +91,7 @@ func (a *App) promotionsView(w http.ResponseWriter, r *http.Request, message str
 		return
 	}
 	for _, p := range products {
-		if !p.Archived && p.SaleUnit == "each" {
+		if !p.Archived {
 			ws.Products = append(ws.Products, p)
 		}
 	}

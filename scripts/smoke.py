@@ -208,6 +208,8 @@ def main():
                 assert db.execute("SELECT hold_until FROM baskets WHERE id=?", (basket_id,)).fetchone()[0] == original_deadline
             process.terminate(); process.wait(timeout=5)
             with sqlite3.connect(env["DATABASE_PATH"]) as db:
+                # This is an intentional fixture writer to a disposable v10 DB.
+                db.create_function("app_schema_version", 0, lambda: 12, deterministic=True)
                 db.execute("UPDATE baskets SET hold_until=1 WHERE id=?", (basket_id,))
             process = start()
             expired = get("/cart")

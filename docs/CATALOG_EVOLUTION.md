@@ -1,6 +1,6 @@
 # Catalog and fulfillment evolution
 
-This document distinguishes the implemented version 3 catalog foundation from later fulfillment work. Counted-unit manager overrides and whole-line substitutions are implemented in schema v5; weighted checkout, generated labels and camera scanning remain future work. Each later phase must preserve existing IDs, sessions, baskets, stock allocations, receipt snapshots and picking state through versioned migrations.
+This document distinguishes the implemented version 3 catalog foundation from later fulfillment work. Counted-unit manager overrides and whole-line substitutions are implemented in schema v5; weighted checkout and reviewed actual grams are implemented in the schema-10 source candidate, while generated labels and camera scanning remain future work. See [Weighted products](WEIGHTED_PRODUCTS.md) for the release gates. Each later phase must preserve existing IDs, sessions, baskets, stock allocations, receipt snapshots and picking state through versioned migrations.
 
 ## Preserved version 2 boundary
 
@@ -18,7 +18,7 @@ The current foundation adds a picking quantity and version to order items. It do
 - The v3 foundation seeded 70 fake products; schema v8 fresh/reset fixtures contain 72 with separate product details. Existing v7 catalogs are not enlarged on migration. The one-time v3 migration expands only an exact original eight-product catalog, requiring total count eight plus all original IDs and placeholder codes. It preserves manager edits to those records; the same eight with any additional custom product receive no expansion. Partial/custom legacy catalogs and established empty schemas receive no seed products. Reopening does not recreate removed records.
 - `product_codes` preserves existing numeric strings as `legacy_placeholder` and separately stores unique `demo_local` identities for ordinary Code 128. The read-only local-code resolution boundary does not change picking state or claim retail GTIN validation. Generated labels and camera UI remain deferred.
 
-Counted products use `each`, basis 1 and step 1. Weighed metadata uses `g`, basis 1000 and step 1–1000, but weighed products are visibly unavailable for sale. The current 1–99 cart quantity and 0–10000 stock constraints have not been reinterpreted. Neither weighted checkout nor integer weighted line pricing is enabled. Unit/price-basis conversion after receipt use is rejected. Schema v4 implements timed basket reservations, scoped manager basket overrides and customer special instructions; see [Basket reservations](BASKET_RESERVATIONS.md). Schema v5 implements counted-unit manager substitutions; actual-weight reconciliation remains a separate milestone.
+The schema-3 through schema-9 foundation used `each`, basis 1 and step 1 for executable quantities; weighed metadata existed but was unavailable for sale. Schema 10 performs a controlled quantity migration while preserving every historical counted quantity. It enables `g`, basis 1000 and requested step 1–1000 with the separate bounds and review rules in [Weighted products](WEIGHTED_PRODUCTS.md). Unit/price-basis conversion after receipt use is rejected. Schema v4 implements timed basket reservations, scoped manager basket overrides and customer special instructions; see [Basket reservations](BASKET_RESERVATIONS.md). Schema v5 implements counted-unit manager substitutions; schema 10 adds reviewed actual-weight reconciliation.
 
 ## Completed schema v8: individual product presentation
 
@@ -28,7 +28,7 @@ Counted products use `each`, basis 1 and step 1. Weighed metadata uses `g`, basi
 
 [Runtime schema compatibility](SCHEMA_COMPATIBILITY.md) adds an immediate-transaction version check to every mutation and checks dynamic responses/readiness for incompatible databases. It preserves schema 8 and all counted quantity semantics. Before a weighted migration, verify old-process drain or implement and prove database-enforced protection for unguarded legacy writers; publishing this preparatory release alone does not establish that boundary.
 
-## Deferred: integer measurement and pricing
+## Integer measurement and pricing (schema-10 candidate)
 
 Use integer quantities in the product’s base unit: units for counted goods and grams for weighed goods. Store weighed rates as cents per 1000 grams. Snapshot the unit, requested quantity, rate, price basis and rounded subtotal on the order.
 
@@ -36,15 +36,15 @@ For non-negative values, round once per line with `(grams × cents_per_kg + 500)
 
 Mixed-unit views must not sum grams and units into one misleading item count. Show line progress and each line’s quantity/unit. The original 1–99 cart-quantity and 0–10000 stock constraints require a dedicated migration before supporting weighed quantities. Selling unit/price basis changes after use should be rejected unless a deliberate replacement product/version is introduced. Changing SQLite quantity/stock CHECK constraints requires the controlled table-rebuild migration procedure and a foreign-key integrity check, not just relaxed Go validation. Do not toggle foreign_keys inside an active transaction.
 
-## Implemented counted overrides; deferred richer allocations and weight reconciliation
+## Working overrides; deferred split allocations
 
 Schema v5 keeps `order_items` and `orders.total` as immutable placed snapshots and adds stable working lines, final amounts and reasoned order audit. The current counted-unit workflow aggregates by actual product within an order; source receipt rows, retained zero-quantity source lines and substitution events preserve provenance. Substitution into an existing working product uses its recorded price. Manager authority explicitly permits instruction overrides with a reason; customer pre-approval is not the only gate. See [Manager order overrides](ORDER_OVERRIDES.md) for inventory, replay, migration and terminal-state rules.
 
-A future richer allocation model may preserve multiple independently priced fulfillment lines per original requested line and split replacements. That extension must migrate current stable IDs/history, preserve all quantity and stock invariants, and avoid losing provenance when two requested lines select the same replacement. Mixed-unit substitutions and actual weights require explicit integer-unit rounding, tolerances and price policy; they are not implemented by the counted model.
+A future richer allocation model may preserve multiple independently priced fulfillment lines per original requested line and split replacements. That extension must migrate current stable IDs/history, preserve all quantity and stock invariants, and avoid losing provenance when two requested lines select the same replacement. Schema 10 extends this model with same-unit gram substitutions and explicit actual-weight review. Mixed-unit substitutions and independently priced split allocations remain deferred.
 
-## Planned weighted execution acceptance contract
+## Weighted execution acceptance contract
 
-The next quantity migration is a coherent checkout-to-fulfillment change. Counted lines retain their present bounds (99 per line, 10000 available plus basket holds); weighed lines use integer grams with a planned 100000 g per-line and 1000000 g available-plus-held cap. Recheck all additions, multiplication, reservation deltas and totals before a write. Basket holds convert at checkout without a second deduction.
+The schema-10 candidate is a coherent checkout-to-fulfillment change. Counted lines retain their present bounds (99 per line, 10000 available plus basket holds); weighed lines use integer grams with a 100000 g per-line and 1000000 g available-plus-held cap. Recheck all additions, multiplication, reservation deltas and totals before a write. Basket holds convert at checkout without a second deduction.
 
 Original receipt quantities stay requested quantities. A working weighed line separately records its target, accepted allocation, actual picked grams and measurement confirmation. Measuring the original product retains the order's recorded rate. A new replacement uses its reviewed effective quote; a previously present working product retains its working rate. Initial substitutions stay within the same selling unit. Changing a target invalidates the old measurement and requires remeasurement.
 
@@ -74,7 +74,7 @@ Camera UI is deferred. When built, require HTTPS, user-triggered camera access, 
 
 ## Acceptance gates
 
-Gates 1–3 and 5 are covered by the current catalog foundation. The remaining weighted and label gates apply to later milestones; existing counted-item oversell and session-isolation tests remain mandatory.
+Gates 1–3 and 5 are covered by the current catalog foundation. Weighted gates apply to the schema-10 candidate and its release verification; label gates remain deferred; existing counted-item oversell and session-isolation tests remain mandatory.
 
 1. Upgrade populated older databases and reopen repeatedly without changing receipt amounts, identifiers, sessions or fulfillment state
 2. Add/reassign/archive categories, types and products without code changes or restart resurrection

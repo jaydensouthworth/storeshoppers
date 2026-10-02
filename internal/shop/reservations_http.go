@@ -6,7 +6,7 @@ import (
 )
 
 func basketProblem(err error) bool {
-	return errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict) || errors.Is(err, ErrStock) || errors.Is(err, ErrUnavailable) || errors.Is(err, ErrEmpty) || errors.Is(err, ErrHold)
+	return errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict) || errors.Is(err, ErrStock) || errors.Is(err, ErrUnavailable) || errors.Is(err, ErrEmpty) || errors.Is(err, ErrHold) || errors.Is(err, ErrZeroEstimate)
 }
 func (a *App) renewCart(w http.ResponseWriter, r *http.Request) {
 	s, ok := a.form(w, r)
@@ -111,6 +111,7 @@ func (a *App) managerChangeBasket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pid, e1 := num(r.PostForm.Get("product_id"))
+	selectedPickerQuantity(r, pid)
 	qty, e2 := num(r.PostForm.Get("quantity"))
 	revision, e3 := num(r.PostForm.Get("revision"))
 	var err error

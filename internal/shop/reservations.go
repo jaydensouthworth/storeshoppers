@@ -28,7 +28,12 @@ func (s *Store) ExpireHolds() error {
 		return err
 	}
 	defer tx.Rollback()
-	now := s.now().Unix()
+	if err = expireHolds(tx, s.now().Unix()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+func expireHolds(tx *sql.Tx, now int64) error {
 	const expired = `SELECT b.id FROM baskets b JOIN sessions s ON s.id=b.owner_session_id WHERE b.hold_until>0 AND (b.hold_until<=? OR s.expires<=?)`
 	rows, err := tx.Query(`SELECT product_id,SUM(reserved) FROM cart WHERE reserved>0 AND basket_id IN (`+expired+`) GROUP BY product_id`, now, now)
 	if err != nil {
@@ -63,7 +68,7 @@ func (s *Store) ExpireHolds() error {
 	if _, err = tx.Exec(`UPDATE baskets SET hold_until=0,revision=revision+1 WHERE id IN (`+expired+`)`, now, now); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 func customerBasket(q querier, sid string, now int64) (Basket, error) {
@@ -99,7 +104,7 @@ func loadBasket(q querier, id string, now int64) (Basket, error) {
 	}
 	defer rows.Close()
 	quote := sha256.New()
-	fmt.Fprintf(quote, "basket-v7:%s;", id)
+	fmt.Fprintf(quote, "basket-v9:%s;", id)
 	for rows.Next() {
 		var l CartLine
 		fields := append(productFields(&l.Product), &l.Quantity, &l.Reserved)
@@ -108,12 +113,20 @@ func loadBasket(q querier, id string, now int64) (Basket, error) {
 		}
 		state.apply(&l.Product)
 		p := l.Product
-		if p.SaleUnit == "each" {
-			l.Subtotal = l.Quantity * p.EffectivePrice()
-			b.Total += l.Subtotal
+		l.Subtotal, err = lineAmount(l.Quantity, p.EffectivePrice(), p.PriceBasis, p.SaleUnit)
+		if err != nil {
+			return b, err
+		}
+		b.Total, err = addAmount(b.Total, l.Subtotal)
+		if err != nil {
+			return b, err
+		}
+		if p.SaleUnit == "g" {
+			b.HasWeight = true
+		} else {
 			b.Count += l.Quantity
 		}
-		if p.Archived || p.SaleUnit != "each" {
+		if p.Archived || !validQuantity(p.SaleUnit, l.Quantity, p.QuantityStep, false) {
 			b.CanCheckout = false
 		}
 		if l.Reserved != l.Quantity || b.HoldUntil <= now {
@@ -124,7 +137,10 @@ func loadBasket(q querier, id string, now int64) (Basket, error) {
 		fmt.Fprintf(quote, "sale:%d:%d:%d:%d:%d:%d;", p.PromotionID, p.PromotionVersion, p.EffectivePrice(), p.SaleStarts, p.SaleEnds, p.PricingBoundary)
 		b.Lines = append(b.Lines, l)
 	}
-	if len(b.Lines) == 0 {
+	if b.HasWeight {
+		b.Count = int64(len(b.Lines))
+	}
+	if len(b.Lines) == 0 || b.Total == 0 {
 		b.CanCheckout = false
 	}
 	b.Quote = hex.EncodeToString(quote.Sum(nil))
@@ -146,7 +162,7 @@ func (s *Store) SetCartVersion(sid string, pid, qty int64, add bool, revision in
 	return s.setCart(sid, pid, qty, add, revision)
 }
 func (s *Store) setCart(sid string, pid, qty int64, add bool, revision int64) error {
-	if pid < 1 || qty < 0 || qty > 99 {
+	if pid < 1 || qty < 0 || qty > maxGrams {
 		return ErrInvalid
 	}
 	if err := s.ExpireHolds(); err != nil {
@@ -207,6 +223,11 @@ func (s *Store) changeBasket(tx *sql.Tx, b Basket, pid, qty int64, add bool) err
 	if err != nil {
 		return err
 	}
+	pricing, err := loadPricing(tx, s.now().Unix())
+	if err != nil {
+		return err
+	}
+	pricing.apply(&p)
 	old := int64(0)
 	for _, l := range b.Lines {
 		if l.Product.ID == pid {
@@ -214,12 +235,15 @@ func (s *Store) changeBasket(tx *sql.Tx, b Basket, pid, qty int64, add bool) err
 		}
 	}
 	if add {
-		if qty > 99-old {
+		if qty > p.QuantityLimit()-old {
 			return ErrInvalid
 		}
 		qty += old
 	}
-	if qty > 0 && (p.Archived || p.SaleUnit != "each") {
+	if !validQuantity(p.SaleUnit, qty, p.QuantityStep, true) {
+		return ErrInvalid
+	}
+	if qty > 0 && p.Archived {
 		return ErrUnavailable
 	}
 	var desired []CartLine
@@ -238,7 +262,7 @@ func (s *Store) changeBasket(tx *sql.Tx, b Basket, pid, qty int64, add bool) err
 		desired = append(desired, CartLine{Product: p, Quantity: qty})
 	}
 	err = s.reserveBasket(tx, b, desired)
-	if qty != 0 || (!errors.Is(err, ErrStock) && !errors.Is(err, ErrUnavailable)) {
+	if qty != 0 || (!errors.Is(err, ErrStock) && !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrZeroEstimate)) {
 		return err
 	}
 	// A failed preflight made no writes. Remove just the requested line without
@@ -261,17 +285,29 @@ func (s *Store) reserveBasket(tx *sql.Tx, b Basket, desired []CartLine) error {
 	for _, l := range b.Lines {
 		old[l.Product.ID] = l.Reserved
 	}
+	var total int64
 	for _, l := range desired {
-		if l.Quantity < 1 || l.Quantity > 99 {
+		if !validQuantity(l.Product.SaleUnit, l.Quantity, l.Product.QuantityStep, false) {
 			return ErrInvalid
 		}
-		if l.Product.Archived || l.Product.SaleUnit != "each" {
+		if l.Product.Archived {
 			return ErrUnavailable
 		}
 		if l.Quantity > l.Product.Stock+old[l.Product.ID] {
 			return ErrStock
 		}
+		amount, err := lineAmount(l.Quantity, l.Product.EffectivePrice(), l.Product.PriceBasis, l.Product.SaleUnit)
+		if err != nil {
+			return err
+		}
+		total, err = addAmount(total, amount)
+		if err != nil {
+			return err
+		}
 		next[l.Product.ID] = l.Quantity
+	}
+	if len(desired) > 0 && total == 0 {
+		return ErrZeroEstimate
 	}
 	for _, l := range b.Lines {
 		if _, ok := next[l.Product.ID]; !ok {
@@ -281,7 +317,7 @@ func (s *Store) reserveBasket(tx *sql.Tx, b Basket, desired []CartLine) error {
 	for pid, qty := range next {
 		delta := qty - old[pid]
 		if delta != 0 {
-			result, err := tx.Exec(`UPDATE products SET stock=stock-?,version=version+1 WHERE id=? AND stock-? BETWEEN 0 AND 10000`, delta, pid, delta)
+			result, err := tx.Exec(`UPDATE products SET stock=stock-?,version=version+1 WHERE id=? AND stock-? BETWEEN 0 AND CASE sale_unit WHEN 'g' THEN 1000000 ELSE 10000 END`, delta, pid, delta)
 			if err != nil {
 				return err
 			}
@@ -381,7 +417,7 @@ func (s *Store) ManagedBasket(id, sid string, all bool) (Basket, error) {
 	return scopedBasket(s.db, id, sid, all, s.now().Unix())
 }
 func (s *Store) ManagerSetBasket(id, sid string, all bool, pid, qty, revision int64, reason string) error {
-	if pid < 1 || qty < 0 || qty > 99 {
+	if pid < 1 || qty < 0 || qty > maxGrams {
 		return ErrInvalid
 	}
 	if strings.TrimSpace(reason) == "" {

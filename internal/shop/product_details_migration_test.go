@@ -78,11 +78,11 @@ func assertProductDetailsAbsent(t *testing.T, db *sql.DB) {
 	}
 }
 
-func assertProductDetailsSchema8(t *testing.T, db *sql.DB) {
+func assertProductDetailsCurrentSchema(t *testing.T, db *sql.DB) {
 	t.Helper()
 	var version, count int
 	if err := db.QueryRow(`SELECT MAX(version),COUNT(*) FROM schema_version`).Scan(&version, &count); err != nil || version != latestSchemaVersion || count != latestSchemaVersion {
-		t.Fatalf("product details schema: max=%d count=%d latest=%d error=%v; want current version", version, count, latestSchemaVersion, err)
+		t.Fatalf("product details schema: max=%d count=%d latest=%d error=%v; want current schema", version, count, latestSchemaVersion, err)
 	}
 	if err := checkSQLite(db); err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestProductDetailsPopulatedV7UpgradePreservesDataAndRetries(t *testing.T) {
 			s := openPromotionMigrationStore(t, path, now)
 			assertShopperPriorTables(t, s.db, before)
 			assertProductDetailsAbsent(t, s.db)
-			assertProductDetailsSchema8(t, s.db)
+			assertProductDetailsCurrentSchema(t, s.db)
 			for _, id := range []int64{1, 2, 3} {
 				details, err := s.ProductDetails(id)
 				if expected := (ProductDetails{ProductID: id, Kind: "unspecified"}); err != nil || !reflect.DeepEqual(details, expected) {
@@ -164,7 +164,7 @@ func TestProductDetailsEmptyEstablishedV7NeverSeeds(t *testing.T) {
 		s := openTestStore(t, path)
 		assertShopperPriorTables(t, s.db, before)
 		assertProductDetailsAbsent(t, s.db)
-		assertProductDetailsSchema8(t, s.db)
+		assertProductDetailsCurrentSchema(t, s.db)
 		if err := s.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -203,7 +203,7 @@ func TestProductDetailsEstablishedSeventyProductV7NeverExpands(t *testing.T) {
 	s := openTestStore(t, path)
 	assertShopperPriorTables(t, s.db, before)
 	assertProductDetailsAbsent(t, s.db)
-	assertProductDetailsSchema8(t, s.db)
+	assertProductDetailsCurrentSchema(t, s.db)
 	if n := testCount(t, s, "products"); n != 70 {
 		t.Fatalf("ordinary v7 upgrade expanded the established catalog: products=%d, want 70", n)
 	}
@@ -329,7 +329,7 @@ func productDetailsRecoveryRows(t *testing.T, db *sql.DB) map[string][][]any {
 
 func assertProductDetailsFreshSeed(t *testing.T, s *Store) {
 	t.Helper()
-	assertProductDetailsSchema8(t, s.db)
+	assertProductDetailsCurrentSchema(t, s.db)
 	if n := testCount(t, s, "products"); n != 72 {
 		t.Fatalf("fresh/reset product count=%d, want 72", n)
 	}

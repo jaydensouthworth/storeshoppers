@@ -23,3 +23,11 @@ Stale basket revisions also preserve the attempted quantity while displaying the
 ## Verification
 
 Run `./scripts/check.sh`. It includes dependency-free JavaScript interaction checks, the Go race suite, and seven real-process HTTP smoke suites. The manager workflow smoke exercises ordinary HTML and HTMX search, choice and mutation forms, automatic picking start, exact retries, optional notes, stock and receipt assertions, partial/cancelled/Ready outcomes, stale-session recovery and restart persistence. Live browser checks should repeat the interrupted cart flow and full item workflow at desktop and narrow widths; a passing server test alone is not evidence that the mobile interface is usable.
+
+## Manager review and the order queue
+
+The schema11 local candidate adds a separate Manager review panel on each ticket.
+Place a hold with a 3–240 character reason; use Release hold with an optional note
+when resolved. Internal notes are a separate disclosure, and every private event
+is labelled Manager only. See [Order review and queue](ORDER_ATTENTION.md) for
+privacy boundaries, filters, query recovery and verification limits.

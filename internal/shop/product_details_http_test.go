@@ -201,7 +201,7 @@ func TestProductDetailsHTTPCartReturnAndEffectiveSalePrice(t *testing.T) {
 	}
 }
 
-func TestProductDetailsHTTPWeightedItemVisibleButCannotBeOrdered(t *testing.T) {
+func TestProductDetailsHTTPWeightedItemRequiresGramStep(t *testing.T) {
 	s := newTestStore(t)
 	a := testApp(t, s, testManagerPassword)
 	p := testCreateProduct(t, s, func(p *Product) {
@@ -218,16 +218,21 @@ func TestProductDetailsHTTPWeightedItemVisibleButCannotBeOrdered(t *testing.T) {
 	if page.Code != 200 || !strings.Contains(page.Body.String(), p.Name) {
 		t.Fatalf("weighted detail is unavailable=%d", page.Code)
 	}
-	if form := adminForm(page.Body.String(), "/cart"); form != "" {
-		t.Error("weighted detail exposes a counted add-to-cart form")
+	if form := adminForm(page.Body.String(), "/cart"); form == "" || !strings.Contains(form, `min="100" max="100000" step="100"`) {
+		t.Error("weighted detail lacks gram add-to-cart bounds")
 	}
 	values := url.Values{"csrf": {shopper.CSRF}, "revision": {fmt.Sprint(shopper.Revision)}, "product_id": {fmt.Sprint(p.ID)}, "quantity": {"1"}, "return": {"product"}, "mode": {"add"}}
 	w := testRequest(t, a, http.MethodPost, "/cart", shopper, values, nil)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), ErrUnavailable.Error()) || !strings.Contains(w.Body.String(), p.Name) {
+	if w.Code != 200 || !strings.Contains(w.Body.String(), ErrInvalid.Error()) || !strings.Contains(w.Body.String(), p.Name) {
 		t.Errorf("weighted forged add=%d: %s", w.Code, w.Body.String())
 	}
 	if testBasket(t, s, shopper.ID).Count != 0 {
 		t.Error("weighted detail created a counted reservation")
+	}
+	values.Set("quantity", "300")
+	assertRedirect(t, testRequest(t, a, http.MethodPost, "/cart", shopper, values, nil), fmt.Sprintf("/products/%d", p.ID), false)
+	if b := testBasket(t, s, shopper.ID); b.Count != 1 || !b.HasWeight || b.Lines[0].Quantity != 300 {
+		t.Errorf("weighted detail reservation is incorrect: %+v", b)
 	}
 }
 

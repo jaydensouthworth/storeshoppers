@@ -455,35 +455,23 @@ func TestInventoryOnlyChangesDoNotInvalidateCheckoutQuote(t *testing.T) {
 	}
 }
 
-func TestWeightMetadataIsDeferredNotCountedOrOrderable(t *testing.T) {
+func TestWeightedCartUsesGramRequestsAndLineCounts(t *testing.T) {
 	s := newTestStore(t)
-	p := testCreateProduct(t, s, func(p *Product) { p.SaleUnit = "g"; p.PriceBasis = 1000; p.QuantityStep = 50 })
+	p := testCreateProduct(t, s, func(p *Product) { p.SaleUnit = "g"; p.PriceBasis = 1000; p.QuantityStep = 50; p.Price = 349 })
 	owner := testSession(t, s, "")
-	if err := s.Adjust(p.ID, 500, p.Version, "Future weighed inventory"); err != nil {
+	if err := s.Adjust(p.ID, 500, p.Version, "Weighed inventory"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetCart(owner.ID, p.ID, 50, false); !errors.Is(err, ErrUnavailable) {
-		t.Errorf("weighted cart accepted = %v", err)
-	}
-	// Corrupt/legacy cart data must fail safely without treating grams as unit counts.
+	testCart(t, s, owner.ID, p.ID, 50)
 	testCart(t, s, owner.ID, 1, 2)
-	testExec(t, s, `INSERT INTO cart(basket_id,product_id,quantity) VALUES(?,?,?)`, testBasket(t, s, owner.ID).ID, p.ID, 50)
 	b := testBasket(t, s, owner.ID)
-	if b.CanCheckout || b.Count != 2 {
-		t.Errorf("weighted basket counted grams as items or became orderable: %+v", b)
+	if !b.CanCheckout || !b.HasWeight || b.Count != 2 || b.Lines[1].Subtotal != 17 {
+		t.Fatalf("mixed basket %+v", b)
 	}
-	session := testSession(t, s, owner.ID)
-	if _, err := s.Checkout(owner.ID, session.CheckoutKey, session.Revision, b.Quote); !errors.Is(err, ErrUnavailable) {
-		t.Errorf("weighted checkout = %v", err)
-	}
-	if testCount(t, s, "orders") != 0 || testProduct(t, s, 1).Stock != 22 {
-		t.Error("weighted rejection left partial order or stock changes")
-	}
-	if err := s.SetCart(owner.ID, p.ID, 0, false); err != nil {
-		t.Errorf("weighted item cannot be removed: %v", err)
-	}
-	if got := testBasket(t, s, owner.ID); !got.CanCheckout || got.Count != 2 {
-		t.Errorf("basket not restored after removing weighed item: %+v", got)
+	id := testCheckout(t, s, owner.ID)
+	o := testOrder(t, s, id, owner.ID)
+	if !o.HasWeight || o.RequiredCount != 2 || o.Items[1].Quantity != 50 || o.Items[1].Subtotal != 17 || testProduct(t, s, p.ID).Stock != 450 {
+		t.Fatalf("gram receipt/allocation %+v", o)
 	}
 }
 

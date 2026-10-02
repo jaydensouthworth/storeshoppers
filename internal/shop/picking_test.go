@@ -26,6 +26,8 @@ func receiptSnapshot(o Order) Order {
 	o.CompletionKind = ""
 	o.WorkingItems = nil
 	o.WorkingPrices = nil
+	o.WorkingSteps = nil
+	o.PickedTotal = 0
 	o.Events = nil
 	o.Percent = 0
 	o.Status, o.PickedCount, o.AllPicked = "", 0, false

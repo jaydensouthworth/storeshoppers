@@ -20,3 +20,6 @@ python3 scripts/shoppers_smoke.py
 python3 scripts/promotions_smoke.py
 python3 scripts/product_details_smoke.py
 python3 scripts/product_images_smoke.py
+python3 scripts/weighted_smoke.py
+python3 scripts/attention_smoke.py
+python3 scripts/weighted_promotions_smoke.py

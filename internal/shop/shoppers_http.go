@@ -10,12 +10,18 @@ import (
 
 type ShopperFilters struct {
 	Query, Status, ShopperFilter string
+	QueueContext                 string
 	ShopperID                    int64
 	Page                         int
 }
 
 func parseShopperFilters(values url.Values) ShopperFilters {
 	f := ShopperFilters{Status: "open", Page: 1}
+	if raw := values.Get("queue"); len(raw) <= 2000 {
+		if context, err := url.ParseQuery(raw); err == nil {
+			f.QueueContext = parseOrderFilters(context).Values().Encode()
+		}
+	}
 	f.Query, _ = boundedManagerDraft(strings.TrimSpace(values.Get("q")), 100)
 	switch values.Get("status") {
 	case "open", "active", "unassigned", "closed", "all":
@@ -32,6 +38,9 @@ func parseShopperFilters(values url.Values) ShopperFilters {
 }
 func (f ShopperFilters) Values() url.Values {
 	v := url.Values{"status": {f.Status}}
+	if f.QueueContext != "" {
+		v.Set("queue", f.QueueContext)
+	}
 	if f.Query != "" {
 		v.Set("q", f.Query)
 	}
@@ -99,6 +108,9 @@ func (a *App) shoppersView(w http.ResponseWriter, r *http.Request, selected int6
 	}
 	v.Title, v.Section, v.ManagerTab = "Shoppers", "shoppers", "shoppers"
 	v.Shoppers = workspace
+	context, _ := url.ParseQuery(f.QueueContext)
+	v.OrderFilters = parseOrderFilters(context)
+	workspace.QueueContext = f.QueueContext
 	v.Search = f.Query
 	v.Message = message
 	if r.Method == http.MethodPost && r.Header.Get("HX-Request") == "true" {
@@ -118,7 +130,7 @@ func (a *App) changeShopper(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Scope precedes parsing, stale errors and draft recovery.
-	if _, err = a.store.Order(id, session.ID, !a.config.DemoMode); errors.Is(err, ErrNotFound) {
+	if _, err = a.store.ManagerOrder(id, session.ID, !a.config.DemoMode); errors.Is(err, ErrNotFound) {
 		http.NotFound(w, r)
 		return
 	} else if err != nil {
@@ -157,4 +169,15 @@ func (a *App) changeShopper(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.shoppersView(w, r, id, message, err)
+}
+
+// ShopperShortcutURL changes only the requested assignment view while carrying
+// the originating, normalized Orders queue context through secondary navigation.
+func (v View) ShopperShortcutURL(status string, shopperID, orderID int64) string {
+	f := ShopperFilters{Status: status, Page: 1, QueueContext: v.Shoppers.QueueContext}
+	if shopperID > 0 {
+		f.ShopperID = shopperID
+		f.ShopperFilter = strconv.FormatInt(shopperID, 10)
+	}
+	return f.URL(orderID)
 }

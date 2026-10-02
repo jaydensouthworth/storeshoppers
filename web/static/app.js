@@ -133,6 +133,9 @@
       const selected = form.querySelector('.product-picker-results input[type="radio"]:checked');
       const submit = form.querySelector("[data-picker-submit]");
       if (submit) submit.disabled = !selected;
+      form.querySelectorAll?.("[data-picker-quantity]").forEach((input) => {
+        input.disabled = !selected || input.dataset.pickerQuantity !== selected.value;
+      });
     });
   }
   document.addEventListener("change", (event) => {
@@ -148,6 +151,13 @@
     syncQuantityControls();
     if (event.detail.target?.id !== "workspace") return;
     const context = requests.get(event.detail?.xhr);
+    const weightReview = document.querySelector(".weight-review");
+    if (weightReview && context?.formID?.startsWith("measure-line-")) {
+      weightReview.tabIndex = -1;
+      weightReview.focus({ preventScroll: true });
+      weightReview.scrollIntoView({ block: "start", behavior: "auto" });
+      return;
+    }
     const error = document.querySelector("#workspace .notice.error:not([hidden])");
     const success = document.querySelector("#workspace .notice.success:not([hidden])");
     const notice = error || success;

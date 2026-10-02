@@ -68,6 +68,18 @@ test('picked-stock question appears only when quantity drops below picked count'
  h.fire('DOMContentLoaded');assert.equal(panel.hidden,true);assert.equal(choice.disabled,true);assert.equal(choice.required,false);
  input.value='1';h.fire('input',{eventTarget:{matches:()=>true}});assert.equal(panel.hidden,false);assert.equal(choice.disabled,false);assert.equal(choice.required,true);
 });
+test('picker disables quantities for other products without overwriting their drafts',()=>{
+ const h=harness();const submit={disabled:true};const inputs=[{dataset:{pickerQuantity:'1'},value:'3'},{dataset:{pickerQuantity:'73'},value:'500'}];
+ const selected={value:'73'};h.document.pickers=[{querySelector:q=>q==='[data-picker-submit]'?submit:selected,querySelectorAll:()=>inputs}];
+ h.fire('DOMContentLoaded');assert.equal(inputs[0].disabled,true);assert.equal(inputs[1].disabled,false);assert.equal(inputs[0].value,'3');
+ selected.value='1';h.fire('change',{eventTarget:{closest:()=>({})}});assert.equal(inputs[0].disabled,false);assert.equal(inputs[1].disabled,true);assert.equal(inputs[1].value,'500');
+});
+test('actual weight preview is focused without submitting confirmation',()=>{
+ const h=harness();const review=h.node('weight-review-8');let submissions=0;h.form.id='measure-line-8';h.form.submit=()=>submissions++;
+ const query=h.document.querySelector;h.document.querySelector=q=>q==='.weight-review'?review:query(q);
+ h.begin();h.fire('htmx:afterSwap',{xhr:h.xhr,target:{id:'workspace'}});
+ assert.equal(review.focused,1);assert.equal(review.scrolled,1);assert.equal(submissions,0);
+});
 test('background tracker failure does not steal keyboard focus',()=>{
  const h=harness();h.fire('htmx:sendError',{xhr:{}});assert.equal(h.global.hidden,false);assert.equal(h.global.focused,0);assert.equal(h.global.scrolled,0);
 });

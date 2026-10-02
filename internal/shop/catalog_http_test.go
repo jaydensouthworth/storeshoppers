@@ -199,7 +199,7 @@ func TestDemoCatalogChangesCannotExposeOtherSessionOrders(t *testing.T) {
 	}
 }
 
-func TestHTTPWeightedProductMetadataCannotBecomeCountedSale(t *testing.T) {
+func TestHTTPWeightedProductUsesGramStepAndPreservesBasis(t *testing.T) {
 	s := newTestStore(t)
 	a := testApp(t, s, testManagerPassword)
 	manager := testManager(t, s)
@@ -225,11 +225,16 @@ func TestHTTPWeightedProductMetadataCannotBecomeCountedSale(t *testing.T) {
 	}
 	shopper := testSession(t, s, "")
 	w := testRequest(t, a, http.MethodPost, "/cart", shopper, url.Values{"revision": {fmt.Sprint(shopper.Revision)}, "csrf": {shopper.CSRF}, "product_id": {fmt.Sprint(p.ID)}, "quantity": {"1"}}, nil)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), ErrUnavailable.Error()) {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), ErrInvalid.Error()) {
 		t.Errorf("weighted HTTP cart = %d: %s", w.Code, w.Body.String())
 	}
 	if b := testBasket(t, s, shopper.ID); b.Count != 0 || b.CanCheckout {
 		t.Errorf("weighted HTTP request created counted basket: %+v", b)
+	}
+	valid := url.Values{"revision": {fmt.Sprint(shopper.Revision)}, "csrf": {shopper.CSRF}, "product_id": {fmt.Sprint(p.ID)}, "quantity": {"200"}}
+	assertRedirect(t, testRequest(t, a, http.MethodPost, "/cart", shopper, valid, nil), "/", false)
+	if b := testBasket(t, s, shopper.ID); b.Count != 1 || !b.HasWeight || !b.CanCheckout || b.Total != 320 || b.Lines[0].Quantity != 200 {
+		t.Errorf("gram HTTP reservation or price incorrect: %+v", b)
 	}
 }
 
