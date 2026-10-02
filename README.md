@@ -16,11 +16,13 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Transactional catalog change history and manager inventory adjustments with a reason and audit trail
 - Manager working-order add/remove/quantity/substitution controls with reasoned stock disposition
 - Partial finish and whole-order cancellation with immutable placed receipts, separate final totals and scoped audit
-- Manager pick tickets with per-item quantities and guarded readiness
+- Shoppers workspace with a fixed simulated roster, actual assigned-order progress and explicitly unrecorded scan rates
+- Reasoned, replay-safe assign/reassign/cancel-task controls, scoped task history and automatic task closure at Ready or completion
+- Manager pick tickets with per-item quantities, current assignment links and guarded readiness
 - Customer status refresh with a normal HTML fallback
 - Persistent SQLite storage and locally bundled frontend assets
 
-This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Phone-first picking and barcode validation are planned next.
+This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Promotions, product-detail pages, weighted selling, dark mode and the later phone/barcode workflow remain in the [ordered roadmap](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -77,6 +79,8 @@ Startup applies versioned migrations transactionally. Version 2 adds picking pro
 
 Version 5 adds separate working-order lines, reasoned manager overrides and explicit partial/cancelled outcomes without rewriting placed receipts. Ready and Completed orders remain frozen. See [Manager order overrides](docs/ORDER_OVERRIDES.md).
 
+Version 6 adds a fixed simulated shopper roster, versioned order assignments and structured task history. Existing orders remain unassigned until a manager assigns them. Cancelling a task preserves order status, working items and stock; Ready or completion ends the task in the same transaction. See [Shoppers](docs/SHOPPERS.md).
+
 Version 4 adds persisted basket allocations, scoped basket management and instruction snapshots. Existing baskets migrate with their contents intact and no reservation; the customer must explicitly review and reserve before checkout. Expired holds release exactly once on startup or the next relevant request, and reads never renew a hold. See [Basket reservations](docs/BASKET_RESERVATIONS.md).
 
 Catalog management is implemented in version 3 at `/manager/catalog`. New manager-created products start with zero stock; restock them through the audited inventory form. Category/type names and SKUs remain reserved after archive, and historical receipts and picking tickets survive catalog edits. Archived category/type labels can be restored with their original identity; this does not restore any archived products. Product restoration is a separate, version-guarded action requiring active category/type labels. It preserves stock, SKU and local code IDs, and requires a fresh checkout quote.
@@ -89,7 +93,7 @@ Weighed products can be configured with grams, cents per kilogram and a quantity
 
 ```text
 cmd/shop/          Configuration and server lifecycle
-internal/shop/     Catalog, basket, orders, inventory, sessions and tests
+internal/shop/     Catalog, baskets, orders, shoppers, inventory, sessions and tests
 web/               Embedded HTML, CSS, SVG illustrations and HTMX
 scripts/           Development, checks and HTTP smoke test
 docs/              Architecture and roadmap

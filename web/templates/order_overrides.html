@@ -16,7 +16,7 @@
 </section>{{end}}
 
 {{define "order-change-history"}}
-{{if .Order.Events}}<details class="order-history"><summary>Order change history <span>Latest {{len .Order.Events}} changes</span></summary><ol>{{range .Order.Events}}<li><div class="order-event-heading"><strong>{{if eq .Action "set"}}Working quantity changed{{else if eq .Action "substitute"}}Product substituted{{else if eq .Action "finish"}}Finished with picked items{{else if eq .Action "cancel"}}Order cancelled{{else}}{{.Action}}{{end}}</strong><time>{{.Created}}</time></div><p>{{.Details}}</p>{{if .Reason}}<p><strong>Reason:</strong> {{.Reason}}</p>{{end}}</li>{{end}}</ol></details>{{end}}
+{{if .Order.Events}}<details class="order-history"><summary>Order change history <span>Latest {{len .Order.Events}} {{if eq (len .Order.Events) 1}}change{{else}}changes{{end}}</span></summary><ol>{{range .Order.Events}}<li><div class="order-event-heading"><strong>{{if eq .Action "set"}}Working quantity changed{{else if eq .Action "substitute"}}Product substituted{{else if eq .Action "finish"}}Finished with picked items{{else if eq .Action "cancel"}}Order cancelled{{else}}{{.Action}}{{end}}</strong><time>{{.Created}}</time></div><p>{{.Details}}</p>{{if .Reason}}<p><strong>Reason:</strong> {{.Reason}}</p>{{end}}</li>{{end}}</ol></details>{{end}}
 {{end}}
 
 {{define "order-override-fields"}}
@@ -72,11 +72,11 @@
   {{if not .Order.AllPicked}}{{$finishDraft := eq (index $draft "form_id") "finish"}}<details class="override-disclosure override-finish" {{if $finishDraft}}open{{end}}><summary>Finish with picked items <span>Close with missing units resolved</span></summary>
     <form class="override-form" method="post" action="/manager/orders/{{.Order.ID}}/override" hx-post="/manager/orders/{{.Order.ID}}/override" hx-target="#workspace" hx-swap="outerHTML" hx-disabled-elt="find button" hx-indicator="#pending">
       {{template "order-override-fields" .}}<input type="hidden" name="action" value="finish"><input type="hidden" name="command_key" value="{{.OrderCommandKey}}-finish"><input type="hidden" name="form_id" value="finish">
-      <p class="fine-print override-form-wide">Permanently close this order with only the {{.Order.PickedCount}} picked units. Every unpicked unit is resolved below. This does not mark missing items as picked or imply a full collection. This cannot be undone.</p>
+      <p class="fine-print override-form-wide">Permanently close this order with only the {{.Order.PickedCount}} picked {{if eq .Order.PickedCount 1}}unit{{else}}units{{end}}. Every unpicked unit is resolved below. This does not mark missing items as picked or imply a full collection. This cannot be undone.</p>
       <div><label for="order-finish-remainder">Mark every unpicked unit as</label><select id="order-finish-remainder" name="remainder" required><option value="">Choose an outcome</option><option value="unavailable" {{if and $finishDraft (eq (index $draft "remainder") "unavailable")}}selected{{end}}>Unavailable</option><option value="cancelled" {{if and $finishDraft (eq (index $draft "remainder") "cancelled")}}selected{{end}}>Cancelled</option></select></div>
       <div><label for="order-finish-disposition">Unpicked units: stock handling</label><select id="order-finish-disposition" name="disposition" required aria-describedby="stock-disposition-help">{{if $finishDraft}}{{template "order-disposition-options" (index $draft "disposition")}}{{else}}{{template "order-disposition-options" ""}}{{end}}</select></div>
       <div class="override-form-wide"><label for="order-finish-reason">Reason for finishing with picked items</label><input type="text" id="order-finish-reason" name="reason" value="{{if $finishDraft}}{{index $draft "reason"}}{{end}}" minlength="3" maxlength="240" required placeholder="Explain the outcome in 3–240 characters"></div>
-      <button id="order-finish-partial" class="button override-form-wide" type="submit">Finish with {{.Order.PickedCount}} picked units</button>
+      <button id="order-finish-partial" class="button override-form-wide" type="submit">Finish with {{.Order.PickedCount}} picked {{if eq .Order.PickedCount 1}}unit{{else}}units{{end}}</button>
     </form>
   </details>
   {{end}}

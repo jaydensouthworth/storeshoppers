@@ -5,7 +5,7 @@
 ```text
 Browser
   ├─ Storefront: browse → basket → demo checkout → order receipt
-  └─ Manager: demo sign-in → catalog / inventory and audit trail / order queue
+  └─ Manager: demo sign-in → catalog / inventory and audit trail / order queue / shopper assignments
           ↓ HTML form requests; HTMX enhances partial updates
 Go net/http + html/template
   ├─ Request and form boundaries: host, origin, CSRF, session, manager guard
@@ -15,7 +15,7 @@ Go net/http + html/template
   └─ Checkout and order status transitions
           ↓ parameterized SQL; transactions
 SQLite: products, categories, product_types, product_codes,
-        sessions, baskets, cart, orders, order_items, adjustments, catalog_events, basket_events, working_order_items, order_events
+        sessions, baskets, cart, orders, order_items, adjustments, catalog_events, basket_events, working_order_items, order_events, shoppers, shopper_assignments, shopper_event_links
 ```
 
 The server returns HTML rather than a JSON API. Forms work with ordinary browser requests; HTMX swaps the shared workspace for live cart, filter and management updates. The underlying behavior is server-owned. Full-page navigation is intentionally plain HTML, keeping history and access checks predictable. HTMX history snapshots are disabled so manager/session pages are not saved in its local history cache.
@@ -54,7 +54,7 @@ This is a safe local demonstration boundary, **not production identity**. A shar
 
 Semantic headings, navigation, article and form structures; visible labels; keyboard focus treatment; skip link; live success/error messages; disabled out-of-stock actions; reduced-motion preference; responsive two-column phone catalog and stacked checkout. SVG product art is decorative and hidden from assistive technology. Color is not the sole stock/status signal.
 
-The storefront and manager are responsive now. The future shopper flow will add mobile-specific picking interactions without introducing a second frontend stack prematurely.
+The storefront and manager are responsive now. The Shoppers manager workspace assigns fixed simulated roster members to actual orders, with recorded picking progress and explicitly unrecorded scanner telemetry. A future shopper-facing flow will add mobile-specific picking interactions without introducing a second frontend stack prematurely.
 
 ## Versioned migrations
 
@@ -73,3 +73,7 @@ Fresh database creation seeds 70 fake products within the migration transaction.
 ## Explicit demo reset
 
 Both normal and demo startup preserve data through additive migrations. Shared demo managers may visit `/manager/demo/reset` for a confirmation page; only an authorized, CSRF-protected and explicitly confirmed POST resets the shared fixture. A bounded request gate drains active handlers, SQLite temporarily enforces exclusive ownership, and the supported Backup API creates a durable private archive before transactional baseline installation. The live main/WAL files are never swapped or unlinked. Failure preserves recoverability, archives are bounded without automatic pruning, and successful reset invalidates every session. See [Demo reset, storage limits and recovery](DEMO_RESET.md) for details and primary SQLite references.
+
+## Shopper assignments
+
+Schema v6 adds a fixed simulated roster, versioned task ownership and structured assignment-audit links without assigning historical orders. Every assignment, reassignment and cancellation advances the order revision and writes its reason in the same immediate transaction. One active task per order is enforced by a partial unique index; each shopper may hold several orders. Cancelling a task preserves stock, receipt and working lines and leaves its order unassigned. Ready or Completed ends its task with the same transactional audit. Demo ownership is applied before workload aggregates, filtering, history and pagination. Scan rates remain unrecorded until real telemetry exists. See [Shoppers](SHOPPERS.md).

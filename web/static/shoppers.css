@@ -1,0 +1,97 @@
+.shopper-simulation-note { border-left: 4px solid var(--ink); background: var(--blue-wash); padding: 16px 18px; margin: 0 0 25px; font-size: 13px; }
+.shopper-simulation-note p { margin: 6px 0 0; }
+.shopper-section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; align-items: baseline; margin: 24px 0 14px; }
+.shopper-section-heading h2 { font-size: 24px; margin: 0; }
+.shopper-section-heading > span { font-size: 11px; color: var(--muted); }
+.shopper-roster-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; margin-bottom: 28px; }
+.shopper-card { padding: 18px; border: 1px solid var(--ink); border-top: 5px solid var(--ink); background: #fff; min-width: 0; }
+.shopper-person { display: flex; gap: 10px; align-items: center; }
+.shopper-person h3 { font-size: 16px; margin: 0 0 4px; overflow-wrap: anywhere; }
+.shopper-initials { width: 39px; height: 42px; display: grid; place-items: center; background: var(--yellow); border: 1px solid var(--ink); flex-shrink: 0; font-weight: 700; }
+.demo-person-label { display: inline-block; font: 400 10px/1.4 Arial, Helvetica, sans-serif; color: var(--muted); }
+.shopper-card dl { margin: 19px 0 14px; font-size: 12px; }
+.shopper-card dl > div { display: flex; gap: 10px; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line); }
+.shopper-card dt { color: var(--muted); }
+.shopper-card dd { margin: 0; font-weight: 700; text-align: right; }
+.shopper-card dd.telemetry-pending { font-weight: 400; }
+.shopper-card progress { width: 100%; height: 9px; accent-color: var(--ink); }
+.shopper-card .fine-print { margin: 5px 0 12px; }
+.shopper-card > a { font-size: 12px; }
+.shopper-queue-views { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 20px; }
+.shopper-queue-views a { display: inline-flex; gap: 18px; align-items: center; border: 1px solid var(--ink); padding: 10px 14px; min-height: 44px; text-decoration: none; font-size: 12px; }
+.shopper-queue-views a[aria-current] { background: var(--ink); color: #fff; }
+.shopper-queue-views strong { font-size: 13px; }
+.shopper-filters { display: grid; grid-template-columns: minmax(160px,1.4fr) minmax(130px,1fr) minmax(130px,1fr) auto; align-items: end; gap: 12px; border-block: 1px solid var(--line); padding: 16px 0; }
+.shopper-filters > div { min-width: 0; }
+.shopper-filters input,.shopper-filters select { width: 100%; font-size: 12px; }
+.shopper-filters > .text-link { grid-column: 1/-1; justify-self: start; font-size: 11px; }
+.shopper-results { font-size: 12px; margin: 17px 0; }
+.shopper-task-table { border-collapse: collapse; width: 100%; text-align: left; table-layout: fixed; }
+.shopper-task-table th,.shopper-task-table td { padding: 14px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: 12px; overflow-wrap: anywhere; }
+.shopper-task-table th:first-child,.shopper-task-table td:first-child { padding-left: 0; }
+.shopper-task-table thead th { font-size: 10px; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--ink); }
+.shopper-task-table small { display: block; margin-top: 5px; font-size: 10px; color: var(--muted); font-weight: 400; }
+.shopper-task-table th:first-child { width: 25%; }
+.shopper-task-table th:last-child { width: 19%; }
+.shopper-task-table .secondary { padding: 9px; font-size: 10px; min-height: 44px; }
+.shopper-empty { border-top: 1px solid var(--line); padding: 25px 0 5px; }
+.shopper-empty h3 { font-size: 20px; }
+.shopper-empty p,.shopper-empty-note { font-size: 13px; color: var(--muted); }
+.shopper-editor { border-top: 5px solid var(--ink); scroll-margin-top: 20px; }
+.shopper-editor h2 { font-size: 25px; overflow-wrap: anywhere; }
+.shopper-editor .section-title { flex-wrap: wrap; }
+.shopper-editor .section-title a { font-size: 12px; }
+.shopper-editor-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; font-size: 12px; }
+.shopper-current-assignment { margin-top: 18px; font-size: 14px; }
+.shopper-assignment-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 18px; }
+.shopper-assignment-form > div { min-width: 0; }
+.shopper-assignment-form input,.shopper-assignment-form select { width: 100%; }
+.shopper-form-wide { grid-column: 1/-1; }
+.shopper-form-actions { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+.shopper-form-actions a { font-size: 12px; }
+.shopper-assignment-form .fine-print { margin: 0; }
+.shopper-history ol { margin: 0; padding: 0; list-style: none; }
+.shopper-history li { padding: 15px 0; border-top: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
+.shopper-history li > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+.shopper-history time { color: var(--muted); font-size: 10px; }
+.shopper-history li p { margin: 7px 0 0; }
+.order-assignment { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px 24px; padding: 17px 20px; margin: 0 0 24px; border: 1px solid var(--ink); background: #fff; }
+.order-assignment .eyebrow { margin: 0 0 5px; font-size: 10px; }
+.order-assignment strong { font-size: 16px; }
+.order-assignment strong .demo-person-label { margin-left: 6px; }
+.order-assignment p:not(.eyebrow) { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+@media(max-width:1100px) {
+  .shopper-roster-grid { gap: 10px; }
+  .shopper-card { padding: 13px; }
+  .shopper-person { align-items: start; }
+  .shopper-initials { width: 29px; height: 33px; font-size: 12px; }
+  .shopper-filters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .shopper-filters > button { width: fit-content; }
+}
+@media(max-width:900px) and (min-width:801px) {
+  .shopper-roster-grid { grid-template-columns: 1fr; }
+  .shopper-card dl { display: flex; flex-wrap: wrap; gap: 16px; }
+  .shopper-card dl > div { gap: 15px; }
+}
+@media(max-width:650px) {
+  .shopper-roster-grid { grid-template-columns: 1fr; }
+  .shopper-card { padding: 17px; }
+  .shopper-person { align-items: center; }
+  .shopper-initials { width: 39px; height: 42px; font-size: 15px; }
+  .shopper-card dl { margin: 14px 0 8px; }
+  .shopper-filters { grid-template-columns: 1fr; }
+  .shopper-filters input,.shopper-filters select,.shopper-assignment-form input,.shopper-assignment-form select { font-size: 16px; }
+  .shopper-assignment-form { grid-template-columns: 1fr; }
+  .shopper-queue-views { gap: 6px; }
+  .shopper-queue-views a { gap: 8px; padding: 10px; font-size: 11px; }
+  .shopper-task-table,.shopper-task-table tbody,.shopper-task-table tr { display: block; width: 100%; }
+  .shopper-task-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .shopper-task-table tr { padding: 16px 0; border-top: 1px solid var(--ink); }
+  .shopper-task-table th,.shopper-task-table td { display: block; padding: 7px 0; width: 100% !important; border: 0; }
+  .shopper-task-table th { padding-top: 0; font-size: 14px; }
+  .shopper-task-table td[data-label]::before { content: attr(data-label) ": "; color: var(--muted); font-size: 11px; margin-right: 5px; }
+  .shopper-task-table .secondary { font-size: 12px; padding: 10px 13px; }
+  .shopper-task-table small { margin-top: 4px; }
+  .order-assignment { padding: 16px; }
+  .order-assignment strong .demo-person-label { display: block; margin: 4px 0 0; }
+}

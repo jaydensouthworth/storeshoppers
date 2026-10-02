@@ -274,7 +274,13 @@ func (s *Store) Order(id int64, sid string, manager bool) (Order, error) {
 		}
 		o.Events = append(o.Events, e)
 	}
-	return o, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return o, err
+	}
+	o.Assignment, err = activeAssignment(s.db, id)
+	return o, err
 }
 func (s *Store) Adjust(pid, delta, version int64, reason string) error {
 	if err := s.ExpireHolds(); err != nil {
@@ -364,6 +370,11 @@ func (s *Store) AdvanceVersioned(id int64, from string, version int64, sid strin
 	}
 	if _, err = tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,'','status','Fulfillment transition',?)`, id, token(), from+" → "+next); err != nil {
 		return err
+	}
+	if next == "Ready" || next == "Completed" {
+		if err = endShopperAssignment(tx, id, next); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

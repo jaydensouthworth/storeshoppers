@@ -193,6 +193,11 @@ func (s *Store) OverrideOrder(id int64, sid string, allOrders bool, c OrderComma
 	if _, err = tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,?,?,?,?)`, id, c.Key, hash, c.Action, c.Reason, details); err != nil {
 		return err
 	}
+	if c.Action == "finish" || c.Action == "cancel" {
+		if err = endShopperAssignment(tx, id, "Completed · "+c.Action); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 

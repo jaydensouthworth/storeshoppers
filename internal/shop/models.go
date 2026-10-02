@@ -76,6 +76,7 @@ type OrderEvent struct {
 	Action, Reason, Details, Created string
 }
 type Order struct {
+	Assignment                        *ShopperAssignment
 	WorkingPrices                     map[int64]int64
 	Version, WorkingTotal, FinalTotal int64
 	Finalized                         bool

@@ -924,3 +924,16 @@ main.manager-layout { width: min(1480px,100%); }
   .order-overrides .board-label { max-width: none; }
   .original-receipt .summary-row.total { flex-wrap: wrap; }
 }
+
+/* Keep the next order action reachable before long working lists on phones. */
+.picking-layout > .ticket-actions { grid-column: 2; grid-row: 1; margin: 0; min-width: 0; }
+.picking-work { grid-column: 1; grid-row: 1 / span 2; min-width: 0; }
+.picking-receipt { grid-column: 2; grid-row: 2; min-width: 0; }
+.picking-receipt > .receipt { margin-top: 0; }
+@media (max-width: 800px) {
+  .picking-layout { display: flex; flex-direction: column; }
+  .picking-layout > * { width: 100%; }
+  .picking-layout > .ticket-actions { max-width: none; }
+  .picking-layout > .ticket-actions h2 { font-size: 25px; }
+  .picking-layout > .ticket-actions .order-totals { margin-top: 12px; }
+}

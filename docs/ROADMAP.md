@@ -14,7 +14,7 @@ Each phase is accepted only when the intended task works end to end, relevant in
 
 ## Verified live foundation
 
-As of 1 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/c391ead670088fb72f01d0acc280b396123c4439). This checkpoint contains 50 verified published files.
+As of 1 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/448fa95f066ffdee0ffb5ee2f28b0ba570cbbfe6). This checkpoint contains 79 verified published files.
 
 - 70 fake products; configurable categories/types; create, edit, archive and restore; dedicated editors and a manager sidebar
 - Safe bundled illustration picker, immutable SKU and separate demo-local product codes; uploads, generated scan labels and camera scanning are not implemented
@@ -22,10 +22,11 @@ As of 1 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdad
 - Persisted 15-minute stock holds, expiry/reacquisition, available/reserved counts, scoped practice baskets and audited manager basket overrides
 - Plaintext checkout instructions capped at 500 characters; Picking progress percentages/counts and a distinct Ready status. The default Orders view already shows these states
 - Reasoned stock audit, per-line picking, guarded readiness, customer status refresh and normal HTML fallback
+- Working-order quantity changes and substitutions, explicit partial finish/cancellation, stock disposition and immutable original receipts
 - Versioned populated-data migrations and restart persistence; server-side validation, CSRF and non-negative transactional inventory
 - The public known-password hint appears only when the configured password matches the demo value; this remains intentionally limited demo access
 
-Verification for this release: 115 top-level tests, 82.2% core coverage, race checks, vet, build, HTTP/restart checks and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36933888229). Authenticated-manager QA passed on desktop and at 400 CSS pixels. Physical-phone testing and a fuller accessibility audit remain open.
+Verification for this release: 169 top-level tests, 81.8% core coverage, race checks, vet, build, HTTP/restart checks and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36940243317). Authenticated-manager QA passed on desktop and at 400 CSS pixels. Physical-phone testing and a fuller accessibility audit remain open.
 
 ## Ordered implementation backlog
 
@@ -39,7 +40,7 @@ Verification for this release: 115 top-level tests, 82.2% core coverage, race ch
 
 ### 2. Give managers broad control over confirmed working orders
 
-**Implemented and locally tested in schema v5; publication/live verification is a separate release step:** confirmed working-order additions/removals, quantity changes, whole-line counted substitutions and explicit reasoned manager overrides. Incomplete orders can finish with unavailable/cancelled remainders and deliberate stock disposition, while actual picked counts remain truthful. Whole-order cancellation and scoped order history are included. See [Manager order overrides](ORDER_OVERRIDES.md).
+**Implemented and live-verified in schema v5:** confirmed working-order additions/removals, quantity changes, whole-line counted substitutions and explicit reasoned manager overrides. Incomplete orders can finish with unavailable/cancelled remainders and deliberate stock disposition, while actual picked counts remain truthful. Whole-order cancellation and scoped order history are included. See [Manager order overrides](ORDER_OVERRIDES.md).
 
 Preserve requested receipt lines and the placed total. Use separate fulfillment/allocation records, resolution history and a final fulfillment total. Checkout instructions retain the shopper’s guidance, while explicit, reasoned manager overrides remain permitted. A structured substitution-preference field is a later refinement; this increment supports counted same-unit changes. Missing physical stock must not produce phantom returns. Validate scope, state and versions; update allocations, stock, totals and audit in one transaction. Final totals stay nullable until Ready, allow an explicitly all-unavailable final zero and freeze at Ready. Ready remains frozen except collection; historical amendments/refunds and a Needs attention workflow remain future work. See [catalog and fulfillment evolution](CATALOG_EVOLUTION.md).
 
@@ -47,7 +48,7 @@ Preserve requested receipt lines and the placed total. Use separate fulfillment/
 
 ### 3. Add the Shoppers workspace
 
-Place Shoppers directly below Orders in the sidebar. Show a simulated employee roster, assigned tasks and progress, with working, audited assign/reassign/cancel-picking-task controls. Cancelling a picking task is distinct from cancelling its order. Define ownership, competing-picker and interrupted-session rules. Keep scan rate as an explicit placeholder until real scanner telemetry exists; do not invent analytics.
+**Implemented and locally verified in schema v6; publication and live verification are pending for this checkpoint:** Shoppers appears directly below Orders. A fixed simulated roster has working, audited assign/reassign/cancel-task controls and progress derived from actual order picking records. Cancelling a task leaves its order open and unassigned, with stock and picked counts intact. Ready or completion ends the active task in the same transaction. One active task per order is enforced; a shopper can hold several orders. Demo ownership applies before workload counts, filters, history and pagination. Selected editors preserve filter context and recover failed drafts; the order ticket links to its current assignment. Closed-order searches use structured historical assignee records. Scan rates remain explicitly unrecorded until real scanner telemetry exists. See [Shoppers](SHOPPERS.md).
 
 **Acceptance:** task changes preserve order/stock integrity and session scope, expose the current assignment clearly, and remain recoverable after interruption.
 

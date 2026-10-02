@@ -37,6 +37,7 @@ type App struct {
 	resetPending atomic.Bool
 }
 type View struct {
+	Shoppers                                                 *ShoppersWorkspace
 	OrderCatalogQuote                                        string
 	OrderOverrideDraft                                       map[string]string
 	OrderCommandKey                                          string
@@ -122,6 +123,8 @@ func New(store *Store, cfg Config) (*App, error) {
 	a.mux.HandleFunc("POST /manager/logout", a.logout)
 	a.mux.HandleFunc("GET /manager", a.showManager)
 	a.mux.HandleFunc("GET /manager/orders", a.showManager)
+	a.mux.HandleFunc("GET /manager/shoppers", a.showShoppers)
+	a.mux.HandleFunc("POST /manager/shoppers/orders/{id}", a.changeShopper)
 	a.mux.HandleFunc("GET /manager/stock", a.showStock)
 	a.mux.HandleFunc("GET /manager/catalog", a.showCatalog)
 	a.mux.HandleFunc("POST /manager/catalog/products", a.saveCatalogProduct)
