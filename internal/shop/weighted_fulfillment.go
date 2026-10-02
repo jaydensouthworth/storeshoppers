@@ -154,49 +154,74 @@ func (s *Store) ConfirmWeight(orderID int64, sid string, all bool, c WeightComma
 	if p.Command.Review != c.Review {
 		return ErrWeightReview
 	}
+	if _, err = confirmWeightTx(tx, orderID, c, p, hash, pickActor{Kind: "manager", Source: "manager"}, s.now().Unix()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+type weightMutationResult struct {
+	EventID, Version, PickVersion int64
+}
+
+// confirmWeightTx applies a previously prepared, reviewed measurement within
+// the caller's immediate transaction. The caller authorizes its own actor and
+// checks replay before preparing this snapshot; worker authority never passes
+// through a public manager operation. Stock, expiry, progress and audit commit
+// together, while the requested receipt, snapped rate and manager hold stay put.
+func confirmWeightTx(tx *sql.Tx, orderID int64, c WeightCommand, p WeightPreview, hash string, actor pickActor, now int64) (weightMutationResult, error) {
+	var err error
 	// A held basket may expire between review and confirmation. Reconcile it
 	// inside this transaction so a failed measurement rolls everything back.
-	if err = expireHolds(tx, s.now().Unix()); err != nil {
-		return err
+	if err = expireHolds(tx, now); err != nil {
+		return weightMutationResult{}, err
 	}
 	var pid int64
 	if err = tx.QueryRow(`SELECT product_id FROM working_order_items WHERE id=? AND order_id=?`, c.LineID, orderID).Scan(&pid); err != nil {
-		return err
+		return weightMutationResult{}, err
 	}
 	if p.StockDelta > 0 {
 		result, e := tx.Exec(`UPDATE products SET stock=stock-?,version=version+1 WHERE id=? AND stock>=?`, p.StockDelta, pid, p.StockDelta)
 		if e != nil {
-			return e
+			return weightMutationResult{}, e
 		}
 		n, e := result.RowsAffected()
 		if e != nil {
-			return e
+			return weightMutationResult{}, e
 		}
 		if n != 1 {
-			return ErrStock
+			return weightMutationResult{}, ErrStock
 		}
 	} else if p.StockDelta < 0 {
 		if err = disposeOrderStock(tx, pid, -p.StockDelta, c.Disposition); err != nil {
-			return err
+			return weightMutationResult{}, err
 		}
 	}
 	if _, err = tx.Exec(`UPDATE working_order_items SET allocated_quantity=?,picked_quantity=?,measurement_confirmed=1,pick_version=pick_version+1 WHERE id=?`, c.Actual, c.Actual, c.LineID); err != nil {
-		return err
+		return weightMutationResult{}, err
 	}
 	items, err := workingOrderItems(tx, orderID)
 	if err != nil {
-		return err
+		return weightMutationResult{}, err
 	}
 	var order Order
 	if err = summarizeWorking(&order, items); err != nil {
-		return err
+		return weightMutationResult{}, err
 	}
 	if _, err = tx.Exec(`UPDATE orders SET status='Picking',order_version=order_version+1 WHERE id=?`, orderID); err != nil {
-		return err
+		return weightMutationResult{}, err
 	}
 	details := fmt.Sprintf("%s: target %d g; accepted allocation %d → %d g; actual measured %d g at %s/kg; line amount %s → %s; stock delta %d g; reduction disposition %s", p.Name, p.Target, p.Allocated, c.Actual, c.Actual, Money(p.Price), Money(p.OldSubtotal), Money(p.NewSubtotal), p.StockDelta, c.Disposition)
-	if _, err = tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,?,'measure',?,?)`, orderID, c.Key, hash, c.Reason, details); err != nil {
-		return err
+	result, err := tx.Exec(`INSERT INTO order_events(order_id,command_key,command_hash,action,reason,details) VALUES(?,?,?,'measure',?,?)`, orderID, c.Key, hash, c.Reason, details)
+	if err != nil {
+		return weightMutationResult{}, err
 	}
-	return tx.Commit()
+	eventID, err := result.LastInsertId()
+	if err != nil {
+		return weightMutationResult{}, err
+	}
+	if _, err = tx.Exec(`INSERT INTO order_event_actors(event_id,actor,source,grant_id,assignment_id,shopper_id,shopper_name) VALUES(?,?,?,NULLIF(?,0),NULLIF(?,0),NULLIF(?,0),?)`, eventID, actor.Kind, actor.Source, actor.GrantID, actor.AssignmentID, actor.ShopperID, actor.ShopperName); err != nil {
+		return weightMutationResult{}, err
+	}
+	return weightMutationResult{EventID: eventID, Version: c.OrderVersion + 1, PickVersion: c.PickVersion + 1}, nil
 }

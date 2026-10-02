@@ -97,3 +97,36 @@
 .phone-pairing-actions form { margin-top:16px; }
 .phone-pairing-actions button { max-width:100%; white-space:normal; }
 @media(max-width:700px) { .phone-code-layout { grid-template-columns:1fr; gap:18px; } .phone-qr { max-width:280px; margin:0 auto; } .phone-code-layout input { font-size:14px; } }
+
+/* Measured weights and item reports keep the same square, phone-sized controls. */
+.handheld-weight-entry,.handheld-report { border-top:1px solid var(--line); margin-top:24px; padding-top:4px; }
+.handheld-weight-entry > summary,.handheld-report > summary { min-height:48px; padding:14px 0; cursor:pointer; font-size:14px; font-weight:700; overflow-wrap:anywhere; }
+.handheld-weight-entry form > label,.handheld-report form > label { display:block; margin:17px 0 7px; font-size:13px; font-weight:700; }
+.handheld-weight-entry textarea,.handheld-report textarea { min-height:88px; line-height:1.5; }
+.handheld-weight-entry button,.handheld-report button { margin-top:16px; width:100%; max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.handheld-report > p,.handheld-report form > p { font-size:12px; color:var(--muted); line-height:1.6; }
+.handheld-invalid-choice { color:var(--theme-error-text); }
+.handheld-report-draft { border-left:3px solid var(--ink); padding-left:10px; }
+.handheld-weight-review { margin:22px 0; padding:16px; border:2px solid var(--ink); border-top:6px solid var(--yellow); }
+.handheld-weight-review h3 { font:700 26px/1.1 var(--display); margin:0 0 9px; }
+.handheld-weight-review .handheld-review-lead { font-size:13px; line-height:1.5; margin:0 0 14px; }
+.handheld-review-values { margin:16px 0; }
+.handheld-review-values > div { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:12px; align-items:baseline; border-bottom:1px solid var(--line); padding:10px 0; }
+.handheld-review-values dt { font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+.handheld-review-values dd { font-size:15px; font-weight:700; margin:0; text-align:right; overflow-wrap:anywhere; }
+.handheld-review-values > .handheld-review-actual { background:var(--blue-wash); padding:12px 8px; }
+.handheld-review-actual dd { font-size:22px; }
+.handheld-stock-effect { padding:12px; border-left:4px solid var(--ink); background:var(--blue-wash); font-size:13px; }
+.handheld-stock-effect p { margin:6px 0 0; line-height:1.5; }
+.handheld-zero-note,.handheld-review-note { font-size:12px; line-height:1.6; }
+.handheld-working-total { border-block:2px solid var(--ink); padding:14px 0; margin:18px 0; }
+.handheld-working-total > span { display:block; font-size:12px; font-weight:700; }
+.handheld-working-total > strong { display:block; font:700 34px/1.15 var(--display); margin:4px 0 8px; overflow-wrap:anywhere; }
+.handheld-working-total p { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+.handheld-weight-review button { width:100%; max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.handheld-draft .plain-instructions { white-space:pre-wrap; }
+@media(max-width:390px) {
+  .handheld-weight-review { padding:12px; }
+  .handheld-review-values > div { grid-template-columns:minmax(0,1fr); gap:4px; }
+  .handheld-review-values dd { text-align:left; }
+}

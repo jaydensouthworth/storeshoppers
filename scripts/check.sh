@@ -33,3 +33,5 @@ python3 scripts/attention_smoke.py
 python3 scripts/weighted_promotions_smoke.py
 
 python3 scripts/handheld_smoke.py
+
+python3 scripts/handheld_weight_smoke.py

@@ -34,30 +34,46 @@
   function revoke() {
     const root = workspace(); if (root) root.dataset.handheldRevoked = "true";
     document.dispatchEvent(new CustomEvent("handheld:revoked"));
-    document.querySelectorAll('form[action="/handheld/pick"],form[action="/handheld/scan"]').forEach(form => {
-      form.querySelectorAll("button,input").forEach(input => { input.disabled = true; });
+    document.querySelectorAll("form[data-handheld-authorized]").forEach(form => {
+      form.querySelectorAll("button,input,select,textarea").forEach(input => { input.disabled = true; });
     });
   }
   document.addEventListener("submit", event => {
     const form = event.target;
     if (!form?.matches?.("[data-handheld-form]")) return;
+    if (form.matches("[data-handheld-authorized]") && workspace()?.dataset.handheldRevoked === "true") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      notice("This phone connection is no longer active. Refresh or reconnect before reviewing this item again. Your entered values are kept here.");
+      return;
+    }
     if (navigator.onLine === false) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      notice("You’re offline. Nothing was sent. Your entered values are kept; reconnect and refresh the task before confirming a pick.");
+      notice("You’re offline. Nothing was sent. Your entered values are kept; reconnect and refresh the task before confirming any changes.");
     }
   }, true);
   document.addEventListener("htmx:beforeRequest", event => {
     const root = workspace();
     const element = event.detail?.elt;
     if (!root || !element || !root.contains(element) || !event.detail?.xhr) return;
-    const context = {root, disabled:[], sequence:++requestSequence};
     const form = element.matches?.("form") ? element : element.closest?.("form");
+    if (form?.matches?.("[data-handheld-authorized]") && root.dataset.handheldRevoked === "true") {
+      event.preventDefault();
+      notice("This phone connection is no longer active. Refresh or reconnect before reviewing this item again. Your entered values are kept here.");
+      return;
+    }
+    if (form?.matches?.("[data-handheld-form]") && navigator.onLine === false) {
+      event.preventDefault();
+      notice("You’re offline. Nothing was sent. Your entered values are kept; reconnect and refresh the task before confirming any changes.");
+      return;
+    }
+    const context = {root, disabled:[], sequence:++requestSequence};
     // HTMX has already serialized the request. Lock this form during its one
     // request so new edits cannot be mistaken for the submitted confirmation.
     if (form?.matches?.("[data-handheld-form]")) {
       form.querySelectorAll("input,select,textarea,button").forEach(input => {
-        if (!input.disabled) { context.disabled.push(input); input.dataset.handheldBusy = "true"; input.disabled = true; }
+        if (!input.disabled) { context.disabled.push(input); input.dataset.handheldBusy = String(context.sequence); input.disabled = true; }
       });
     }
     requests.set(event.detail.xhr, context);
@@ -81,7 +97,13 @@
   document.addEventListener("htmx:afterRequest", event => {
     const context = requests.get(event.detail?.xhr);
     if (!context) return;
-    context.disabled.forEach(input => { delete input.dataset.handheldBusy; if (input.isConnected && context.root.dataset.handheldRevoked !== "true") input.disabled = false; });
+    context.disabled.forEach(input => {
+      // A restored form may already belong to a newer request. Its controls
+      // must stay locked when cleanup from the old request arrives late.
+      if (input.dataset.handheldBusy !== String(context.sequence)) return;
+      delete input.dataset.handheldBusy;
+      if (input.isConnected && context.root.dataset.handheldRevoked !== "true") input.disabled = false;
+    });
     if (context.sequence !== requestSequence || context.root !== workspace()) return;
     const pending = document.getElementById("handheld-pending");
     if (pending) pending.hidden = true;
@@ -99,7 +121,8 @@
     importPairingLink();
     mountLifetime();
     const error = document.querySelector("#handheld-workspace .handheld-feedback.error");
-    if (error) { error.focus({preventScroll:true}); error.scrollIntoView({block:"nearest"}); }
+    const focusTarget = error || document.querySelector("#handheld-workspace [data-handheld-weight-review]");
+    if (focusTarget) { focusTarget.focus({preventScroll:true}); focusTarget.scrollIntoView({block:"nearest"}); }
   });
   function mountLifetime() {
     if (lifetimeTimer !== null) { window.clearTimeout(lifetimeTimer); lifetimeTimer = null; }
@@ -116,6 +139,9 @@
     else lifetimeTimer = window.setTimeout(expire, Math.min(remaining, 2147483647));
   }
   function resume() {
+    // A restored page is a new navigation intent. Ignore any response from a
+    // request that began before Back/Forward or a history restoration.
+    requestSequence++;
     const root = workspace();
     document.querySelectorAll("[data-handheld-busy]").forEach(input => {
       delete input.dataset.handheldBusy;

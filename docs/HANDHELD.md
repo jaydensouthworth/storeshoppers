@@ -28,7 +28,21 @@ Counted picking shares the manager's transactional service. It checks eligibilit
 
 Offline/network failures retain the visible draft without automatic replay. Controls lock only while the submitted request is pending. Older HTMX responses, including redirect headers, cannot replace a newer navigation intent. Invalid counts remain editable; stale conflicts preserve the unsaved count for explicit code re-review. Grant expiry/revocation locks further writes and stops the camera. Back/Forward and reconnect do not automatically resubmit a command.
 
-Weighted lines are visible and their identities can be checked, but actual grams still require the manager's existing reviewed measurement flow. The label identifies the product, never a package weight. Substitution/unavailable actions, structured customer approvals, phone weight review and phone completion/staging are the next bounded increments, not silently implied features.
+### Actual grams and stock consequences
+
+A matching weighed label exposes whole-gram entry. Enter actual grams, preview the current allocation, saved cents/kg rate, rounded line amount, price change, stock consequence and proposed working total, then explicitly confirm. The label never supplies a package weight. The phone uses the same internal measurement transaction as the manager, with its assignment grant checked in that transaction.
+
+Actual grams above the accepted allocation reserve only the difference. Below-allocation measurements require an explicit choice: physically returned/resalable stock may be restocked, while unavailable/damaged grams must be written off. There is no default disposition. Zero is an explicit measured-zero outcome, not an automatic unavailable report. Requested receipt/target/rate snapshots remain unchanged, and the proposed working total is not the final Ready total. Manager holds allow measurements but continue blocking final readiness.
+
+A preview does not reserve stock; confirmation rechecks availability and all versions. Failed confirmation keeps bounded actual/disposition/note fields but discards its approval. Explicit code re-review and a fresh weight preview are required. An exact old retry returns its originally saved grams without overwriting a later correction. Revocation is checked before any replay. The phone weight/report increment needs no new migration: schema14 already contains the scoped actor and replay records, and measured allocations exist since schema10.
+
+### Ask the manager to review an item
+
+The selected-line report form accepts a bounded reason (cannot find the item, damaged, or weight/stock question) and optional fake note. It opens the existing manager review hold if needed, preserves any earlier private hold reason, and adds an internal attributed report. It never changes picked quantity, actual measurement, allocations, inventory, original receipts or working totals. No scan is needed to report an absent item. The phone sees only its acknowledgment and the generic review state; the manager sees the report on the ticket and Needs attention queue.
+
+Only the manager resolves the underlying issue and releases the hold. Replaying an old report after release does not reopen it. A returned validation/conflict error retains the report with current state and a fresh key for an explicit new Send; an ambiguous transport retry still carries the original key. This is not a customer chat thread, persisted unavailable outcome, substitution consent or authority for the phone to release a hold.
+
+Substitution/unavailable outcomes, structured customer approvals and phone completion/staging remain staged increments.
 
 ## Camera and photo privacy
 
@@ -44,7 +58,7 @@ The aggregate `scripts/check.sh` includes:
 - Independent decoding of actual generated PNG pixels, using pinned ZXing for every seeded identity and additional long/catalog examples; rotation, JPEG, moderate blur/skew, low contrast and damaged/cropped negative fixtures
 - Scanner lifecycle tests with controlled media promises, pixels, timers, image decoding and native-result stubs
 - Handheld DOM/lifecycle tests covering stale responses and headers, offline drafts, expiry, Back/Forward, fragment cleanup, explicit clipboard copy and no browser storage of grants/codes
-- A real-process smoke test using separate desktop, phone and attacker cookie jars; rendered pairing/scan/count forms; wrong/unknown/matching codes; replay; unchanged inventory/receipt; private-note isolation; actual process restart; persisted grant/progress; and revocation before replay
+- Real-process smoke tests using separate desktop, phone and attacker cookie jars; rendered pairing/scan/count forms; wrong/unknown/matching codes; replay; unchanged inventory/receipt; private-note isolation; actual process restart; persisted grant/progress; and revocation before replay
 
 These are not evidence of physical camera optics. Live desktop/narrow-screen QA and Samsung S23 Ultra Chrome camera acceptance are separate release checks. The physical-device checklist is: allow/deny camera, rear lens and focus, desktop label at normal/large size, glare and low light, rotation, retry, app switch/lock/resume, photo import, wrong label, weighted label, manual fallback, reconnect/revocation and TalkBack. Never claim physical-device acceptance from a viewport or mocked camera test.
 
@@ -52,9 +66,15 @@ These are not evidence of physical camera optics. Live desktop/narrow-screen QA 
 
 The [project plan](https://chatgpt.com/space/page_6abd4f41ae448191a351b73099da8658) includes sourced workflow research and the detailed acceptance matrix. Next releases should preserve the same authorization/transaction boundaries:
 
-1. Phone measured-weight review and explicit manager escalation for exceptions
+1. Complete live connected-device acceptance for measured-weight review and item reporting
 2. Session-scoped customer/shopper message threads with separate message revisions, no external notifications or real personal data
 3. Structured substitution preferences and proposal/approve/reject transitions; chat alone is never consent
 4. Unavailable outcomes and explicit manager overrides with stock/audit invariants
 5. Staging and pickup handoff with separate authority after Ready, because Ready currently closes the picking assignment
 6. Batching only after each individual-order lifecycle is complete; no decorative productivity analytics
+
+## Release evidence, 2 October 2026
+
+The [schema14 phone foundation commit 3098829](https://github.com/jaydensouthworth/storeshoppers/commit/3098829b82ab9c27450b66a4aa7304383e56696d) is deployed. Its [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37049056947) passed all test/container/persistence steps. It passed 398 top-level Go tests, 98 JavaScript checks and 13 real-process suites. The five new deployed assets matched bytes; all 77 storefront records (72 products, four offers, five featured entries) were retained after QA cleanup.
+
+Live desktop and 389 CSS-pixel checks passed for the clear entry, independent welcome shell, light/dark layouts and product scan label/full-size PNG. Connected live picking could not be completed: Chromium returned ERR_BLOCKED_BY_CLIENT for the pairing POST. Its cause was not established and the blocked action was not retried through another route. The synthetic order was cancelled normally, its stock restored, and browser appearance/bounds restored. Actual S23 Ultra optics remain unverified. The measured-weight/report extension is being validated as the next increment; these earlier live checks do not establish its connected-phone acceptance.

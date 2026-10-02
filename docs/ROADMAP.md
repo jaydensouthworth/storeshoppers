@@ -49,13 +49,14 @@ HTTP/restart suites and Docker persistence checks. Live desktop and 388 CSS-pixe
 workflows passed. All 72 products, four sales and five featured entries were
 preserved; only the synthetic QA order/profile were cleaned up.
 
-**Current implementation, not yet a verified live release:** schema14 phone-first
+**Deployed foundation, with connected-browser acceptance still incomplete:** schema14 phone-first
 workspace, one-time assignment pairing, real product Code 128 labels,
 camera/photo/manual recognition and explicit counted-pick confirmation. Keep the
 public fake-data boundary and independent visitor/phone authorization. See
 [Handheld demo](HANDHELD.md) and the [expanded sourced project plan](https://chatgpt.com/space/page_6abd4f41ae448191a351b73099da8658).
-Local checks, review, CI and live desktop/narrow acceptance must pass before this
-increment is described as live; physical S23 Ultra optics remain a distinct check.
+The foundation passed [CI](https://github.com/jaydensouthworth/storeshoppers/actions/runs/37049056947), and live welcome/label desktop/narrow checks passed. Chromium blocked the pairing POST with ERR_BLOCKED_BY_CLIENT; no cause or permission requirement was inferred, no bypass was attempted, and connected camera/pick browser acceptance remains open. Physical S23 Ultra optics are a distinct check.
+
+**Current implementation candidate:** phone measured-weight preview/confirmation and selected-item manager-review reports, using existing schema14 records and shared transactions. Local independent-session process coverage includes exact/stale retries, stock/amount/receipt invariants, report privacy/release/replay, restart and revocation. Aggregate checks and independent review gate publication; this source candidate is not yet live.
 
 ### 1. Manager usability and explicit reset
 
@@ -122,8 +123,7 @@ photo decoding, manual fallback and shared counted-pick transactions. Scan recog
 never implies a pick. Private manager notes and unrelated visitor orders remain
 inaccessible. See [Handheld architecture and acceptance](HANDHELD.md).
 
-The staged follow-ups are phone measured-weight review and exceptions, in-app
-customer/shopper messaging, structured substitution preferences and approvals,
+The current increment adds phone measured-weight review and explicit item reports. The staged follow-ups are in-app customer/shopper messaging, structured substitution preferences and approvals,
 unavailable handling, staging/pickup handoff, then batch operations. Chat has its own
 revision and does not itself authorize a substitution. Ready closes the picking task,
 so staging requires an explicit new authority boundary. Real notifications, customer

@@ -14,12 +14,16 @@ const handheldCookie = "shop_handheld"
 const handheldPairCookie = "shop_handheld_pair"
 
 type HandheldView struct {
-	RecoveringPick                                                bool
+	RecoveringPick, RecoveringWeight                              bool
 	CSRF, CommandKey, Message, Error                              string
 	ConnectCode, CodeDraft, PickedDraft, FormatDraft, SourceDraft string
 	Task                                                          *HandheldTask
 	Selected                                                      *HandheldLine
 	Recognition                                                   *HandheldRecognition
+	WeightDraft                                                   *HandheldWeightDraft
+	WeightReview                                                  *HandheldWeightReview
+	ReportDraft                                                   *HandheldReportDraft
+	ReportKey                                                     string
 }
 type HandheldPairingView struct {
 	View
@@ -35,6 +39,9 @@ func (a *App) registerHandheldRoutes() {
 	a.mux.HandleFunc("POST /handheld/disconnect", a.handheldTransport(a.disconnectHandheld))
 	a.mux.HandleFunc("POST /handheld/scan", a.handheldTransport(a.scanHandheld))
 	a.mux.HandleFunc("POST /handheld/pick", a.handheldTransport(a.pickHandheld))
+	a.mux.HandleFunc("POST /handheld/weight/preview", a.handheldTransport(a.previewHandheldWeight))
+	a.mux.HandleFunc("POST /handheld/weight/confirm", a.handheldTransport(a.confirmHandheldWeight))
+	a.mux.HandleFunc("POST /handheld/report", a.handheldTransport(a.reportHandheldItem))
 	a.mux.HandleFunc("GET /manager/orders/{id}/phone", a.showHandheldPairing)
 	a.mux.HandleFunc("POST /manager/orders/{id}/phone/issue", a.issueHandheldPairing)
 	a.mux.HandleFunc("POST /manager/orders/{id}/phone/revoke", a.revokeHandheldPairing)
@@ -92,6 +99,9 @@ func (a *App) handheldPage(w http.ResponseWriter, r *http.Request, v HandheldVie
 	if v.CommandKey == "" {
 		v.CommandKey = token()
 	}
+	if v.ReportKey == "" {
+		v.ReportKey = token()
+	}
 	if v.SourceDraft == "" {
 		v.SourceDraft = "manual"
 	}
@@ -113,11 +123,16 @@ func (a *App) handheldPage(w http.ResponseWriter, r *http.Request, v HandheldVie
 			if lineID != 0 && v.Selected == nil {
 				v.Error = "That item is no longer on this task. Choose an item from the current list."
 				v.Recognition = nil
+				v.WeightReview = nil
 			}
 			// Preview and projection are each coherent transactions. A manager change
 			// between them must invalidate review, not attach old recognition to new data.
-			if v.Recognition != nil && (v.Selected == nil || r.PostForm.Get("version") != strconv.FormatInt(task.Version, 10) || r.PostForm.Get("pick_version") != strconv.FormatInt(v.Selected.PickVersion, 10) || r.PostForm.Get("assignment_version") != strconv.FormatInt(task.Assignment.Version, 10)) {
+			if (v.Recognition != nil || v.WeightReview != nil) && (v.Selected == nil || r.PostForm.Get("version") != strconv.FormatInt(task.Version, 10) || r.PostForm.Get("pick_version") != strconv.FormatInt(v.Selected.PickVersion, 10) || r.PostForm.Get("assignment_version") != strconv.FormatInt(task.Assignment.Version, 10)) {
 				v.Recognition = nil
+				v.WeightReview = nil
+				if v.WeightDraft != nil {
+					v.RecoveringWeight = true
+				}
 				v.Error = ErrConflict.Error()
 			}
 			// An explicit successful recovery review establishes a new command.
@@ -126,6 +141,16 @@ func (a *App) handheldPage(w http.ResponseWriter, r *http.Request, v HandheldVie
 			if r.URL.Path == "/handheld/scan" && v.RecoveringPick && v.Recognition != nil && v.Recognition.CanPick {
 				v.CommandKey = token()
 				v.RecoveringPick = false
+			}
+			if v.Selected != nil && v.Selected.SaleUnit == "g" && v.WeightDraft == nil {
+				actual := v.Selected.Allocated
+				if v.Selected.Measured {
+					actual = v.Selected.Picked
+				}
+				v.WeightDraft = &HandheldWeightDraft{Actual: strconv.FormatInt(actual, 10)}
+			}
+			if r.URL.Path == "/handheld/scan" && v.Recognition != nil && v.Recognition.CanMeasure {
+				v.RecoveringWeight = false
 			}
 			if v.PickedDraft == "" && v.Selected != nil {
 				suggested := v.Selected.Picked
@@ -145,6 +170,9 @@ func (a *App) handheldPage(w http.ResponseWriter, r *http.Request, v HandheldVie
 		w.Header().Set("X-Handheld-Error", "revoked")
 		v.Error = ErrHandheldAccess.Error()
 		v.Recognition = nil
+		v.WeightReview = nil
+		v.WeightDraft = nil
+		v.ReportDraft = nil
 		v.CodeDraft = ""
 		v.PickedDraft = ""
 	}
@@ -239,7 +267,10 @@ func handheldScanForm(r *http.Request) HandheldScan {
 	return c
 }
 func handheldDraft(r *http.Request) HandheldView {
-	v := HandheldView{RecoveringPick: r.URL.Path == "/handheld/pick" || r.PostForm.Get("resume_confirmation") == "1"}
+	v := HandheldView{RecoveringPick: r.URL.Path == "/handheld/pick" || r.PostForm.Get("resume_confirmation") == "1", RecoveringWeight: r.PostForm.Get("resume_weight") == "1"}
+	if v.RecoveringWeight {
+		v.WeightDraft = handheldWeightDraft(r)
+	}
 	for _, field := range []struct {
 		name  string
 		dst   *string

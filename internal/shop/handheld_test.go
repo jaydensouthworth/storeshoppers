@@ -146,7 +146,7 @@ func TestHandheldRecognizeConfirmAbsoluteReplayAndRollback(t *testing.T) {
 	c := handheldCommand(t, s, g, 0, 1)
 	fingerprint := fingerprintTest(t, s.db)
 	recognition, err := s.PreviewHandheldScan(g.Token, g.CSRF, c.HandheldScan)
-	if err != nil || !recognition.CanPick || recognition.State != "recognized" {
+	if err != nil || !recognition.CanPick || recognition.CanMeasure || recognition.State != "recognized" {
 		t.Fatal(recognition, err)
 	}
 	if fingerprintTest(t, s.db) != fingerprint {
@@ -219,7 +219,7 @@ func TestHandheldScanRecoveryCasesNeverMutate(t *testing.T) {
 			input.Format = tc.format
 			before := fingerprintTest(t, s.db)
 			recognition, err := s.PreviewHandheldScan(g.Token, g.CSRF, input)
-			if err != nil || recognition.State != tc.state || recognition.CanPick {
+			if err != nil || recognition.State != tc.state || recognition.CanPick || recognition.CanMeasure {
 				t.Fatal(recognition, err)
 			}
 			pick := c
@@ -236,7 +236,7 @@ func TestHandheldScanRecoveryCasesNeverMutate(t *testing.T) {
 		testExec(t, s, query, c.Code)
 		before := fingerprintTest(t, s.db)
 		r, err := s.PreviewHandheldScan(g.Token, g.CSRF, c.HandheldScan)
-		if err != nil || r.State != "archived" || r.CanPick {
+		if err != nil || r.State != "archived" || r.CanPick || r.CanMeasure {
 			t.Fatal(r, err)
 		}
 		if _, err = s.ConfirmHandheldPick(g.Token, g.CSRF, c); !errors.Is(err, ErrInvalid) {
@@ -259,7 +259,7 @@ func TestHandheldWeighedCodeRequiresExplicitWeight(t *testing.T) {
 	c := handheldCommand(t, s, g, 0, 1)
 	before := fingerprintTest(t, s.db)
 	r, err := s.PreviewHandheldScan(g.Token, g.CSRF, c.HandheldScan)
-	if err != nil || r.State != "weight-required" || r.CanPick {
+	if err != nil || r.State != "weight-required" || r.CanPick || !r.CanMeasure {
 		t.Fatal(r, err)
 	}
 	if _, err = s.ConfirmHandheldPick(g.Token, g.CSRF, c); !errors.Is(err, ErrHandheldWeight) {

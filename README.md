@@ -27,7 +27,8 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Dismissible demo guide pointing visitors to the Employees workspace
 - Separate phone-first in-store demo with one-time assignment pairing and independent customer/phone sessions
 - Real Code 128 product labels, user-triggered camera/photo decoding and manual fallback
-- Explicit replay-safe counted-pick confirmation with shared manager progress and revocable task access
+- Explicit replay-safe counted-pick and measured-weight confirmation with shared manager progress and revocable task access
+- Phone actual-gram amount/stock review and private item reports routed to the manager’s review queue
 - Persistent SQLite storage and locally bundled frontend assets
 
 This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Weighted selling uses reviewed actual grams and immutable requested receipts; its quantity and recovery rules are recorded in [Weighted products](docs/WEIGHTED_PRODUCTS.md). The phone workflow, privacy boundaries and physical-device acceptance checklist are in [Handheld demo](docs/HANDHELD.md); later connected workflows remain in the [ordered roadmap](docs/ROADMAP.md).
@@ -133,4 +134,4 @@ Schema 13 adds visitor-scoped simulated shopper profiles, availability and activ
 capacity. New assignments check eligibility transactionally, while current work and
 historical identities survive profile edits and archive/restore. See [Shoppers](docs/SHOPPERS.md).
 
-Schema 14 adds one-time, short-lived phone pairing and revocable assignment-scoped grants. The separate `/handheld/` workspace shares authorized counted picking with the manager, preserves stock and placed receipts, and supports local camera/photo decoding without uploads. Product pages expose real demo scan labels. Actual phone weight review, messaging, structured substitution approvals and staging remain staged follow-ups. See [Handheld demo](docs/HANDHELD.md).
+Schema 14 adds one-time, short-lived phone pairing and revocable assignment-scoped grants. The separate `/handheld/` workspace shares authorized counted picking with the manager, preserves stock and placed receipts, and supports local camera/photo decoding without uploads. Product pages expose real demo scan labels. Phone weight review and bounded item reports reuse the existing measurement and manager-hold rules. Messaging, structured substitution approvals and staging remain staged follow-ups. See [Handheld demo](docs/HANDHELD.md).

@@ -20,7 +20,7 @@ var (
 	ErrHandheldAttempts = errors.New("Too many connection attempts. Wait five minutes before trying again.")
 	ErrHandheldCSRF     = errors.New("This phone form expired. Refresh the phone workspace and review the task before trying again.")
 	ErrHandheldIssued   = errors.New("This connection code was already issued and cannot be displayed again. Use the code on the original screen, or deliberately create a new code.")
-	ErrHandheldWeight   = errors.New("This label identifies a weighed product, not its weight. Ask the desktop manager to enter actual grams and explicitly review and confirm the weight.")
+	ErrHandheldWeight   = errors.New("This label identifies a weighed product, not its weight. Enter actual grams from the scale, then explicitly review and confirm the weight.")
 )
 
 const handheldInvitationTTL = 10 * time.Minute
@@ -47,7 +47,7 @@ type HandheldTask struct {
 }
 type HandheldRecognition struct {
 	State, Code, Source, Format, Message, ProductName string
-	CanPick                                           bool
+	CanPick, CanMeasure                               bool
 }
 type HandheldScan struct {
 	LineID, AssignmentVersion, Version, PickVersion int64
@@ -554,6 +554,7 @@ func recognizeHandheldTx(tx *sql.Tx, g handheldGrant, c HandheldScan) (HandheldR
 	}
 	if saleUnit == "g" {
 		result.State = "weight-required"
+		result.CanMeasure = true
 		result.Message = ErrHandheldWeight.Error()
 		return result, nil
 	}
