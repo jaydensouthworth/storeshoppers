@@ -110,17 +110,28 @@
 .featured-heading h2 { font-size: 30px; margin: 0; }
 .featured-heading > span { max-width: 260px; font-size: 11px; color: var(--muted); }
 .featured-products { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border-top: 1px solid var(--line); }
-.featured-product { display: grid; grid-template-columns: 70px minmax(0,1fr); gap: 12px; padding: 20px 15px; border-right: 1px solid var(--line); }
+.featured-product { display: grid; grid-template-columns: 70px minmax(0,1fr); column-gap: 12px; padding: 20px 15px; border-right: 1px solid var(--line); }
 .featured-product:first-child { padding-left: 0; }
 .featured-product:last-child { border-right: 0; padding-right: 0; }
-.featured-art svg { width: 70px; height: 85px; }
-.featured-copy { min-width: 0; }
-.featured-copy > p:first-child { font-size: 9px; text-transform: uppercase; margin: 0 0 6px; }
-.featured-copy h3 { font-size: 16px; line-height: 1.2; margin-bottom: 10px; overflow-wrap: anywhere; }
-.featured-copy .featured-price { font-size: 11px; margin: 0 0 12px; }
+.featured-art svg { display: block; width: 70px; height: 85px; }
+/* The fallback keeps actions at the foot of each card without sizing text. */
+.featured-copy { min-width: 0; display: grid; grid-template-rows: auto auto auto 1fr auto; }
+.featured-category { grid-row: 1; align-self: start; font-size: 9px; text-transform: uppercase; margin: 0 0 6px; }
+.featured-copy h3 { grid-row: 2; align-self: start; font-size: 16px; line-height: 1.2; margin: 0 0 10px; overflow-wrap: anywhere; }
+.featured-copy .featured-price { grid-row: 3; align-self: start; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 11px; margin: 0 0 12px; }
+.featured-effective,.featured-discount { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
 .featured-price strong { font-size: 16px; }
 .featured-price del { color: var(--muted); }
+.featured-copy .offer-ends { grid-row: 4; align-self: start; margin: 0 0 10px; }
+.featured-copy > form { grid-row: 5; align-self: start; margin: 0; }
 .featured-copy .secondary { width: 100%; min-height: 44px; padding: 8px; font-size: 10px; }
+/* Share natural category/title/price/date/action tracks within each shelf row.
+   An absent sale date leaves its track empty; neighbors determine its size. */
+@supports (grid-template-rows: subgrid) {
+  .featured-product { grid-row: span 5; grid-template-rows: subgrid; row-gap: 0; }
+  .featured-art { grid-column: 1; grid-row: 1/-1; }
+  .featured-copy { grid-column: 2; grid-row: 1/-1; grid-template-rows: subgrid; row-gap: 0; }
+}
 @media(max-width:1100px) {
   .featured-products { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .featured-product { border-bottom: 1px solid var(--line); }
@@ -130,7 +141,7 @@
 @media(max-width:600px) {
   .featured-heading h2 { font-size: 27px; }
   .featured-products { grid-template-columns: 1fr; }
-  .featured-product { padding: 17px 0; border-right: 0; grid-template-columns: 80px minmax(0,1fr); gap: 18px; }
+  .featured-product { padding: 17px 0; border-right: 0; grid-template-columns: 80px minmax(0,1fr); column-gap: 18px; }
   .featured-art svg { width: 80px; height: 100px; }
   .featured-copy h3 { font-size: 18px; }
   .featured-copy .secondary { width: auto; min-width: 150px; font-size: 11px; }

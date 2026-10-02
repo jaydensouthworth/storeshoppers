@@ -23,9 +23,10 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Manager pick tickets with per-item quantities, current assignment links and guarded readiness
 - Visible form recovery after manager login, retained quantity drafts and no automatic mutation replay
 - Customer status refresh with a normal HTML fallback
+- Persistent System/Light/Dark appearance across storefront and manager pages
 - Persistent SQLite storage and locally bundled frontend assets
 
-This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Weighted selling, dark mode and the later phone/barcode workflow remain in the [ordered roadmap](docs/ROADMAP.md).
+This is a portfolio project with fake products and demo orders. No payment, address, email or real fulfillment is involved. Weighted selling and the later phone/barcode workflow remain in the [ordered roadmap](docs/ROADMAP.md).
 
 ## Architecture
 
@@ -38,6 +39,8 @@ One Go server renders HTML with `html/template`; HTMX enhances the forms without
 - Checkout quotes require another review after prices change; unrelated stock updates do not invalidate prices
 - Order items preserve product names and prices as immutable snapshots
 - CSRF tokens, session ownership and server-side manager checks protect writes
+
+See [Appearance preferences](docs/DARK_MODE.md) for theme behavior and verification.
 
 See [Architecture](docs/ARCHITECTURE.md) for the design and its limits, and [Manager workflows](docs/MANAGER_WORKFLOWS.md) for item controls and interrupted-form recovery.
 

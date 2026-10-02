@@ -1,0 +1,268 @@
+/* Color roles keep navy signage, yellow labels and local illustration colors
+   independent from the foreground used on dark paper. No image inversion. */
+:root {
+  color-scheme: light;
+  --brand-ink: #142b59;
+  --brand-red: #c72b21;
+  --selection-muted: #3e4b61;
+  --theme-text: #142b59;
+  --theme-page: #ffffff;
+  --theme-surface: #ffffff;
+  --theme-muted: #4c5a71;
+  --theme-line: #bac4d4;
+  --theme-wash: #e7f0ff;
+  --theme-accent: #c72b21;
+  --theme-input: #ffffff;
+  --theme-input-border: #142b59;
+  --theme-placeholder: #677184;
+  --theme-disabled: #e7eaf0;
+  --theme-disabled-text: #536074;
+  --theme-disabled-border: #8490a4;
+  --theme-quiet: #edf0f5;
+  --theme-highlight: #ffe449;
+  --theme-highlight-heading: #142b59;
+  --theme-subtle-highlight: #fffbed;
+  --theme-error-surface: #fff0ed;
+  --theme-error-text: #8b241d;
+  --theme-warning-text: #a12a1f;
+  --theme-complete-surface: #e9edf3;
+  --theme-complete-text: #3e4b61;
+  --theme-complete-border: #64718a;
+  --theme-art-paper: #ffffff;
+  --theme-art-blue: #e7f0ff;
+  --theme-art-backdrop: transparent;
+  --theme-focus: #c72b21;
+  --theme-nav-border: #142b59;
+  --ink: var(--theme-text);
+  --paper: var(--theme-page);
+  --muted: var(--theme-muted);
+  --line: var(--theme-line);
+  --blue-wash: var(--theme-wash);
+  --red: var(--theme-accent);
+}
+
+/* With scripts disabled, the site still follows the operating-system theme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --theme-text: #e8eefb;
+    --theme-page: #101b2d;
+    --theme-surface: #17263d;
+    --theme-muted: #b0bfd6;
+    --theme-line: #596e8e;
+    --theme-wash: #223650;
+    --theme-accent: #ff9589;
+    --theme-input: #122139;
+    --theme-input-border: #8299ba;
+    --theme-placeholder: #a6b8d2;
+    --theme-disabled: #293951;
+    --theme-disabled-text: #bcc9dd;
+    --theme-disabled-border: #6d809e;
+    --theme-quiet: #293951;
+    --theme-highlight: #223650;
+    --theme-highlight-heading: #ffe449;
+    --theme-subtle-highlight: #223650;
+    --theme-error-surface: #40252c;
+    --theme-error-text: #ffc1b7;
+    --theme-warning-text: #ffb1a5;
+    --theme-complete-surface: #293951;
+    --theme-complete-text: #c7d5eb;
+    --theme-complete-border: #8299ba;
+    --theme-art-paper: #d6e1f3;
+    --theme-art-blue: #b8cee9;
+    --theme-art-backdrop: #d6e1f3;
+    --theme-focus: #ffb1a5;
+    --theme-nav-border: #8299ba;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --theme-text: #e8eefb;
+  --theme-page: #101b2d;
+  --theme-surface: #17263d;
+  --theme-muted: #b0bfd6;
+  --theme-line: #596e8e;
+  --theme-wash: #223650;
+  --theme-accent: #ff9589;
+  --theme-input: #122139;
+  --theme-input-border: #8299ba;
+  --theme-placeholder: #a6b8d2;
+  --theme-disabled: #293951;
+  --theme-disabled-text: #bcc9dd;
+  --theme-disabled-border: #6d809e;
+  --theme-quiet: #293951;
+  --theme-highlight: #223650;
+  --theme-highlight-heading: #ffe449;
+  --theme-subtle-highlight: #223650;
+  --theme-error-surface: #40252c;
+  --theme-error-text: #ffc1b7;
+  --theme-warning-text: #ffb1a5;
+  --theme-complete-surface: #293951;
+  --theme-complete-text: #c7d5eb;
+  --theme-complete-border: #8299ba;
+  --theme-art-paper: #d6e1f3;
+  --theme-art-blue: #b8cee9;
+  --theme-art-backdrop: #d6e1f3;
+  --theme-focus: #ffb1a5;
+  --theme-nav-border: #8299ba;
+}
+
+:focus-visible { outline-color: var(--theme-focus); }
+input, select, textarea {
+  color: var(--theme-text);
+  background: var(--theme-input);
+  border-color: var(--theme-input-border);
+  accent-color: var(--brand-red);
+}
+input::placeholder, textarea::placeholder { color: var(--theme-placeholder); opacity: 1; }
+.catalog-form-grid input[readonly] { background: var(--theme-quiet); }
+button:disabled, input:disabled, select:disabled, textarea:disabled {
+  color: var(--theme-disabled-text);
+  background: var(--theme-disabled);
+  border-color: var(--theme-disabled-border);
+}
+.panel, .basket-docket, .receipt, .secondary, .add-button, .shopper-card,
+.order-assignment, .order-history, .weekly-offer, .weekly-basket-bar { background: var(--theme-surface); }
+.secondary, .add-button { color: var(--theme-text); }
+.basket-docket::after {
+  background: linear-gradient(135deg, transparent 50%, var(--theme-surface) 50%) 0 0 / 12px 12px,
+    linear-gradient(45deg, var(--theme-surface) 50%, transparent 50%) 0 0 / 12px 12px;
+}
+.button {
+  background: var(--brand-ink);
+  color: #fff;
+  border-color: var(--theme-nav-border);
+}
+.button:hover:not(:disabled) { background: var(--brand-red); border-color: var(--brand-red); }
+.secondary:hover:not(:disabled), .add-button:hover:not(:disabled) {
+  background: var(--yellow);
+  color: var(--brand-ink);
+}
+
+/* Large paper notices turn navy; small yellow labels keep navy lettering. */
+.circular-feature, .empty.large, .notice, .order-next, .demo-note,
+.hold-banner, .practice-banner, .ticket-actions, .basket-hold-card {
+  background: var(--theme-highlight);
+}
+.circular-feature h1, .order-next h2, .ticket-actions h2, .basket-hold-card h2 {
+  color: var(--theme-highlight-heading);
+}
+.manager-main .manager-boundary, .stock-selection { background: var(--theme-subtle-highlight); }
+.skip, .brand-stamp, .basket-link > span, .status-Placed, .hold-state-live,
+.shopper-initials, .sale-status-Active, .demo-password-hint, .nutrition-disclaimer,
+.detail-note-mark, .phone-basket b, .is-picked .pick-check,
+.catalog-product[open] > summary .catalog-status {
+  color: var(--brand-ink);
+  background: var(--yellow);
+  border-color: var(--brand-ink);
+}
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator {
+  color: var(--brand-ink);
+  border-color: var(--brand-ink);
+}
+.notice.error, .hold-state-review, .override-cancel[open] > summary {
+  color: var(--theme-error-text);
+  background: var(--theme-error-surface);
+  border-color: var(--theme-accent);
+}
+.hold-review { color: var(--theme-error-text); background: var(--theme-error-surface) !important; }
+.hold-review h2 { color: var(--theme-error-text); }
+.inline-error, .line-resolution { color: var(--theme-warning-text) !important; }
+.stock-low, .archive-button, .promotion-cancel summary, .override-cancel > summary,
+.working-remove > summary, .unsaved-quantity {
+  color: var(--theme-warning-text);
+}
+.archive-button { border-color: var(--theme-warning-text); }
+.status-Ready { color: var(--theme-text); background: var(--theme-surface); }
+.status-Completed {
+  color: var(--theme-complete-text);
+  background: var(--theme-complete-surface);
+  border-color: var(--theme-complete-border);
+}
+.catalog-product.is-archived .catalog-status, .compact-product-name > .pill,
+.sale-status-Expired, .sale-status-Cancelled { background: var(--theme-quiet); }
+.pick-progress, .pick-progress::-webkit-progress-bar { background: var(--theme-quiet); }
+
+/* Navy signs always retain light text, even when page text becomes light. */
+.demo-strip, .manager-sidebar, .manager-menu, .phone-basket, .status-Picking,
+.weekly-circular .circular-kicker, .weekly-shop-link, .detail-department, .detail-side-note,
+.working-item-picked .working-pick-count, .working-add > summary,
+.stock-tabs a[aria-current], .promotion-tabs a[aria-current],
+.shopper-queue-views a[aria-current] {
+  background: var(--brand-ink);
+  color: #fff;
+  border-color: var(--theme-nav-border);
+}
+.manager-links a[aria-current] { color: var(--brand-ink); background: var(--yellow); }
+.manager-links a[aria-current]:focus-visible { outline-color: var(--brand-red); outline-offset: -5px; }
+.manager-lock button:hover { color: var(--brand-ink); }
+.stock-tabs a:hover { background: var(--theme-wash); color: var(--theme-text); }
+.phone-basket { border-top-color: var(--yellow); box-shadow: 0 -3px 0 var(--theme-page); }
+
+/* Red stickers and prices are different roles: white stays on red stickers,
+   while free-standing red prices use the brighter dark-theme accent. */
+.price-label, .product-on-sale .price-label, .weekly-offer-art > span,
+.product-sale-note > span, .basket-sale { color: #fff; background: var(--brand-red); }
+.sold-out { color: var(--brand-red); background: var(--theme-art-paper); border-color: var(--brand-red); }
+.art-apple, .art-pasta, .art-razor { background: var(--yellow); }
+.art-leaf, .art-milk, .art-jam { background: var(--theme-art-blue); }
+.art-bread, .art-egg, .art-oil { background: var(--theme-art-paper); }
+.category-tag, .detail-art-stamp { color: var(--brand-ink); border-color: var(--brand-ink); }
+.detail-art { background: var(--yellow); }
+.detail-art.art-deodorant { background: #8adbe4; }
+.illustration-option { background: var(--theme-art-paper); color: var(--brand-ink); }
+.illustration-option:has(input:checked) { background: var(--yellow); border-color: var(--brand-ink); }
+.illustration-option input { accent-color: var(--brand-ink); }
+.illustration-option :focus-visible { outline-color: var(--brand-ink); }
+.featured-art svg, .weekly-empty-art > svg { background: var(--theme-art-backdrop); }
+.product-art-link:focus-visible { outline-color: var(--brand-ink); }
+.detail-side-note .text-link:focus-visible { outline-color: var(--yellow); }
+
+/* Product choices keep the familiar yellow selection without pale text. */
+.product-choice:has(input:checked) {
+  background: var(--yellow);
+  color: var(--brand-ink);
+  border-color: var(--brand-ink);
+}
+.product-choice:has(input:checked) small { color: var(--selection-muted); }
+.product-choice input { accent-color: var(--brand-ink); }
+.product-choice:focus-within { outline-color: var(--theme-focus); }
+.product-choice:has(input:checked):focus-within { outline-color: var(--brand-red); }
+
+/* An inline label and 44px control fit the existing header height. The same
+   850px breakpoint as the base header places navigation below brand + theme. */
+.site-header { gap: 20px; }
+.site-header nav { margin-left: auto; }
+.theme-control {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto 92px;
+  align-items: center;
+  gap: 0 7px;
+}
+.theme-control[hidden] { display: none; }
+.theme-control label { margin: 0; font-size: 10px; }
+.theme-control select { width: 92px; min-height: 44px; padding: 8px; font-size: 12px; }
+.theme-status { grid-column: 1 / -1; max-width: 136px; font-size: 10px; line-height: 1.4; color: var(--theme-muted); }
+.theme-status:empty { display: none; }
+@media (min-width: 851px) and (max-width: 1000px) {
+  .site-header { gap: 16px; }
+  .site-header nav { gap: 16px; }
+  .site-header nav .manager-link { padding-left: 16px; }
+}
+@media (max-width: 850px) {
+  .theme-control { order: 1; margin-left: auto; }
+  .site-header nav { order: 2; flex-basis: 100%; width: 100%; }
+}
+@media (max-width: 600px) {
+  .site-header { gap: 18px 10px; }
+  .theme-control select { font-size: 16px; }
+  .site-header nav { flex-wrap: wrap; }
+}
+@media (max-width: 360px) {
+  .theme-control { grid-template-columns: 92px; }
+  .theme-control label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .product:hover .product-art svg { transform: none; }
+}

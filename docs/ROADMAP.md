@@ -14,7 +14,7 @@ Each phase is accepted only when the intended task works end to end, relevant in
 
 ## Verified live foundation
 
-As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/8af4815cab1d90133526dcbf67817e6e1046918b). This checkpoint contains 121 verified published files.
+As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdadf8-2-25-70-220.sslip.io/), [published source](https://github.com/jaydensouthworth/storeshoppers/tree/af1e468813659415e1b20be025f08e4fe0062b16). This checkpoint contains 123 verified published files.
 
 - 72 fake products; configurable categories/types; create, edit, archive and restore; dedicated editors and a manager sidebar
 - Safe bundled illustration picker, immutable SKU and separate demo-local product codes; uploads, generated scan labels and camera scanning are not implemented
@@ -28,11 +28,11 @@ As of 2 October 2026: [live demo](https://instoreshopperexample-site-3az7di-fdad
 - Versioned populated-data migrations and restart persistence; server-side validation, CSRF and non-negative transactional inventory
 - The public known-password hint appears only when the configured password matches the demo value; this remains intentionally limited demo access
 
-Verification for this release: 240 top-level Go tests, 9 JavaScript interaction tests, 83.8% core coverage, race checks, vet, build, seven HTTP/restart smoke suites and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36957257054). Live desktop and 402 CSS-pixel actions covered basket edits, visible expired-form feedback, direct Mark picked/start, partial picking, searched substitutions, working-item additions/removals and own-order cancellation with stock audit. Physical-phone testing and a fuller accessibility audit remain open.
+Verification for this release: 245 top-level Go tests, 9 JavaScript interaction tests, 83.8% core coverage, race checks, vet, build, seven HTTP/restart smoke suites and [passing CI with Docker checks](https://github.com/jaydensouthworth/storeshoppers/actions/runs/36961461552). Live desktop and 402 CSS-pixel actions covered basket edits, visible expired-form feedback, direct Mark picked/start, partial picking, searched substitutions, working-item additions/removals and own-order cancellation with stock audit. Physical-phone testing and a fuller accessibility audit remain open.
 
 ## Ordered implementation backlog
 
-**Current priority:** improve the weekly-sales composition after the verified manager correction. Routine item controls are now directly on working-list rows, product choice uses bounded search, unnecessary notes/stock questions are removed, and expired forms show visible recovery. See [Manager workflows](MANAGER_WORKFLOWS.md). The current live promotion list became empty across deployment; verify hosting persistence without overwriting visitor changes. After this headline improvement, resume the retained weighted, image, theme and manager-workflow backlog in tested phases.
+**Current priority:** align the secondary Featured strip for mixed regular/sale products and integrate the retained persistent theme control. The compact circular is live: 306 CSS pixels at 1366×768 and 1440×901, with catalog controls/products above the fold. Routine manager controls and visible stale-form recovery are verified; see [Manager workflows](MANAGER_WORKFLOWS.md). The missing hosting volume was added and exact sale/audit records survived a deployment. Continue compatibility safeguards, weighted execution, safe image uploads and remaining manager workflows in tested phases without overwriting visitor changes.
 
 ### 1. Manager usability and explicit reset
 

@@ -1,5 +1,5 @@
 {{define "layout"}}<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"historyCacheSize":0}'><title>{{.Title}} · Neighborhood Market</title><link rel="preload" href="/static/market-condensed-bold.woff" as="font" type="font/woff" crossorigin><link rel="stylesheet" href="/static/app.css"><link rel="stylesheet" href="/static/stock.css"><link rel="stylesheet" href="/static/shoppers.css"><link rel="stylesheet" href="/static/promotions.css"><link rel="stylesheet" href="/static/product_details.css"><link rel="stylesheet" href="/static/manager_workflows.css"><script src="/static/htmx.min.js" defer></script><script src="/static/app.js" defer></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"historyCacheSize":0}'><title>{{.Title}} · Neighborhood Market</title><meta name="color-scheme" content="light dark"><script src="/static/theme.js"></script><link rel="preload" href="/static/market-condensed-bold.woff" as="font" type="font/woff" crossorigin><link rel="stylesheet" href="/static/app.css"><link rel="stylesheet" href="/static/stock.css"><link rel="stylesheet" href="/static/shoppers.css"><link rel="stylesheet" href="/static/promotions.css"><link rel="stylesheet" href="/static/product_details.css"><link rel="stylesheet" href="/static/manager_workflows.css"><link rel="stylesheet" href="/static/theme.css"><script src="/static/htmx.min.js" defer></script><script src="/static/app.js" defer></script></head>
 <body><a class="skip" href="#main">Skip to content</a>{{template "workspace" .}}</body></html>{{end}}
 
 {{define "workspace"}}
@@ -8,6 +8,7 @@
   <header class="site-header">
     <a class="brand" href="/" aria-label="Neighborhood Market home"><span class="brand-stamp" aria-hidden="true">N/M</span><span class="brand-name">NEIGHBORHOOD<span>MARKET</span></span></a>
     <nav aria-label="Main navigation"><a href="/" {{if or (eq .Section "store") (eq .Section "product") (eq .Section "product-unavailable")}}aria-current="page"{{end}}>Shop the shelves</a><a href="/orders" {{if or (eq .Section "orders") (eq .Section "order")}}aria-current="page"{{end}}>My orders</a><a class="basket-link" href="/cart" {{if eq .Section "cart"}}aria-current="page"{{end}}>Basket <span>{{.Basket.Count}}</span></a><a class="manager-link" href="/manager" {{if or (eq .Section "manager") (eq .Section "picking") (or (eq .Section "catalog") (eq .Section "catalog-examples")) (eq .Section "baskets") (eq .Section "basket") (eq .Section "shoppers") (eq .Section "promotions") (eq .Section "featured")}}aria-current="page"{{end}}>Employees <span aria-hidden="true">→</span></a></nav>
+    {{template "theme-control" .}}
   </header>
   <main id="main" tabindex="-1" {{if or (eq .Section "manager") (eq .Section "picking") (or (eq .Section "catalog") (eq .Section "catalog-examples")) (eq .Section "baskets") (eq .Section "basket") (eq .Section "shoppers") (eq .Section "promotions") (eq .Section "featured")}}class="manager-layout"{{end}}>
     <div id="pending" class="htmx-indicator" role="status">Updating the market…</div><div id="network-error" class="notice error" role="alert" tabindex="-1" hidden>We couldn’t reach the market. Try again when the connection returns.</div>
@@ -280,3 +281,5 @@
 {{end}}
 
 {{define "catalog-filter-context"}}{{range .Fields}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}{{end}}
+
+{{define "theme-control"}}<div class="theme-control" data-theme-control hidden><label for="theme-choice">Theme</label><select id="theme-choice" data-theme-select aria-describedby="theme-status"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select><span id="theme-status" class="theme-status" data-theme-status role="status" aria-live="polite"></span></div>{{end}}
