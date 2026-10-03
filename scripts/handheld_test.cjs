@@ -6,9 +6,9 @@ const source = fs.readFileSync('web/static/handheld.js','utf8');
 function harness({hash='', online=true, clipboardFail=false}={}) {
  const listeners=new Map(), windowListeners=new Map(), ids=new Map(), emitted=[], history=[], copied=[], timers=new Map(), clock={now:100000};let timerID=0;
  let current=null;
- const make=id=>({id,dataset:{},value:'',disabled:false,hidden:true,isConnected:true,textContent:'',focus(){this.focused=true;},select(){this.selected=true;},scrollIntoView(){this.scrolled=true;}});
- const note=make('pair-note'), copyStatus=make('copy-status'), error=make('error'), review=make('review');
- const doc={readyState:'loading',addEventListener(n,f){if(!listeners.has(n))listeners.set(n,[]);listeners.get(n).push(f);},getElementById(id){return id==='handheld-workspace'?current:ids.get(id)||null;},querySelector(s){if(s==='[data-pairing-link-note]')return note;if(s==='[data-copy-pairing-status]')return copyStatus;if(s==='#handheld-workspace .handheld-feedback.error')return this.errorVisible?error:null;if(s==='#handheld-workspace [data-handheld-weight-review]')return this.reviewVisible?review:null;return null;},querySelectorAll(s){if(s==="[data-handheld-busy]")return current?current.forms.flatMap(form=>form.inputs).filter(i=>i.dataset.handheldBusy):[];return s==="form[data-handheld-authorized]"&&current?current.forms.filter(form=>form.authorized):[];},dispatchEvent(e){emitted.push(e.type);}};
+ const make=id=>({id,dataset:{},value:'',disabled:false,hidden:true,isConnected:true,textContent:'',focus(){this.focused=true;},select(){this.selected=true;},scrollIntoView(options){this.scrolled=true;this.scrollOptions=options;}});
+ const note=make('pair-note'), copyStatus=make('copy-status'), error=make('error'), review=make('review'), itemHeading=make('handheld-item-title'), picked=make('handheld-picked');
+ const doc={readyState:'loading',addEventListener(n,f){if(!listeners.has(n))listeners.set(n,[]);listeners.get(n).push(f);},getElementById(id){return id==='handheld-workspace'?current:ids.get(id)||null;},querySelector(s){if(s==='[data-pairing-link-note]')return note;if(s==='[data-copy-pairing-status]')return copyStatus;if(s==='#handheld-workspace .handheld-feedback.error')return this.errorVisible?error:null;if(s==='#handheld-workspace [data-handheld-weight-review]')return this.reviewVisible?review:null;if(s==='#handheld-workspace #handheld-item-title')return this.itemVisible?itemHeading:null;if(s==='#handheld-workspace #handheld-picked')return this.pickedVisible?picked:null;return null;},querySelectorAll(s){if(s==="[data-handheld-busy]")return current?current.forms.flatMap(form=>form.inputs).filter(i=>i.dataset.handheldBusy):[];return s==="form[data-handheld-authorized]"&&current?current.forms.filter(form=>form.authorized):[];},dispatchEvent(e){emitted.push(e.type);}};
  const win={setTimeout(f,ms){const id=++timerID;timers.set(id,{f,ms});return id;},clearTimeout(id){timers.delete(id);},location:{hash,pathname:'/handheld/',search:''},history:{replaceState(a,b,c){history.push(c);win.location.hash='';}},addEventListener(n,f){if(!windowListeners.has(n))windowListeners.set(n,[]);windowListeners.get(n).push(f);}};
  const navigator={onLine:online,clipboard:{async writeText(v){if(clipboardFail)throw Error('denied');copied.push(v);}}};
  const pairing=make('pairing-code'),copyInput=make('phone-pairing-code');ids.set(pairing.id,pairing);ids.set(copyInput.id,copyInput);ids.set('handheld-network',make('handheld-network'));ids.set('handheld-pending',make('handheld-pending'));
@@ -30,7 +30,7 @@ function harness({hash='', online=true, clipboardFail=false}={}) {
  async function asyncFire(n,target){const e=event({},target);for(const f of listeners.get(n)||[])await f(e);return e;}
  function winFire(n){for(const f of windowListeners.get(n)||[])f({});}
  function begin(root=current,header=null,link=false,form=root.form){const xhr={getResponseHeader:()=>header};const elt=link?{owner:root,matches:()=>false,closest:()=>null}:form;fire('htmx:beforeRequest',{elt,xhr});return xhr;}
- return {doc,win,navigator,timers,clock,ids,pairing,copyInput,copyStatus,note,error,review,history,copied,emitted,install,fire,asyncFire,winFire,begin,get root(){return current;}};
+ return {doc,win,navigator,timers,clock,ids,pairing,copyInput,copyStatus,note,error,review,itemHeading,picked,history,copied,emitted,install,fire,asyncFire,winFire,begin,get root(){return current;}};
 }
 test('pairing fragment fills only the visible connect draft and is cleared without redemption or persistence',()=>{
  const h=harness({hash:'#pair=ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ'});h.fire('DOMContentLoaded');
@@ -195,4 +195,27 @@ test('an undo response cannot replace newer manual navigation or its URL',()=>{
  assert.equal(h.fire('htmx:beforeSwap',{xhr:undo,shouldSwap:true}).detail.shouldSwap,false);
  assert.equal(h.fire('htmx:beforeOnLoad',{xhr:navigation}).prevented,false);
  assert.equal(h.fire('htmx:beforeSwap',{xhr:navigation,shouldSwap:true}).detail.shouldSwap,true);
+});
+
+
+function itemNavigation(h, href='/handheld/?line=15') {
+ const xhr={getResponseHeader(){return null;}};
+ const elt={owner:h.root,matches:()=>false,closest:()=>null,getAttribute:name=>name==='href'?href:null};
+ h.fire('htmx:beforeRequest',{elt,xhr});return xhr;
+}
+test('manual item navigation focuses the heading with header clearance and no keyboard autofocus',()=>{
+ const h=harness(),xhr=itemNavigation(h);h.install();h.doc.itemVisible=true;h.doc.pickedVisible=true;
+ h.fire('htmx:afterSwap',{target:{id:'handheld-workspace'},xhr});
+ assert.ok(h.itemHeading.focused&&h.itemHeading.scrolled);assert.equal(h.itemHeading.scrollOptions.block,'start');
+ assert.equal(h.picked.focused,undefined);assert.equal(h.picked.selected,undefined);
+ const template=fs.readFileSync('web/templates/handheld.html','utf8'),css=fs.readFileSync('web/static/handheld.css','utf8');
+ assert.match(template,/<h2 id="handheld-item-title" tabindex="-1">/);assert.match(css,/#handheld-item-title\s*\{[^}]*scroll-margin-top:96px/);
+});
+test('manual item focus respects newer navigation, error priority and history restoration',()=>{
+ const h=harness(),old=itemNavigation(h);const latest=itemNavigation(h,'/handheld/');
+ h.doc.itemVisible=true;h.fire('htmx:afterSwap',{target:{id:'handheld-workspace'},xhr:old});assert.equal(h.itemHeading.focused,undefined);
+ h.fire('htmx:afterSwap',{target:{id:'handheld-workspace'},xhr:latest});assert.equal(h.itemHeading.focused,undefined);
+ h.fire('htmx:historyRestore');assert.equal(h.itemHeading.focused,undefined);
+ const item=itemNavigation(h);h.doc.errorVisible=true;h.fire('htmx:afterSwap',{target:{id:'handheld-workspace'},xhr:item});
+ assert.ok(h.error.focused);assert.equal(h.itemHeading.focused,undefined);
 });

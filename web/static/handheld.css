@@ -190,3 +190,6 @@
 .handheld-is-picking .handheld-kicker { margin-bottom:6px; }
 .handheld-is-picking .handheld-metrics { margin:10px 0; }
 .handheld-is-picking .handheld-main { padding-top:12px; }
+
+/* Manual item navigation lands on its heading, clear of the compact header. */
+#handheld-item-title { scroll-margin-top:96px; }

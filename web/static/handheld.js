@@ -68,7 +68,8 @@
       notice("You’re offline. Nothing was sent. Your entered values are kept; reconnect and refresh the task before confirming any changes.");
       return;
     }
-    const context = {root, disabled:[], sequence:++requestSequence};
+    const itemNavigation = !form && /^\/handheld\/\?line=[1-9][0-9]*$/.test(element.getAttribute?.("href") || "");
+    const context = {root, disabled:[], sequence:++requestSequence, itemNavigation};
     // HTMX has already serialized the request. Lock this form during its one
     // request so new edits cannot be mistaken for the submitted confirmation.
     if (form?.matches?.("[data-handheld-form]")) {
@@ -121,8 +122,10 @@
     importPairingLink();
     mountLifetime();
     const error = document.querySelector("#handheld-workspace .handheld-feedback.error");
-    const focusTarget = error || document.querySelector("#handheld-workspace [data-handheld-flow-focus]") || document.querySelector("#handheld-workspace [data-handheld-weight-review]") || document.querySelector("#handheld-workspace #handheld-picked");
-    if (focusTarget) { focusTarget.focus({preventScroll:true}); if (focusTarget.id === "handheld-picked") focusTarget.select?.(); focusTarget.scrollIntoView({block:"nearest"}); }
+    const context = requests.get(event.detail?.xhr);
+    const itemHeading = context?.itemNavigation && context.sequence === requestSequence ? document.querySelector("#handheld-workspace #handheld-item-title") : null;
+    const focusTarget = error || document.querySelector("#handheld-workspace [data-handheld-flow-focus]") || document.querySelector("#handheld-workspace [data-handheld-weight-review]") || itemHeading || document.querySelector("#handheld-workspace #handheld-picked");
+    if (focusTarget) { focusTarget.focus({preventScroll:true}); if (focusTarget.id === "handheld-picked") focusTarget.select?.(); focusTarget.scrollIntoView({block:focusTarget === itemHeading ? "start" : "nearest"}); }
   });
   function mountLifetime() {
     if (lifetimeTimer !== null) { window.clearTimeout(lifetimeTimer); lifetimeTimer = null; }
