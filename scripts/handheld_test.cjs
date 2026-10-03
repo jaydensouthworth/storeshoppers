@@ -14,7 +14,7 @@ function harness({hash='', online=true, clipboardFail=false}={}) {
  const pairing=make('pairing-code'),copyInput=make('phone-pairing-code');ids.set(pairing.id,pairing);ids.set(copyInput.id,copyInput);ids.set('handheld-network',make('handheld-network'));ids.set('handheld-pending',make('handheld-pending'));
  function install(){
   if(current)current.forms.flatMap(form=>form.inputs).forEach(i=>i.isConnected=false);
-  const forms=['/handheld/pick','/handheld/scan','/handheld/weight/preview','/handheld/weight/confirm','/handheld/report','/handheld/disconnect','/handheld/connect'].map(action=>{
+  const forms=['/handheld/pick','/handheld/pick/undo','/handheld/scan','/handheld/weight/preview','/handheld/weight/confirm','/handheld/report','/handheld/disconnect','/handheld/connect'].map(action=>{
    const inputs=[make('code'),make('picked'),make('already-disabled'),make('disposition'),make('note'),make('send')];
    inputs[0].value='SHOPDEMO-000001';inputs[1].value='2';inputs[2].disabled=true;inputs[3].value='writeoff';inputs[4].value='Fake demo note';
    const authorized=!['/handheld/connect','/handheld/disconnect'].includes(action);
@@ -185,4 +185,14 @@ test('late cleanup cannot unlock a newer submission of the same restored form',(
  const old=h.begin(h.root,null,false,form);h.winFire('pageshow');const next=h.begin(h.root,null,false,form);
  h.fire('htmx:afterRequest',{xhr:old});assert.ok(form.inputs.every(input=>input.disabled));assert.equal(h.ids.get('handheld-pending').hidden,false);
  h.fire('htmx:afterRequest',{xhr:next});assert.equal(form.inputs[0].disabled,false);assert.equal(form.inputs[2].disabled,true);assert.equal(h.ids.get('handheld-pending').hidden,true);
+});
+
+
+test('an undo response cannot replace newer manual navigation or its URL',()=>{
+ const h=harness(),form=h.root.forms.find(form=>form.action==='/handheld/pick/undo');
+ const undo=h.begin(h.root,null,false,form),navigation=h.begin(h.root,null,true);
+ assert.equal(h.fire('htmx:beforeOnLoad',{xhr:undo}).prevented,true);
+ assert.equal(h.fire('htmx:beforeSwap',{xhr:undo,shouldSwap:true}).detail.shouldSwap,false);
+ assert.equal(h.fire('htmx:beforeOnLoad',{xhr:navigation}).prevented,false);
+ assert.equal(h.fire('htmx:beforeSwap',{xhr:navigation,shouldSwap:true}).detail.shouldSwap,true);
 });

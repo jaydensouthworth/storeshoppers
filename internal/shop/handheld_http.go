@@ -175,7 +175,11 @@ func (a *App) handheldPage(w http.ResponseWriter, r *http.Request, v HandheldVie
 				v.PickedDraft = strconv.FormatInt(suggested, 10)
 			}
 			applyHandheldFlow(&v)
-			if v.Advanced {
+			// Undo deliberately reopens its original line rather than advancing.
+			// Keep the address bar aligned with that rendered selection too,
+			// including exact retries and current-state conflict reviews. HTMX's
+			// existing latest-request guard rejects obsolete bodies and headers.
+			if v.Advanced || (task.Employee && r.URL.Path == "/handheld/pick/undo") {
 				location := "/handheld/"
 				if v.Selected != nil {
 					location += "?line=" + strconv.FormatInt(v.Selected.LineID, 10)

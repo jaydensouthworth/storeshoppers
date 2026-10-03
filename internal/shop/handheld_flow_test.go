@@ -80,16 +80,26 @@ func TestEmployeeFlowPartialCompletionAutoNextUndoReplayAndReload(t *testing.T) 
 		}
 	}
 	undone := handheldHTTPRequest(t, a, "POST", "/handheld/pick/undo", cookies, undo, nil)
-	if undone.Header().Get("HX-Replace-Url") != "" || !strings.Contains(undone.Body.String(), `data-pick-line-delta="-1"`) || strings.Contains(undone.Body.String(), `action="/handheld/pick/undo"`) {
+	undoURL := fmt.Sprintf("/handheld/?line=%d", line.LineID)
+	if undone.Header().Get("HX-Replace-Url") != undoURL || !strings.Contains(undone.Body.String(), `data-pick-line-delta="-1"`) || strings.Contains(undone.Body.String(), `action="/handheld/pick/undo"`) || strings.Contains(undone.Body.String(), `data-handheld-flow-focus`) {
 		t.Fatal("undo failed to reopen safely")
 	}
 	if form := handheldHTTPForm(t, undone, "/handheld/pick"); form.Get("line_id") != fmt.Sprint(line.LineID) {
 		t.Fatal("undo did not select restored line")
 	}
 	once := fingerprintTest(t, s.db)
-	_ = handheldHTTPRequest(t, a, "POST", "/handheld/pick/undo", cookies, undo, nil)
+	replayedUndo := handheldHTTPRequest(t, a, "POST", "/handheld/pick/undo", cookies, undo, nil)
+	if once != fingerprintTest(t, s.db) || replayedUndo.Header().Get("HX-Replace-Url") != undoURL || strings.Contains(replayedUndo.Body.String(), `data-pick-event=`) || strings.Contains(replayedUndo.Body.String(), `data-handheld-flow-focus`) {
+		t.Fatal("undo retry mutated, advanced, or lost the reopened URL")
+	}
+	for _, response := range []*httptest.ResponseRecorder{undone, replayedUndo} {
+		reloaded := handheldHTTPRequest(t, a, "GET", response.Header().Get("HX-Replace-Url"), cookies, nil, nil)
+		if form := handheldHTTPForm(t, reloaded, "/handheld/scan"); form.Get("line_id") != fmt.Sprint(line.LineID) || strings.Contains(reloaded.Body.String(), `data-pick-event=`) {
+			t.Fatal("reload after undo switched items or recounted the correction")
+		}
+	}
 	if once != fingerprintTest(t, s.db) {
-		t.Fatal("undo replay mutated")
+		t.Fatal("reload after undo mutated saved state")
 	}
 	if !reflect.DeepEqual(stock, migrationQuerySnapshot(t, s.db, `SELECT id,stock FROM products ORDER BY id`)) || testOrder(t, s, id, owner.ID).Status != "Picking" {
 		t.Fatal("flow changed stock or finished order")
@@ -281,5 +291,31 @@ func TestEmployeeFlowWeightNeedsReviewThenAdvancesAndCreditsOneLine(t *testing.T
 	replay := handheldHTTPRequest(t, a, "POST", "/handheld/weight/confirm", cookies, confirm, nil)
 	if replay.Header().Get("HX-Replace-Url") != "" || strings.Contains(replay.Body.String(), `data-pick-event=`) {
 		t.Fatal("weight replay advances/counts")
+	}
+}
+
+func TestEmployeeFlowUndoConflictKeepsRenderedReviewURLWithoutChangingPicks(t *testing.T) {
+	s := newTestStore(t)
+	a := handheldHTTPApp(t, s)
+	_, _, _, g, cookies := employeeFlowFixture(t, s, a)
+	task := handheldTaskTest(t, s, g)
+	line := task.Lines[0]
+	_, form := flowReview(t, s, a, g, cookies, 0)
+	form.Set("picked", fmt.Sprint(line.Quantity))
+	saved := handheldHTTPRequest(t, a, "POST", "/handheld/pick", cookies, form, nil)
+	undo := handheldHTTPForm(t, saved, "/handheld/pick/undo")
+	other := handheldCommand(t, s, g, 1, task.Lines[1].Quantity)
+	if _, err := s.ConfirmHandheldPick(g.Token, g.CSRF, other); err != nil {
+		t.Fatal(err)
+	}
+	before := fingerprintTest(t, s.db)
+	conflict := handheldHTTPRequest(t, a, "POST", "/handheld/pick/undo", cookies, undo, nil)
+	want := fmt.Sprintf("/handheld/?line=%d", line.LineID)
+	if conflict.Header().Get("HX-Replace-Url") != want || !strings.Contains(conflict.Body.String(), ErrConflict.Error()) || strings.Contains(conflict.Body.String(), `data-pick-event=`) || strings.Contains(conflict.Body.String(), `data-handheld-flow-focus`) {
+		t.Fatal("undo conflict failed to synchronize its review without advancing")
+	}
+	reload := handheldHTTPRequest(t, a, "GET", want, cookies, nil, nil)
+	if handheldHTTPForm(t, reload, "/handheld/scan").Get("line_id") != fmt.Sprint(line.LineID) || fingerprintTest(t, s.db) != before {
+		t.Fatal("stale undo changed saved picks or refresh selection")
 	}
 }
