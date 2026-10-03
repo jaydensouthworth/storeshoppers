@@ -3,7 +3,7 @@
 {{end}}{{end}}
 
 {{define "handheld-scanner"}}
-<div class="handheld-scanner" data-handheld-scanner hidden>
+<div class="handheld-scanner" data-handheld-scanner {{if .Task.Employee}}data-scan-auto-review="true"{{end}} hidden>
   <p class="fine-print">Camera and photo decoding happen on this device. No image is uploaded. Scan one demo Code 128 label at a time.</p>
   <div class="scanner-actions"><button type="button" class="secondary" data-scan-start>Start camera</button><button type="button" class="secondary" data-scan-stop hidden>Stop camera</button><label class="secondary scanner-photo">Choose a photo<input type="file" accept="image/jpeg,image/png,image/webp" data-scan-photo></label></div>
   <video data-scan-video autoplay playsinline muted hidden aria-label="Live barcode camera preview"></video>

@@ -152,3 +152,41 @@
 .employee-order-actions details p { font-size:12px; color:var(--muted); }
 .employee-practice { margin-top:26px; }
 .employee-assigned-note { margin-bottom:0; }
+
+/* Refined pick loop: task state, immediate corrections and exceptions stay visible. */
+.handheld-task-links { display:flex; gap:10px; margin:12px 0 18px; }
+.handheld-task-links a { flex:1; border:1px solid var(--ink); padding:12px 8px; font-size:12px; text-align:center; font-weight:700; min-height:44px; }
+.handheld-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; border:1px solid var(--ink); background:var(--theme-surface); padding:12px; margin:12px 0; }
+.handheld-metrics strong { display:block; font:700 25px/1.1 var(--display); font-variant-numeric:tabular-nums; }
+.handheld-metrics span { display:block; font-size:10px; margin-top:5px; color:var(--muted); }
+.handheld-metrics > button { justify-self:start; font-size:12px; min-height:44px; white-space:normal; }
+.handheld-metrics > p { grid-column:2 / 4; font-size:11px; margin:0; align-self:center; color:var(--muted); }
+.handheld-metrics details,.handheld-metrics noscript { grid-column:1 / -1; font-size:11px; }
+.handheld-metrics summary { cursor:pointer; min-height:32px; display:flex; align-items:center; text-decoration:underline; }
+.handheld-metrics details p { line-height:1.55; }
+.handheld-undo { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; padding:12px; margin:14px 0; border:2px solid var(--ink); background:var(--blue-wash); font-size:12px; }
+.handheld-undo button { font-size:12px; min-height:44px; white-space:normal; }
+.handheld-flow-status { padding:10px 12px; border-left:4px solid var(--ink); font-size:13px; background:var(--yellow); color:var(--brand-ink); }
+.handheld-department-group { margin-top:24px; }
+.handheld-department-group > .handheld-section-heading { padding-bottom:10px; border-bottom:2px solid var(--ink); margin-bottom:12px; }
+.handheld-department-group h3 { margin:0; font:700 25px/1.1 var(--display); }
+.handheld-department-group .handheld-section-heading > span { font-size:12px; white-space:nowrap; }
+.handheld-exceptions { padding:14px; border:2px solid var(--ink); background:var(--blue-wash); margin:18px 0; }
+.handheld-exceptions > h3 { margin:0; font:700 24px/1.1 var(--display); }
+.handheld-exceptions > p { font-size:12px; line-height:1.5; }
+.handheld-next { margin-bottom:18px; white-space:normal; }
+.handheld-item-actions { display:flex; flex-wrap:wrap; gap:8px; border-block:1px solid var(--line); padding:12px 0; margin-bottom:18px; clear:both; }
+.handheld-item-actions a { display:flex; flex:1; align-items:center; justify-content:center; min-width:90px; min-height:48px; padding:8px; border:1px solid var(--ink); text-align:center; text-decoration:none; font-size:12px; font-weight:700; background:var(--blue-wash); }
+.handheld-selected-art { float:right; width:72px; height:78px; margin:0 0 10px 12px; }
+.handheld-selected-art img,.handheld-selected-art svg { width:68px; height:72px; }
+.handheld-item h2 { font-size:27px; overflow-wrap:anywhere; }
+.handheld-item-rate { margin-bottom:14px; }
+.handheld-report { scroll-margin-top:16px; }
+@media (max-width:390px) { .handheld-metrics { gap:7px; padding:10px; } .handheld-metrics strong { font-size:23px; } .handheld-item-actions a { min-width:74px; padding:8px 4px; font-size:11px; } }
+.handheld-is-picking .handheld-task-summary { padding-bottom:10px; margin-bottom:10px; }
+.handheld-is-picking .handheld-task-summary h1 { font-size:26px; margin-bottom:6px; }
+.handheld-is-picking .handheld-person { font-size:12px; margin:6px 0 10px; }
+.handheld-is-picking .handheld-person > span { display:inline; margin-left:6px; }
+.handheld-is-picking .handheld-kicker { margin-bottom:6px; }
+.handheld-is-picking .handheld-metrics { margin:10px 0; }
+.handheld-is-picking .handheld-main { padding-top:12px; }

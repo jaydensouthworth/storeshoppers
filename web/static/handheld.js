@@ -121,8 +121,8 @@
     importPairingLink();
     mountLifetime();
     const error = document.querySelector("#handheld-workspace .handheld-feedback.error");
-    const focusTarget = error || document.querySelector("#handheld-workspace [data-handheld-weight-review]");
-    if (focusTarget) { focusTarget.focus({preventScroll:true}); focusTarget.scrollIntoView({block:"nearest"}); }
+    const focusTarget = error || document.querySelector("#handheld-workspace [data-handheld-flow-focus]") || document.querySelector("#handheld-workspace [data-handheld-weight-review]") || document.querySelector("#handheld-workspace #handheld-picked");
+    if (focusTarget) { focusTarget.focus({preventScroll:true}); if (focusTarget.id === "handheld-picked") focusTarget.select?.(); focusTarget.scrollIntoView({block:"nearest"}); }
   });
   function mountLifetime() {
     if (lifetimeTimer !== null) { window.clearTimeout(lifetimeTimer); lifetimeTimer = null; }

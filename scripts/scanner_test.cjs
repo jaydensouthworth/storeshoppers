@@ -30,3 +30,20 @@ test('oversized files, unsupported types and header pixel bombs are rejected bef
 test('photo errors release URL and remain retryable',async()=>{const h=harness({imageError:true});await h.photoFile({size:24,type:'image/png',arrayBuffer:async()=>pngHeader()});assert.deepEqual(h.stats.revoked,h.stats.urls);assert.equal(h.parts.start.disabled,false);assert.equal(h.input.value,'');assert.equal(h.parts.status.dataset.error,'true');});
 test('Stop during photo bytes ignores late decoding and does not create URL',async()=>{const bytes=deferred(),h=harness({results:good});const pending=h.photoFile({size:24,type:'image/png',arrayBuffer:()=>bytes.promise});h.instance.stop();bytes.resolve(pngHeader());await pending;assert.equal(h.stats.urls.length,0);assert.equal(h.input.value,'');assert.equal(h.parts.start.disabled,false);});
 test('photo parser bounds malformed containers and supports header dimensions',()=>{assert.deepEqual(scanner.photoSize(pngHeader(600,300),'image/png'),{width:600,height:300});for(const data of [new ArrayBuffer(0),new ArrayBuffer(30),pngHeader(0,0)])assert.throws(()=>scanner.photoSize(data,'image/png'));});
+
+test('employee scan auto-reviews identity once without ever submitting a pick or weight',async()=>{
+ for(const path of ['/handheld/scan','/handheld/pick','/handheld/weight/confirm']){
+  const h=harness({results:good});h.root.dataset.scanAutoReview='true';h.form.getAttribute=n=>n==='action'?path:null;
+  await h.instance.startCamera();await h.tick();await h.tick();
+  assert.equal(h.stats.submitted,path==='/handheld/scan'?1:0);assert.equal(h.stats.stopped,1);assert.equal(h.stats.detects,1);assert.equal(h.timers.size,0);
+ }
+});
+
+
+test('auto-review photo cleanup cannot unlock or restart a scanner while its form is saving',async()=>{
+ const h=harness({results:good});h.root.dataset.scanAutoReview='true';h.form.getAttribute=()=>'/handheld/scan';
+ h.form.requestSubmit=()=>{h.stats.submitted++;h.input.disabled=true;h.parts.start.disabled=true;h.parts.start.dataset.handheldBusy='1';};
+ await h.photoFile({size:24,type:'image/png',arrayBuffer:async()=>pngHeader()});
+ assert.equal(h.stats.submitted,1);assert.equal(h.parts.start.disabled,true);
+ await h.instance.startCamera();assert.equal(h.stats.requested,0);
+});

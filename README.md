@@ -27,6 +27,7 @@ A connected neighborhood-market demo built with **Go, HTMX and SQLite**. Browse 
 - Dismissible demo guide pointing visitors to the Employees workspace
 - Phone-first employee dashboard with generated fictional identities, a shared store queue and atomic Start shopping claims
 - Shared practice orders created once, guarded pick/unpick, release/reclaim and Ready transitions without manager access
+- Department-grouped employee picking with server-confirmed auto-next, quick counted undo, prominent exception controls and transparent active-session metrics
 - Optional one-time assignment pairing with independent customer/phone sessions
 - Real Code 128 product labels, user-triggered camera/photo decoding and manual fallback
 - Explicit replay-safe counted-pick and measured-weight confirmation with shared manager progress and revocable task access

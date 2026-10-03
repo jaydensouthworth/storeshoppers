@@ -36,14 +36,18 @@ type HandheldSession struct {
 type HandheldLine struct {
 	WorkingOrderItem
 	Department, Icon, ImageURL string
+	Exception                  string
 	Archived                   bool
 }
 type HandheldTask struct {
 	ID, Version, Expires, PickedLines, RequiredLines                      int64
 	Reference, Status, Instructions, LastRecorded, LastSync, ExpiresLabel string
+	MetricsKey                                                            string
 	Held, Practice, Employee                                              bool
 	Assignment                                                            ShopperAssignment
 	Lines                                                                 []HandheldLine
+	Departments                                                           []HandheldDepartment
+	Exceptions                                                            []HandheldLine
 }
 type HandheldRecognition struct {
 	State, Code, Source, Format, Message, ProductName string
@@ -150,7 +154,7 @@ func handheldGrantHashTx(tx *sql.Tx, hash, csrf string, requireCSRF bool, now in
 	return g, nil
 }
 func handheldTaskTx(tx *sql.Tx, g handheldGrant, now int64) (*HandheldTask, error) {
-	out := &HandheldTask{Employee: g.Scope == employeeStoreScope, ID: g.OrderID, Version: g.Version, Expires: g.Expires, Status: g.Status, LastRecorded: handheldTime(g.LastRecorded), LastSync: handheldTime(now), ExpiresLabel: handheldTime(g.Expires)}
+	out := &HandheldTask{MetricsKey: handheldPayload([]any{"picking-session-v1", g.Epoch, g.AssignmentID, g.AssignmentVersion, g.ShopperID}), Employee: g.Scope == employeeStoreScope, ID: g.OrderID, Version: g.Version, Expires: g.Expires, Status: g.Status, LastRecorded: handheldTime(g.LastRecorded), LastSync: handheldTime(now), ExpiresLabel: handheldTime(g.Expires)}
 	err := tx.QueryRow(`SELECT reference,instructions,attention_reason<>'',EXISTS(SELECT 1 FROM employee_store_orders so WHERE so.order_id=orders.id AND so.epoch=? AND so.practice=1) FROM orders WHERE id=?`, g.Epoch, g.OrderID).Scan(&out.Reference, &out.Instructions, &out.Held, &out.Practice)
 	if err != nil {
 		return nil, err
@@ -163,8 +167,8 @@ func handheldTaskTx(tx *sql.Tx, g handheldGrant, now int64) (*HandheldTask, erro
 		return nil, ErrHandheldAccess
 	}
 	out.Assignment = *assignment
-	rows, err := tx.Query(`SELECT w.id,w.product_id,w.name,w.price,w.quantity,w.picked_quantity,w.pick_version,w.sku,w.sale_unit,w.price_basis,w.quantity_step,w.unavailable_quantity,w.cancelled_quantity,w.allocated_quantity,w.measurement_confirmed,c.name,p.icon,COALESCE(p.image_hash,''),p.archived
- FROM working_order_items w JOIN products p ON p.id=w.product_id JOIN categories c ON c.id=p.category_id WHERE w.order_id=? AND w.quantity>0 ORDER BY c.name,w.id`, g.OrderID)
+	rows, err := tx.Query(`SELECT w.id,w.product_id,w.name,w.price,w.quantity,w.picked_quantity,w.pick_version,w.sku,w.sale_unit,w.price_basis,w.quantity_step,w.unavailable_quantity,w.cancelled_quantity,w.allocated_quantity,w.measurement_confirmed,COALESCE(NULLIF(TRIM(c.name),''),'Other department'),p.icon,COALESCE(p.image_hash,''),p.archived
+ FROM working_order_items w JOIN products p ON p.id=w.product_id LEFT JOIN categories c ON c.id=p.category_id WHERE w.order_id=? AND w.quantity>0 ORDER BY (c.name IS NULL OR TRIM(c.name)=''),LOWER(TRIM(c.name)),c.id,w.id`, g.OrderID)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +192,15 @@ func handheldTaskTx(tx *sql.Tx, g handheldGrant, now int64) (*HandheldTask, erro
 		}
 		out.Lines = append(out.Lines, line)
 	}
-	return out, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if err = handheldExceptionsTx(tx, out, g, now); err != nil {
+		return nil, err
+	}
+	groupHandheldTask(out)
+	return out, nil
 }
 
 func (s *Store) HandheldPairSession(raw string) (HandheldSession, error) {
@@ -596,6 +608,9 @@ func (s *Store) PreviewHandheldScan(raw, csrf string, c HandheldScan) (HandheldR
 	return result, tx.Commit()
 }
 func (s *Store) ConfirmHandheldPick(raw, csrf string, c HandheldPick) (HandheldPickResult, error) {
+	return s.confirmHandheldPick(raw, csrf, c, nil)
+}
+func (s *Store) confirmHandheldPick(raw, csrf string, c HandheldPick, activity *HandheldSaved) (HandheldPickResult, error) {
 	tx, err := s.beginWrite()
 	if err != nil {
 		return HandheldPickResult{}, err
@@ -638,6 +653,10 @@ func (s *Store) ConfirmHandheldPick(raw, csrf string, c HandheldPick) (HandheldP
 		}
 		return result, ErrInvalid
 	}
+	var before, quantity int64
+	if err = tx.QueryRow(`SELECT picked_quantity,quantity FROM working_order_items WHERE id=? AND order_id=?`, c.LineID, g.OrderID).Scan(&before, &quantity); err != nil {
+		return result, err
+	}
 	actor := pickActor{Kind: "worker", Source: c.Source, ShopperName: g.ShopperName, GrantID: g.ID, AssignmentID: g.AssignmentID, ShopperID: g.ShopperID}
 	eventID, err := markWorkingLinePickedTx(tx, g.OrderID, c.LineID, c.Picked, c.PickVersion, c.Version, g.Version, g.Status, fmt.Sprintf("handheld-pick:%d:%s", g.ID, c.Key), hash, actor)
 	if err != nil {
@@ -649,6 +668,10 @@ func (s *Store) ConfirmHandheldPick(raw, csrf string, c HandheldPick) (HandheldP
 	}
 	if _, err = tx.Exec(`UPDATE handheld_grants SET last_recorded=? WHERE id=?`, now, g.ID); err != nil {
 		return result, err
+	}
+	if activity != nil {
+		activity.BeforePicked = before
+		activity.LineDelta = completeDelta(before == quantity, c.Picked == quantity)
 	}
 	return result, tx.Commit()
 }

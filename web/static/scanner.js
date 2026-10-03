@@ -118,7 +118,7 @@
     let generation = 0, active = false, destroyed = false, timer = null, deadline = null, stream = null, objectURL = null, cancelImage = null;
     let permissionPending = false, operationPending = false, scanned = false;
     const statusText = (text, error = false) => { if (status.textContent !== text) status.textContent = text; status.dataset.error = String(error); };
-    const connected = () => !destroyed && root.isConnected !== false && !doc.hidden && root.dataset.scanRevoked !== "true";
+    const connected = () => !destroyed && root.isConnected !== false && !input.disabled && !doc.hidden && root.dataset.scanRevoked !== "true";
     const current = token => token === generation && active && connected();
     const release = media => { if (media) for (const track of media.getTracks()) { track.onended = null; track.stop(); } };
     function stop(message) {
@@ -130,7 +130,7 @@
       if (cancelImage) { const cancel = cancelImage; cancelImage = null; cancel(); }
       if (objectURL) env.URL.revokeObjectURL(objectURL); objectURL = null;
       canvas.width = 0; canvas.height = 0;
-      start.disabled = permissionPending || operationPending; stopButton.hidden = true;
+      start.disabled = permissionPending || operationPending || !!start.dataset.handheldBusy; stopButton.hidden = true;
       if (message) statusText(message);
     }
     function frame(source, width, height) {
@@ -153,6 +153,12 @@
       input.dispatchEvent(new env.Event("input", { bubbles: true })); input.dispatchEvent(new env.Event("change", { bubbles: true })); scanned = false;
       statusText(`Recognized ${code}. Review this code, then use Review code. Nothing has been picked yet.`);
       input.focus();
+      // Employee fast path submits only the read-only identity review. The
+      // absolute count or scale reading still requires an explicit confirmation.
+      if (root.dataset.scanAutoReview === "true" && form.getAttribute?.("action") === "/handheld/scan" && typeof form.requestSubmit === "function") {
+        statusText(`Recognized ${code}. Checking this item. Nothing has been picked yet.`);
+        form.requestSubmit();
+      }
       return true;
     }
     function errorMessage(error, camera) {
@@ -170,7 +176,7 @@
       try {
         const media = await env.navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } });
         permissionPending = false;
-        if (!current(token)) { release(media); start.disabled = operationPending; return; }
+        if (!current(token)) { release(media); start.disabled = operationPending || !!start.dataset.handheldBusy; return; }
         stream = media;
         for (const track of stream.getTracks()) track.onended = () => { if (current(token)) stop("Camera ended. Start it again or type the code."); };
         deadline = env.setTimeout(() => { if (current(token)) stop("Camera paused after two minutes. Start it again or type the code."); }, LIMITS.sessionMS);
@@ -191,13 +197,13 @@
             }
           } catch (error) { operationPending = false; if (current(token)) { stop(); statusText(errorMessage(error, true), true); } return; }
           if (current(token)) timer = env.setTimeout(tick, LIMITS.interval);
-          else start.disabled = permissionPending;
+          else start.disabled = permissionPending || !!start.dataset.handheldBusy;
         }
         timer = env.setTimeout(tick, 0);
       } catch (error) {
         permissionPending = false;
         if (current(token)) { stop(); statusText(errorMessage(error, true), true); }
-        else start.disabled = operationPending;
+        else start.disabled = operationPending || !!start.dataset.handheldBusy;
       }
     }
     async function choosePhoto() {
@@ -229,7 +235,7 @@
         operationPending = false;
         if (current(token) && !recognize(results, "photo", token)) { stop(); statusText("No readable demo Code 128 label was found. Include its full white border, improve the light, or type the code.", true); }
       } catch (error) { if (current(token)) { stop(); statusText(errorMessage(error, false), true); } }
-      finally { operationPending = false; if (!active) start.disabled = permissionPending; if (objectURL) env.URL.revokeObjectURL(objectURL); objectURL = null; }
+      finally { operationPending = false; if (!active) start.disabled = permissionPending || !!start.dataset.handheldBusy; if (objectURL) env.URL.revokeObjectURL(objectURL); objectURL = null; }
     }
     const manual = () => { if (!scanned) { const field = form.querySelector('[name="source"]'); if (field) field.value = "manual"; if (active) stop("Camera stopped while you edit the code. Use Review code when ready."); } };
     const stopClick = () => stop("Scanner stopped. Type the code or start again.");

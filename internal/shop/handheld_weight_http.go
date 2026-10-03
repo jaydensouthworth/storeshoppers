@@ -65,9 +65,14 @@ func (a *App) handheldWeightCommand(w http.ResponseWriter, r *http.Request, conf
 		}
 	} else if err == nil {
 		var saved HandheldWeightResult
-		saved, err = a.store.ConfirmHandheldWeight(handheldCookieValue(r, handheldCookie), r.PostForm.Get("csrf"), c)
+		activity := &HandheldSaved{Key: c.Key, Scan: c.HandheldScan}
+		saved, err = a.store.confirmHandheldWeight(handheldCookieValue(r, handheldCookie), r.PostForm.Get("csrf"), c, activity)
 		if err == nil {
-			v = HandheldView{Message: fmt.Sprintf("Saved %d g as the actual measurement. Allocation, stock and the working amount were updated together. Current saved state is shown below.", saved.Actual)}
+			v = HandheldView{Message: fmt.Sprintf("Saved %d g as the actual measurement. Allocation, stock and amount updated together.", saved.Actual)}
+			if !saved.Replayed {
+				activity.LineID, activity.Version, activity.PickVersion = saved.LineID, saved.Version, saved.PickVersion
+				v.Saved = activity
+			}
 			if saved.Replayed {
 				v.Message = fmt.Sprintf("This confirmation already saved %d g. No duplicate change was made; current saved state is shown below.", saved.Actual)
 			}
@@ -79,6 +84,9 @@ func (a *App) handheldWeightCommand(w http.ResponseWriter, r *http.Request, conf
 			return
 		}
 		v.Error = err.Error()
+		if confirm {
+			v.PickRejected = v.CommandKey
+		}
 		if errors.Is(err, ErrNotFound) {
 			v.Error = "That item is no longer available on this task. Review the current pick list."
 		}

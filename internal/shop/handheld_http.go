@@ -25,6 +25,14 @@ type HandheldView struct {
 	WeightReview                                                  *HandheldWeightReview
 	ReportDraft                                                   *HandheldReportDraft
 	ReportKey                                                     string
+	Saved                                                         *HandheldSaved
+	Undo                                                          *HandheldUndo
+	NextLine                                                      *HandheldLine
+	LastSavedLine                                                 *HandheldLine
+	Advanced                                                      bool
+	PickRejected                                                  string
+	PickEvent                                                     string
+	PickLineDelta                                                 int64
 }
 type HandheldPairingView struct {
 	View
@@ -40,6 +48,7 @@ func (a *App) registerHandheldRoutes() {
 	a.mux.HandleFunc("POST /handheld/disconnect", a.handheldTransport(a.disconnectHandheld))
 	a.mux.HandleFunc("POST /handheld/scan", a.handheldTransport(a.scanHandheld))
 	a.mux.HandleFunc("POST /handheld/pick", a.handheldTransport(a.pickHandheld))
+	a.mux.HandleFunc("POST /handheld/pick/undo", a.handheldTransport(a.pickHandheld))
 	a.mux.HandleFunc("POST /handheld/weight/preview", a.handheldTransport(a.previewHandheldWeight))
 	a.mux.HandleFunc("POST /handheld/weight/confirm", a.handheldTransport(a.confirmHandheldWeight))
 	a.mux.HandleFunc("POST /handheld/report", a.handheldTransport(a.reportHandheldItem))
@@ -165,6 +174,14 @@ func (a *App) handheldPage(w http.ResponseWriter, r *http.Request, v HandheldVie
 				}
 				v.PickedDraft = strconv.FormatInt(suggested, 10)
 			}
+			applyHandheldFlow(&v)
+			if v.Advanced {
+				location := "/handheld/"
+				if v.Selected != nil {
+					location += "?line=" + strconv.FormatInt(v.Selected.LineID, 10)
+				}
+				w.Header().Set("HX-Replace-Url", location)
+			}
 			a.renderHandheldTemplate(w, "handheld", v)
 			return
 		}
@@ -273,7 +290,7 @@ func handheldScanForm(r *http.Request) HandheldScan {
 	return c
 }
 func handheldDraft(r *http.Request) HandheldView {
-	v := HandheldView{RecoveringPick: r.URL.Path == "/handheld/pick" || r.PostForm.Get("resume_confirmation") == "1", RecoveringWeight: r.PostForm.Get("resume_weight") == "1"}
+	v := HandheldView{RecoveringPick: r.URL.Path == "/handheld/pick" || r.URL.Path == "/handheld/pick/undo" || r.PostForm.Get("resume_confirmation") == "1", RecoveringWeight: r.PostForm.Get("resume_weight") == "1"}
 	if v.RecoveringWeight {
 		v.WeightDraft = handheldWeightDraft(r)
 	}
@@ -318,13 +335,15 @@ func (a *App) pickHandheld(w http.ResponseWriter, r *http.Request) {
 		c.LineID = 0
 	}
 	v := handheldDraft(r)
-	result, err := a.store.ConfirmHandheldPick(handheldCookieValue(r, handheldCookie), r.PostForm.Get("csrf"), c)
+	activity := &HandheldSaved{Key: c.Key, Scan: c.HandheldScan, Counted: true, Stay: r.URL.Path == "/handheld/pick/undo"}
+	result, err := a.store.confirmHandheldPick(handheldCookieValue(r, handheldCookie), r.PostForm.Get("csrf"), c, activity)
 	if err != nil {
 		if !handheldProblem(err) {
 			a.fail(w, err)
 			return
 		}
 		v.Error = err.Error()
+		v.PickRejected = v.CommandKey
 		// A quantity validation error can keep the verified review visible, but
 		// only after reauthorizing and rechecking the same current code/versions.
 		// Conflicts deliberately return to review with the draft/key retained.
@@ -339,7 +358,11 @@ func (a *App) pickHandheld(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Only persisted success gets this feedback. A retry names its original
 		// outcome while the newly fetched task shows any subsequent recorded edits.
-		v = HandheldView{Message: fmt.Sprintf("Saved an absolute picked count of %d. Current recorded progress is shown below.", result.Picked)}
+		v = HandheldView{Message: fmt.Sprintf("Saved an absolute picked count of %d.", result.Picked)}
+		if !result.Replayed {
+			activity.LineID, activity.Version, activity.PickVersion = result.LineID, result.Version, result.PickVersion
+			v.Saved = activity
+		}
 		if result.Replayed {
 			v.Message = fmt.Sprintf("This confirmation was already saved with a picked count of %d. No duplicate change was made. Current recorded progress is shown below.", result.Picked)
 		}

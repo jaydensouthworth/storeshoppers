@@ -123,6 +123,9 @@ func (s *Store) PreviewHandheldWeight(raw, csrf string, c HandheldWeight) (Handh
 // persisted separately from current line state so retries remain truthful after
 // a subsequent correction. A revoked or ended grant cannot replay old commands.
 func (s *Store) ConfirmHandheldWeight(raw, csrf string, c HandheldWeight) (HandheldWeightResult, error) {
+	return s.confirmHandheldWeight(raw, csrf, c, nil)
+}
+func (s *Store) confirmHandheldWeight(raw, csrf string, c HandheldWeight, activity *HandheldSaved) (HandheldWeightResult, error) {
 	tx, err := s.beginWrite()
 	if err != nil {
 		return HandheldWeightResult{}, err
@@ -162,6 +165,10 @@ func (s *Store) ConfirmHandheldWeight(raw, csrf string, c HandheldWeight) (Handh
 	if preview.Command.Review != c.Review {
 		return out, ErrWeightReview
 	}
+	var wasComplete bool
+	if err = tx.QueryRow(`SELECT measurement_confirmed=1 AND unavailable_quantity=0 AND cancelled_quantity=0 FROM working_order_items WHERE id=? AND order_id=?`, c.LineID, g.OrderID).Scan(&wasComplete); err != nil {
+		return out, err
+	}
 	actor := pickActor{Kind: "worker", Source: c.Source, ShopperName: g.ShopperName, GrantID: g.ID, AssignmentID: g.AssignmentID, ShopperID: g.ShopperID}
 	saved, err := confirmWeightTx(tx, g.OrderID, handheldWeightCommand(c, g), prepared, hash, actor, now)
 	if err != nil {
@@ -173,6 +180,9 @@ func (s *Store) ConfirmHandheldWeight(raw, csrf string, c HandheldWeight) (Handh
 	}
 	if _, err = tx.Exec(`UPDATE handheld_grants SET last_recorded=? WHERE id=?`, now, g.ID); err != nil {
 		return out, err
+	}
+	if activity != nil {
+		activity.LineDelta = completeDelta(wasComplete, true)
 	}
 	return out, tx.Commit()
 }

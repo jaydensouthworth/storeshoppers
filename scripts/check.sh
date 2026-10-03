@@ -9,6 +9,7 @@ node --check web/static/theme.js
 node --check web/static/demo_guide.js
 node --check web/static/scanner.js
 node --check web/static/handheld.js
+node --check web/static/picking_metrics.js
 node --check web/static/order_messages.js
 node --test scripts/interaction_test.cjs
 node --test scripts/cart_drafts_test.cjs
@@ -16,6 +17,7 @@ node --test scripts/theme_test.cjs
 node --test scripts/demo_guide_test.cjs
 node --test scripts/scanner_test.cjs
 node --test scripts/handheld_test.cjs
+node --test scripts/picking_metrics_test.cjs
 node --test scripts/order_messages_test.cjs
 test -z "$(gofmt -l cmd internal web/embed.go)"
 go vet ./...
